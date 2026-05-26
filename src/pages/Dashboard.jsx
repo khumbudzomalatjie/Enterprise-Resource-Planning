@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '../store/authStore'
+import useThemeStore from '../store/themeStore'
 import Navbar from '../components/Navbar'
 import { 
   Users, 
@@ -17,7 +18,6 @@ import {
   FolderOpen,
   Truck,
   Clock,
-  UserCheck,
   DollarSign,
   BarChart3,
   CheckCircle2,
@@ -28,16 +28,9 @@ import {
 
 export default function Dashboard() {
   const { user, profile } = useAuthStore()
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('ndanduleni-theme') === 'dark' || false
-  })
+  const { isDark, toggleTheme } = useThemeStore()
   const [activeTab, setActiveTab] = useState('job')
   const [logoError, setLogoError] = useState(false)
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark)
-    localStorage.setItem('ndanduleni-theme', isDark ? 'dark' : 'light')
-  }, [isDark])
 
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'User'
 
@@ -65,28 +58,29 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="min-h-screen font-['Inter']">
+    <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       {/* Skip to main content */}
       <a href="#main-dashboard" className="skip-link">Skip to main content</a>
 
       <Navbar />
 
-      {/* Theme Toggle + ERP Label */}
-      <div className="fixed top-4 right-4 z-40 flex items-center gap-4">
+      {/* Theme Toggle + ERP Label - Fixed position */}
+      <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200">
+          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">
             Enterprise Resource Planning
           </span>
         </div>
         <button 
-          onClick={() => setIsDark(!isDark)}
-          className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center"
+          onClick={toggleTheme}
+          className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110 transition-transform"
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
           {isDark ? (
-            <Moon className="w-6 h-6 text-slate-200" />
+            <Sun className="w-6 h-6 text-amber-400" />
           ) : (
-            <Sun className="w-6 h-6 text-slate-700" />
+            <Moon className="w-6 h-6 text-slate-600" />
           )}
         </button>
       </div>
@@ -107,7 +101,7 @@ export default function Dashboard() {
 
       <main id="main-dashboard" className="max-w-7xl mx-auto px-4 pb-16">
         {/* Space between header and tabs */}
-        <div className="h-32 md:h-48"></div>
+        <div className="h-24 md:h-36"></div>
 
         {/* Tab Navigation */}
         <div className="mb-8">
