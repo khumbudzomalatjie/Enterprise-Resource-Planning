@@ -90,7 +90,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col items-start">
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">
-              Welcome={userName}
+              Welcome {userName}
             </h1>
             <p className="text-base text-slate-500 dark:text-slate-400 font-medium mt-1">
               Innovation Without End
