@@ -57,4 +57,14 @@ export const authService = {
       .order('created_at', { ascending: false })
     return { data, error }
   },
+
+  async createUser(email, password, userData) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: userData,
+    })
+    return { data, error }
+  },
 }
