@@ -2,13 +2,16 @@ import { useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import AppRoutes from './routes/AppRoutes'
 import useAuthStore from './store/authStore'
+import useThemeStore from './store/themeStore'
 
 export default function App() {
   const initialize = useAuthStore(state => state.initialize)
+  const initTheme = useThemeStore(state => state.initTheme)
 
   useEffect(() => {
     initialize()
-  }, [initialize])
+    initTheme()
+  }, [initialize, initTheme])
 
   return (
     <>
@@ -17,11 +20,11 @@ export default function App() {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#3a3a3a',
-            color: '#fff',
+            background: '#1e293b',
+            color: '#f1f5f9',
             borderRadius: '25px',
-            border: '1px solid #4a4a4a',
-            boxShadow: '5px 5px 20px #2a2a2a, -5px -5px 20px #4a4a4a',
+            border: '1px solid #334155',
+            boxShadow: '8px 8px 16px #020617, -8px -8px 16px #334155',
           },
           success: {
             iconTheme: {
