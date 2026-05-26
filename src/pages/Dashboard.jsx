@@ -1,271 +1,370 @@
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import useAuthStore from '../store/authStore'
 import Navbar from '../components/Navbar'
 import { 
   Users, 
-  Activity,
+  Briefcase, 
+  TrendingUp, 
+  CreditCard, 
+  Package, 
+  ShoppingCart, 
+  Landmark, 
+  Database,
+  Smartphone,
+  FileText,
+  Calendar,
+  FolderOpen,
+  Truck,
   Clock,
   UserCheck,
-  Shield,
-  TrendingUp,
-  Calendar,
-  AlertCircle
+  DollarSign,
+  BarChart3,
+  CheckCircle2,
+  Sparkles,
+  Sun,
+  Moon
 } from 'lucide-react'
 
 export default function Dashboard() {
   const { user, profile } = useAuthStore()
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeSessions: 0,
-    lastLogin: null,
-    roleDistribution: {}
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('ndanduleni-theme') === 'dark' || false
   })
+  const [activeTab, setActiveTab] = useState('job')
+  const [logoError, setLogoError] = useState(false)
 
   useEffect(() => {
-    // In production, fetch from API
-    setStats({
-      totalUsers: 125,
-      activeSessions: 42,
-      lastLogin: new Date(),
-      roleDistribution: {
-        super_admin: 1,
-        operations_manager: 3,
-        hr_manager: 2,
-        finance_officer: 2,
-        supervisor: 15,
-        cleaner: 80,
-        sales_agent: 10,
-        customer: 12
-      }
-    })
-  }, [])
+    document.documentElement.classList.toggle('dark', isDark)
+    localStorage.setItem('ndanduleni-theme', isDark ? 'dark' : 'light')
+  }, [isDark])
 
-  const statCards = [
-    {
-      icon: Users,
-      label: 'Total Users',
-      value: stats.totalUsers,
-      color: 'text-blue-400',
-      bgColor: 'bg-blue-500/10',
-      trend: '+12%'
-    },
-    {
-      icon: Activity,
-      label: 'Active Sessions',
-      value: stats.activeSessions,
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/10',
-      trend: '+5%'
-    },
-    {
-      icon: UserCheck,
-      label: 'Active Users',
-      value: 98,
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
-      trend: '98%'
-    },
-    {
-      icon: Shield,
-      label: 'Roles',
-      value: 8,
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/10',
-      trend: 'Defined'
-    },
+  const userName = profile?.full_name || user?.email?.split('@')[0] || 'User'
+
+  const tabs = [
+    { id: 'job', label: 'JOB', icon: '📋' },
+    { id: 'sales', label: 'Sales', icon: '💰' },
+    { id: 'events', label: 'Events', icon: '🎉' },
+    { id: 'hr', label: 'Human Resources', icon: '👥' },
+  ]
+
+  const modules = [
+    { icon: Users, label: 'Human Resources', description: 'Staff lifecycle, recruitment' },
+    { icon: CreditCard, label: 'Payroll', description: 'Salary, taxes, compliance' },
+    { icon: Truck, label: 'Fleet Management', description: 'Vehicle tracking, maintenance' },
+    { icon: Package, label: 'Inventory', description: 'Stock, supplies, warehouses' },
+    { icon: ShoppingCart, label: 'Procurement', description: 'Purchase orders, vendors' },
+    { icon: Landmark, label: 'Finance', description: 'Accounting, ledgers, budget' },
+    { icon: TrendingUp, label: 'Sales', description: 'Orders, CRM, invoicing' },
+    { icon: Database, label: 'Assets', description: 'Depreciation, asset register' },
+    { icon: Briefcase, label: 'Jobs', description: 'Work orders, task scheduling' },
+    { icon: Smartphone, label: 'Mobile Cleaner', description: 'Field app, route updates' },
+    { icon: FileText, label: 'Reporting', description: 'BI dashboards, export analytics' },
+    { icon: Calendar, label: 'Events', description: 'Scheduling, logistics, tasks' },
+    { icon: FolderOpen, label: 'Documents', description: 'DMS, contracts, cloud storage' },
   ]
 
   return (
-    <div className="min-h-screen bg-[#333]">
+    <div className="min-h-screen font-['Inter']">
+      {/* Skip to main content */}
+      <a href="#main-dashboard" className="skip-link">Skip to main content</a>
+
       <Navbar />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Welcome back, {profile?.full_name || user?.email?.split('@')[0]}
-          </h1>
-          <p className="text-gray-400 flex items-center space-x-2">
-            <Calendar className="w-4 h-4" />
-            <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-          </p>
-        </motion.div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {statCards.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="
-                bg-[#3a3a3a] 
-                rounded-[2em] 
-                p-6
-                shadow-[5px_5px_20px_#2a2a2a,-5px_-5px_20px_#4a4a4a]
-                hover:shadow-[-5px_-5px_20px_#2a2a2a,5px_5px_10px_#4a4a4a,3px_3px_15px_#99b9ff,-5px_-5px_25px_#2a2a2a]
-                transition-all duration-300
-              "
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-xl ${stat.bgColor}`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
-                <span className="text-xs text-gray-400">{stat.trend}</span>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm mb-1">{stat.label}</p>
-                <p className="text-white text-3xl font-bold">{stat.value}</p>
-              </div>
-            </motion.div>
-          ))}
+      {/* Theme Toggle + ERP Label */}
+      <div className="fixed top-4 right-4 z-40 flex items-center gap-4">
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200">
+            Enterprise Resource Planning
+          </span>
         </div>
+        <button 
+          onClick={() => setIsDark(!isDark)}
+          className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center"
+        >
+          {isDark ? (
+            <Moon className="w-6 h-6 text-slate-200" />
+          ) : (
+            <Sun className="w-6 h-6 text-slate-700" />
+          )}
+        </button>
+      </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="
-              bg-[#3a3a3a] 
-              rounded-[2em] 
-              p-6
-              shadow-[5px_5px_20px_#2a2a2a,-5px_-5px_20px_#4a4a4a]
-            "
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-primary" />
-                <h2 className="text-white text-xl font-semibold">Recent Activity</h2>
-              </div>
-              <button className="text-primary text-sm hover:text-white transition-colors">
-                View All
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {[
-                { user: 'John Doe', action: 'Logged in successfully', time: '2 minutes ago', type: 'login' },
-                { user: 'Jane Smith', action: 'Changed password', time: '15 minutes ago', type: 'security' },
-                { user: 'Mike Johnson', action: 'Session expired', time: '1 hour ago', type: 'session' },
-                { user: 'Sarah Wilson', action: 'Role updated to Supervisor', time: '2 hours ago', type: 'admin' },
-                { user: 'Tom Brown', action: 'Account deactivated', time: '3 hours ago', type: 'warning' },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center justify-between py-3 border-b border-gray-700/50 last:border-0">
-                  <div className="flex items-start space-x-3">
-                    <div className={`
-                      w-2 h-2 rounded-full mt-2
-                      ${activity.type === 'login' ? 'bg-green-400' : ''}
-                      ${activity.type === 'security' ? 'bg-yellow-400' : ''}
-                      ${activity.type === 'session' ? 'bg-blue-400' : ''}
-                      ${activity.type === 'admin' ? 'bg-purple-400' : ''}
-                      ${activity.type === 'warning' ? 'bg-red-400' : ''}
-                    `}></div>
-                    <div>
-                      <p className="text-white text-sm font-medium">{activity.user}</p>
-                      <p className="text-gray-400 text-xs">{activity.action}</p>
-                    </div>
-                  </div>
-                  <span className="text-gray-500 text-xs whitespace-nowrap ml-4">{activity.time}</span>
-                </div>
+      {/* Header */}
+      <header className="pt-8 pb-4 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col items-start">
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">
+              Welcome={userName}
+            </h1>
+            <p className="text-base text-slate-500 dark:text-slate-400 font-medium mt-1">
+              Innovation Without End
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-dashboard" className="max-w-7xl mx-auto px-4 pb-16">
+        {/* Space between header and tabs */}
+        <div className="h-32 md:h-48"></div>
+
+        {/* Tab Navigation */}
+        <div className="mb-8">
+          <nav className="overflow-x-auto custom-scrollbar">
+            <div className="flex gap-2 p-2 rounded-2xl w-fit min-w-max neu-inset" role="tablist">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`tab-btn px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    activeTab === tab.id 
+                      ? 'bg-gradient-to-br from-emerald-700 to-emerald-800 text-white shadow-lg' 
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {tab.icon} {tab.label}
+                </button>
               ))}
             </div>
-          </motion.div>
-
-          {/* Role Distribution */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="
-              bg-[#3a3a3a] 
-              rounded-[2em] 
-              p-6
-              shadow-[5px_5px_20px_#2a2a2a,-5px_-5px_20px_#4a4a4a]
-            "
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h2 className="text-white text-xl font-semibold">Role Distribution</h2>
-              </div>
-              <span className="text-gray-400 text-sm">Total: {stats.totalUsers}</span>
-            </div>
-            
-            <div className="space-y-4">
-              {Object.entries(stats.roleDistribution).map(([role, count]) => {
-                const percentage = ((count / stats.totalUsers) * 100).toFixed(1)
-                const colors = {
-                  super_admin: 'bg-red-500',
-                  operations_manager: 'bg-blue-500',
-                  hr_manager: 'bg-purple-500',
-                  finance_officer: 'bg-yellow-500',
-                  supervisor: 'bg-green-500',
-                  cleaner: 'bg-cyan-500',
-                  sales_agent: 'bg-pink-500',
-                  customer: 'bg-orange-500'
-                }
-                
-                return (
-                  <div key={role}>
-                    <div className="flex justify-between mb-2">
-                      <span className="text-white text-sm capitalize">
-                        {role.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-gray-400 text-sm">
-                        {count} ({percentage}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percentage}%` }}
-                        transition={{ duration: 1, delay: 0.5 }}
-                        className={`h-full rounded-full ${colors[role] || 'bg-primary'}`}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </motion.div>
+          </nav>
         </div>
 
-        {/* System Status */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="mt-8 bg-[#3a3a3a] rounded-[2em] p-6 shadow-[5px_5px_20px_#2a2a2a,-5px_-5px_20px_#4a4a4a]"
-        >
-          <div className="flex items-center space-x-3 mb-6">
-            <AlertCircle className="w-5 h-5 text-primary" />
-            <h2 className="text-white text-xl font-semibold">System Status</h2>
+        {/* Modules Grid */}
+        <div className="mb-12">
+          <div className="flex items-center gap-2 mb-5">
+            <BarChart3 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-xl font-semibold tracking-tight text-slate-700 dark:text-slate-100">
+              Core & Extended Modules
+            </h2>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center space-x-3">
-              <span className="w-3 h-3 rounded-full bg-green-400"></span>
-              <span className="text-gray-300">Authentication Service: Operational</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <span className="w-3 h-3 rounded-full bg-green-400"></span>
-              <span className="text-gray-300">Database: Connected</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <span className="w-3 h-3 rounded-full bg-green-400"></span>
-              <span className="text-gray-300">API: Online</span>
-            </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {modules.map((module, index) => (
+              <motion.div
+                key={module.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="neu-raised rounded-2xl p-5 transition-all flex items-start gap-3 hover:scale-[1.02] cursor-pointer"
+              >
+                <module.icon className="w-8 h-8 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <div>
+                  <h3 className="font-bold text-lg text-slate-800 dark:text-white">{module.label}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </motion.div>
+        </div>
+
+        {/* Tab Panels */}
+        <AnimatePresence mode="wait">
+          {/* JOB PANEL */}
+          {activeTab === 'job' && (
+            <motion.section
+              key="job"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 items-center text-slate-800 dark:text-white">
+                    <Briefcase className="w-6 h-6 text-emerald-600" />
+                    Active Jobs
+                  </h2>
+                  <p className="text-3xl font-bold mt-3 text-slate-800 dark:text-white">24</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Open work orders</p>
+                  <div className="mt-4 h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full">
+                    <div className="h-2 w-2/3 bg-emerald-500 rounded-full"></div>
+                  </div>
+                  <p className="text-xs mt-2 text-slate-500 dark:text-slate-400">67% completion rate</p>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 text-slate-800 dark:text-white">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                    Job Categories
+                  </h2>
+                  <p className="text-3xl font-bold mt-2 text-slate-800 dark:text-white">12</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Residential · Commercial · Industrial</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white text-sm shadow-md opacity-80 cursor-default">
+                    View Details
+                  </button>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 text-slate-800 dark:text-white">
+                    <Calendar className="w-6 h-6 text-emerald-600" />
+                    Scheduled Jobs
+                  </h2>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <li className="flex justify-between">
+                      <span>Office Clean - Main St</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">Today</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Parking Lot Sweep</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">Tomorrow</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Window Washing - Tower B</span>
+                      <span className="text-slate-500 dark:text-slate-400">Jun 15</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* SALES PANEL */}
+          {activeTab === 'sales' && (
+            <motion.section
+              key="sales"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <TrendingUp className="w-8 h-8 text-emerald-600 mb-2" />
+                  <p className="text-2xl font-bold mt-2 text-slate-800 dark:text-white">$189,450</p>
+                  <p className="text-slate-500 dark:text-slate-400">Total Sales (YTD)</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white text-sm shadow-md opacity-80 cursor-default">
+                    Sales Report
+                  </button>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <Users className="w-8 h-8 text-emerald-600 mb-2" />
+                  <p className="text-2xl font-bold mt-2 text-slate-800 dark:text-white">47</p>
+                  <p className="text-slate-500 dark:text-slate-400">Active Clients</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white text-sm shadow-md opacity-80 cursor-default">
+                    CRM
+                  </button>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <DollarSign className="w-8 h-8 text-emerald-600 mb-2" />
+                  <p className="text-2xl font-bold mt-2 text-slate-800 dark:text-white">$32,800</p>
+                  <p className="text-slate-500 dark:text-slate-400">Pending Invoices</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white text-sm shadow-md opacity-80 cursor-default">
+                    Follow Up
+                  </button>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* EVENTS PANEL */}
+          {activeTab === 'events' && (
+            <motion.section
+              key="events"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="neu-raised p-6 rounded-3xl">
+                  <h2 className="text-xl flex gap-2 items-center text-slate-800 dark:text-white">
+                    <Calendar className="w-6 h-6 text-emerald-600" />
+                    Upcoming Events
+                  </h2>
+                  <div className="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
+                    <p>🎉 Annual Gala · Dec 15</p>
+                    <p>🏆 Team Building · Jan 10</p>
+                    <p>📢 Expo 2025 · Feb 5</p>
+                  </div>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white opacity-80 cursor-default">
+                    Manage Events
+                  </button>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl">
+                  <h2 className="text-xl flex gap-2 text-slate-800 dark:text-white">
+                    <Database className="w-6 h-6 text-emerald-600" />
+                    Event Logistics
+                  </h2>
+                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                    3 venues booked | 12 vendors confirmed
+                  </p>
+                  <div className="mt-4 h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full">
+                    <div className="h-2 w-4/5 bg-emerald-500 rounded-full"></div>
+                  </div>
+                  <p className="text-xs mt-2 text-slate-500 dark:text-slate-400">80% preparation complete</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white opacity-80 cursor-default">
+                    Logistics Dashboard
+                  </button>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* HUMAN RESOURCES PANEL */}
+          {activeTab === 'hr' && (
+            <motion.section
+              key="hr"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 items-center text-slate-800 dark:text-white">
+                    <Users className="w-6 h-6 text-emerald-600" />
+                    Staff Overview
+                  </h2>
+                  <p className="text-3xl font-bold mt-3 text-slate-800 dark:text-white">28</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Active cleaners + 7 admins</p>
+                  <div className="mt-4 h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full">
+                    <div className="h-2 w-3/4 bg-emerald-500 rounded-full"></div>
+                  </div>
+                  <p className="text-xs mt-2 text-slate-500 dark:text-slate-400">75% attendance this week</p>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 text-slate-800 dark:text-white">
+                    <CreditCard className="w-6 h-6 text-emerald-600" />
+                    Payroll Summary
+                  </h2>
+                  <p className="text-3xl font-bold mt-2 text-slate-800 dark:text-white">$47,280</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Monthly payroll</p>
+                  <button className="mt-4 w-full py-2 rounded-xl bg-emerald-700 text-white text-sm shadow-md opacity-80 cursor-default">
+                    Process Payroll
+                  </button>
+                </div>
+
+                <div className="neu-raised p-6 rounded-3xl stat-card">
+                  <h2 className="text-xl font-semibold flex gap-2 text-slate-800 dark:text-white">
+                    <Clock className="w-6 h-6 text-emerald-600" />
+                    Time Tracking
+                  </h2>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <li className="flex justify-between">
+                      <span>Sarah K.</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">42 hrs</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Miguel R.</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">38 hrs</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span>Lisa M.</span>
+                      <span className="text-slate-500 dark:text-slate-400">35 hrs</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   )
