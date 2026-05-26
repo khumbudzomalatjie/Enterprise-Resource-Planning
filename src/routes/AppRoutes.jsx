@@ -7,6 +7,7 @@ import ResetPassword from '../pages/ResetPassword'
 import Dashboard from '../pages/Dashboard'
 import UserManagement from '../pages/UserManagement'
 import Unauthorized from '../pages/Unauthorized'
+import HRRoutes from '../modules/hr/routes/HRRoutes'
 import { USER_ROLES } from '../types/authTypes'
 
 export default function AppRoutes() {
@@ -27,6 +28,10 @@ export default function AppRoutes() {
         }
       />
       
+      {/* HR Module Routes */}
+      <Route path="/hr/*" element={<HRRoutes />} />
+      
+      {/* Admin Routes */}
       <Route
         path="/users"
         element={
@@ -41,9 +46,9 @@ export default function AppRoutes() {
       {/* Error Routes */}
       <Route path="/unauthorized" element={<Unauthorized />} />
       
-      {/* Default - Redirect to login */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Default */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
 }
