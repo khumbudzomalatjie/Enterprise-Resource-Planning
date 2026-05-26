@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border: none;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-dark font-sans min-h-screen flex justify-center items-center;
+    margin: 0;
+  }
+
+  #root {
+    @apply w-full min-h-screen;
+  }
+}
+
+@layer components {
+  .glass-input {
+    background-color: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 2px 2px 5px #111011, inset -5px -5px 10px #575259;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 2px #fff, 0 0 5px #99b9ff, 0 0 10px #99b9ff;
+  }
+
+  .text-glow-strong {
+    text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff, 0 0 5px #99b9ff, 0 0 10px #99b9ff, 0 0 20px #99b9ff, 0 0 30px #99b9ff, 0 0 50px #99b9ff;
+  }
+}
