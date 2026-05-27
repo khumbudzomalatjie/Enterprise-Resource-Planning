@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 import { 
   FileText, Plus, Trash2, Download, Eye,
   Sun, Moon, Sparkles, ChevronRight,
-  Save, Send
+  Save, Send, Calculator
 } from 'lucide-react'
 
 // Pre-defined services
@@ -71,6 +71,40 @@ export default function CreateQuotation() {
     fetchClients({ status: 'active' })
   }, [])
 
+  // ============================================
+  // LIVE CALCULATOR FUNCTIONS
+  // ============================================
+  const calculateLineTotal = (item) => {
+    const qty = item.quantity || 0
+    const price = item.unit_price || 0
+    return qty * price
+  }
+
+  const calculateSubtotal = () => {
+    return items.reduce((sum, item) => sum + calculateLineTotal(item), 0)
+  }
+
+  const calculateVAT = () => {
+    return calculateSubtotal() * 0.15
+  }
+
+  const calculateTotal = () => {
+    return calculateSubtotal() + calculateVAT()
+  }
+
+  const calculateDeposit = () => {
+    return calculateTotal() * 0.5
+  }
+
+  const subtotal = calculateSubtotal()
+  const vatAmount = calculateVAT()
+  const totalAmount = calculateTotal()
+  const depositAmount = calculateDeposit()
+  const balanceAmount = totalAmount - depositAmount
+
+  // ============================================
+  // CLIENT & SERVICE HANDLERS
+  // ============================================
   const handleClientSelect = (clientId) => {
     const client = clients.find(c => c.id === clientId)
     if (client) {
@@ -116,39 +150,38 @@ export default function CreateQuotation() {
     setItems(newItems)
   }
 
-  const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => {
-      const qty = item.quantity || 1
-      const price = item.unit_price || 0
-      return sum + (qty * price)
-    }, 0)
-    
-    const taxAmount = subtotal * 0.15
-    const total = subtotal + taxAmount
-
-    return { subtotal, discountAmount: 0, taxAmount, total }
-  }
-
-  const totals = calculateTotals()
-
+  // ============================================
+  // SAVE & DOWNLOAD HANDLERS
+  // ============================================
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) {
       toast.error('Please select a client')
       return
     }
     
-    if (items.length === 0 || !items[0].description) {
-      toast.error('Please add at least one service')
+    const hasItems = items.some(item => item.description && item.unit_price > 0)
+    if (!hasItems) {
+      toast.error('Please add at least one service with a price')
       return
     }
 
     const result = await createQuotation(
-      { ...quotationData, ...totals, status },
+      { 
+        ...quotationData, 
+        subtotal,
+        tax_amount: vatAmount,
+        discount_amount: 0,
+        total_amount: totalAmount,
+        status 
+      },
       items.map(item => ({
-        ...item,
+        description: item.description,
         quantity: item.quantity || 1,
+        unit: item.unit,
         unit_price: item.unit_price || 0,
-        total_price: (item.quantity || 1) * (item.unit_price || 0)
+        tax_percent: 15,
+        discount_percent: 0,
+        total_price: calculateLineTotal(item)
       }))
     )
     
@@ -259,9 +292,9 @@ export default function CreateQuotation() {
         </div>
 
         {/* Quotation Form */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Form */}
-          <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Form - Left Side (2 columns) */}
+          <div className="lg:col-span-2 space-y-6">
             {/* Client Selection */}
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Client Information</h2>
@@ -285,7 +318,7 @@ export default function CreateQuotation() {
               </div>
             </div>
 
-            {/* Items */}
+            {/* Services */}
             <div className="neu-raised rounded-3xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Services</h2>
@@ -324,19 +357,54 @@ export default function CreateQuotation() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-slate-500">Quantity</label>
-                        <input type="number" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} min="1" className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" />
+                        <input 
+                          type="number" 
+                          value={item.quantity} 
+                          onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} 
+                          min="1" 
+                          className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" 
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-slate-500">Unit Price (Excl. VAT)</label>
-                        <input type="number" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" />
+                        <input 
+                          type="number" 
+                          value={item.unit_price} 
+                          onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} 
+                          className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" 
+                        />
                       </div>
                     </div>
-                    <div className="text-xs text-slate-500">
-                      Line Total (Excl. VAT): <span className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency((item.quantity || 1) * (item.unit_price || 0))}</span>
+                    {/* Line Total */}
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-600">
+                      <span className="text-xs text-slate-500">Line Total (Excl. VAT):</span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        {formatCurrency(calculateLineTotal(item))}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Running Totals inside Services Card */}
+              {items.some(item => item.unit_price > 0) && (
+                <div className="mt-4 p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Subtotal (Excl. VAT):</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatCurrency(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">VAT (15%):</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{formatCurrency(vatAmount)}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-600">
+                      <span className="font-semibold text-emerald-600">Total (Incl. VAT):</span>
+                      <span className="font-bold text-lg text-emerald-600">{formatCurrency(totalAmount)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Dates & Notes */}
@@ -352,46 +420,91 @@ export default function CreateQuotation() {
             </div>
           </div>
 
-          {/* Preview */}
-          <div className="lg:sticky lg:top-24 h-fit">
-            <div className="neu-raised rounded-3xl p-4">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <Eye className="w-5 h-5 text-emerald-600" />
-                A4 Preview
-              </h2>
-              <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
-                <div style={{ transform: 'scale(0.4)', transformOrigin: 'top left', width: '250%' }}>
-                  <QuotationPDF 
-                    ref={pdfRef}
-                    quotation={{ ...quotationData, ...totals, quotation_number: 'Q-25-XXXX' }}
-                    items={items.map((item) => ({ 
-                      ...item, 
-                      total_price: (item.quantity || 1) * (item.unit_price || 0) 
-                    }))}
-                  />
-                </div>
+          {/* Calculator Sidebar - Right Side (1 column) */}
+          <div className="space-y-4 lg:sticky lg:top-24 h-fit">
+            {/* LIVE CALCULATOR */}
+            <div className="neu-raised rounded-3xl p-6 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-700">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-emerald-600" />
+                Live Calculator
+              </h3>
+              
+              {/* Services Summary */}
+              <div className="space-y-3 mb-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Services Added</p>
+                {items.filter(item => item.description).map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span className="truncate max-w-[180px]">{item.description}</span>
+                    <span className="font-medium">{formatCurrency(calculateLineTotal(item))}</span>
+                  </div>
+                ))}
+                {items.filter(item => item.description).length === 0 && (
+                  <p className="text-xs text-slate-400 italic">No services added yet</p>
+                )}
               </div>
-            </div>
 
-            {/* Totals Summary */}
-            <div className="neu-raised rounded-3xl p-6 mt-4">
-              <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Totals Summary</h3>
+              {/* Divider */}
+              <div className="border-t border-slate-200 dark:border-slate-600 my-4"></div>
+
+              {/* Calculation Breakdown */}
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Subtotal (Excl. VAT):</span>
-                  <span className="text-slate-800 dark:text-white">{formatCurrency(totals.subtotal)}</span>
+                  <span className="text-slate-500">Subtotal:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">VAT (15%):</span>
-                  <span className="text-slate-800 dark:text-white">{formatCurrency(totals.taxAmount)}</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">+ {formatCurrency(vatAmount)}</span>
                 </div>
-                <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 text-lg font-bold">
-                  <span className="text-emerald-600">Total (Incl. VAT):</span>
-                  <span className="text-emerald-600">{formatCurrency(totals.total)}</span>
+                
+                {/* Total - Highlighted */}
+                <div className="flex justify-between pt-3 border-t-2 border-emerald-200 dark:border-emerald-800">
+                  <span className="font-bold text-base text-slate-800 dark:text-white">TOTAL (Incl. VAT):</span>
+                  <span className="font-bold text-xl text-emerald-600">{formatCurrency(totalAmount)}</span>
+                </div>
+
+                {/* 50% Deposit */}
+                <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 dark:border-slate-600">
+                  <span className="text-slate-500 text-xs">50% Deposit Required:</span>
+                  <span className="font-semibold text-sm text-amber-600">{formatCurrency(depositAmount)}</span>
+                </div>
+
+                {/* Balance */}
+                <div className="flex justify-between">
+                  <span className="text-slate-500 text-xs">Balance on Completion:</span>
+                  <span className="font-semibold text-sm text-blue-600">{formatCurrency(balanceAmount)}</span>
                 </div>
               </div>
-              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-xs text-amber-700 dark:text-amber-400">
-                ⚠️ All prices exclude VAT. 15% VAT will be added to the final amount.
+
+              {/* VAT Notice */}
+              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-xs text-amber-700 dark:text-amber-400 text-center">
+                ⚠ All prices exclude VAT. 15% VAT added to final amount.
+              </div>
+            </div>
+
+            {/* Preview Button */}
+            <div className="neu-raised rounded-3xl p-4">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white mb-3 flex items-center gap-2">
+                <Eye className="w-4 h-4 text-emerald-600" />
+                A4 Preview
+              </h3>
+              <div className="bg-white rounded-xl overflow-hidden shadow-inner border border-slate-200" style={{ maxHeight: '350px', overflow: 'auto' }}>
+                <div style={{ transform: 'scale(0.32)', transformOrigin: 'top left', width: '312%' }}>
+                  <QuotationPDF 
+                    ref={pdfRef}
+                    quotation={{ 
+                      ...quotationData, 
+                      subtotal,
+                      tax_amount: vatAmount,
+                      total_amount: totalAmount,
+                      quotation_number: 'Q-25-XXXX' 
+                    }}
+                    items={items.filter(item => item.description).map((item) => ({ 
+                      ...item, 
+                      total_price: calculateLineTotal(item) 
+                    }))}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -402,10 +515,15 @@ export default function CreateQuotation() {
       <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px' }}>
         <QuotationPDF 
           ref={pdfRef}
-          quotation={{ ...quotationData, ...totals }}
-          items={items.map((item) => ({ 
+          quotation={{ 
+            ...quotationData, 
+            subtotal,
+            tax_amount: vatAmount,
+            total_amount: totalAmount
+          }}
+          items={items.filter(item => item.description).map((item) => ({ 
             ...item, 
-            total_price: (item.quantity || 1) * (item.unit_price || 0) 
+            total_price: calculateLineTotal(item) 
           }))}
         />
       </div>
