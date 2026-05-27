@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { 
   Search, Building2, Plus, Star, MapPin, 
   Phone, Mail, ChevronRight, Sun, Moon, Sparkles,
-  Edit, Trash2, Filter, X
+  Edit, Trash2, Filter, X, Users
 } from 'lucide-react'
 
 export default function ClientList() {
@@ -32,7 +32,7 @@ export default function ClientList() {
 
   useEffect(() => {
     loadClients()
-  }, [statusFilter, typeFilter])
+  }, [])
 
   const loadClients = async () => {
     const filters = {}
@@ -51,55 +51,83 @@ export default function ClientList() {
     setSearch('')
     setStatusFilter('all')
     setTypeFilter('all')
+    loadClients()
+  }
+
+  const handleFilterClick = (status) => {
+    if (statusFilter === status) {
+      setStatusFilter('all')
+    } else {
+      setStatusFilter(status)
+    }
+    loadClients()
   }
 
   // Create Client Handler
   const handleCreateClient = async (formData) => {
     setFormLoading(true)
-    const result = await createClient(formData)
-    setFormLoading(false)
-    if (result.success) {
-      toast.success('Client added successfully!')
-      setShowForm(false)
-      loadClients()
-    } else {
-      toast.error(result.error || 'Failed to add client')
+    try {
+      const result = await createClient(formData)
+      if (result.success) {
+        toast.success('Client added successfully!')
+        setShowForm(false)
+        loadClients()
+      } else {
+        toast.error(result.error || 'Failed to add client')
+      }
+    } catch (err) {
+      toast.error('An error occurred while adding client')
+      console.error('Create client error:', err)
+    } finally {
+      setFormLoading(false)
     }
   }
 
   // Update Client Handler
   const handleUpdateClient = async (formData) => {
     setFormLoading(true)
-    const result = await updateClient(editingClient.id, formData)
-    setFormLoading(false)
-    if (result.success) {
-      toast.success('Client updated successfully!')
-      setEditingClient(null)
-      loadClients()
-    } else {
-      toast.error(result.error || 'Failed to update client')
+    try {
+      const result = await updateClient(editingClient.id, formData)
+      if (result.success) {
+        toast.success('Client updated successfully!')
+        setEditingClient(null)
+        loadClients()
+      } else {
+        toast.error(result.error || 'Failed to update client')
+      }
+    } catch (err) {
+      toast.error('An error occurred while updating client')
+      console.error('Update client error:', err)
+    } finally {
+      setFormLoading(false)
     }
   }
 
   // Delete Client Handler
-  const handleDeleteClient = async (clientId) => {
-    const result = await updateClient(clientId, { client_status: 'former' })
-    if (result.success) {
-      toast.success('Client removed successfully')
-      setDeleteConfirm(null)
-      loadClients()
-    } else {
-      toast.error('Failed to remove client')
+  const handleDeleteClient = async () => {
+    if (!deleteConfirm) return
+    try {
+      const result = await updateClient(deleteConfirm, { client_status: 'former' })
+      if (result.success) {
+        toast.success('Client removed successfully')
+        setDeleteConfirm(null)
+        loadClients()
+      } else {
+        toast.error('Failed to remove client')
+      }
+    } catch (err) {
+      toast.error('An error occurred')
+      console.error('Delete client error:', err)
     }
   }
 
   const getStatusColor = (status) => {
     const colors = {
-      active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-      inactive: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-      prospect: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-      former: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-      blacklisted: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+      active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+      inactive: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border border-slate-200 dark:border-slate-600',
+      prospect: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      former: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600',
+      blacklisted: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800',
     }
     return colors[status] || colors.inactive
   }
@@ -111,15 +139,6 @@ export default function ClientList() {
     if (rating === 'D') return '⭐⭐'
     if (rating === 'unrated') return '—'
     return '⭐'
-  }
-
-  const formatCurrency = (amount) => {
-    if (!amount) return '—'
-    return new Intl.NumberFormat('en-ZA', {
-      style: 'currency',
-      currency: 'ZAR',
-      minimumFractionDigits: 0,
-    }).format(amount)
   }
 
   return (
@@ -164,7 +183,7 @@ export default function ClientList() {
               Clients
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">
-              {clients.length} client{clients.length !== 1 ? 's' : ''} in portfolio
+              {clients?.length || 0} client{(clients?.length || 0) !== 1 ? 's' : ''} in portfolio
             </p>
           </div>
           
@@ -192,14 +211,17 @@ export default function ClientList() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by company name, code, or trading name..."
-                className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500"
+                className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
             </div>
             
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                loadClients()
+              }}
+              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -211,8 +233,11 @@ export default function ClientList() {
 
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
+              onChange={(e) => {
+                setTypeFilter(e.target.value)
+                loadClients()
+              }}
+              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none"
             >
               <option value="all">All Types</option>
               <option value="corporate">Corporate</option>
@@ -251,16 +276,16 @@ export default function ClientList() {
           className="flex flex-wrap gap-3 mb-6"
         >
           {[
-            { label: 'All', count: clients.length, active: statusFilter === 'all' && typeFilter === 'all' },
-            { label: 'Active', count: clients.filter(c => c.client_status === 'active').length, active: statusFilter === 'active' },
-            { label: 'Prospects', count: clients.filter(c => c.client_status === 'prospect').length, active: statusFilter === 'prospect' },
-            { label: 'Former', count: clients.filter(c => c.client_status === 'former').length, active: statusFilter === 'former' },
+            { label: 'All', count: clients?.length || 0, status: 'all' },
+            { label: 'Active', count: clients?.filter(c => c.client_status === 'active').length || 0, status: 'active' },
+            { label: 'Prospects', count: clients?.filter(c => c.client_status === 'prospect').length || 0, status: 'prospect' },
+            { label: 'Inactive', count: clients?.filter(c => c.client_status === 'inactive').length || 0, status: 'inactive' },
           ].map((stat) => (
             <button
               key={stat.label}
-              onClick={() => setStatusFilter(stat.active ? 'all' : stat.label.toLowerCase())}
+              onClick={() => handleFilterClick(stat.status)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                stat.active
+                statusFilter === stat.status
                   ? 'bg-emerald-600 text-white shadow-lg'
                   : 'neu-raised text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
@@ -271,12 +296,12 @@ export default function ClientList() {
         </motion.div>
 
         {/* Client Grid */}
-        {loading && !showForm ? (
+        {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
             <p className="text-slate-500 dark:text-slate-400">Loading clients...</p>
           </div>
-        ) : (
+        ) : clients?.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {clients.map((client, index) => (
               <motion.div
@@ -352,7 +377,7 @@ export default function ClientList() {
                         setDeleteConfirm(client.id)
                       }}
                       className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors"
-                      title="Delete Client"
+                      title="Remove Client"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -361,10 +386,7 @@ export default function ClientList() {
               </motion.div>
             ))}
           </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && clients.length === 0 && (
+        ) : (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -373,9 +395,9 @@ export default function ClientList() {
             <Building2 className="w-20 h-20 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
             <p className="text-slate-500 dark:text-slate-400 text-xl mb-2">No clients found</p>
             <p className="text-slate-400 dark:text-slate-500 mb-6">
-              {search || statusFilter !== 'all' 
+              {search || statusFilter !== 'all' || typeFilter !== 'all'
                 ? 'Try adjusting your search or filters' 
-                : 'Start by adding your first client'}
+                : 'Start by adding your first client to the CRM system'}
             </p>
             <button
               onClick={() => setShowForm(true)}
@@ -461,14 +483,16 @@ export default function ClientList() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="neu-raised rounded-3xl p-8 max-w-md w-full text-center"
             >
-              <Trash2 className="w-16 h-16 text-red-500 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Client?</h3>
+              <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Remove Client?</h3>
               <p className="text-slate-500 dark:text-slate-400 mb-6">
                 This will mark the client as former. You can restore them later if needed.
               </p>
               <div className="flex gap-4 justify-center">
                 <button
-                  onClick={() => handleDeleteClient(deleteConfirm)}
+                  onClick={handleDeleteClient}
                   className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 transition-colors"
                 >
                   Yes, Remove
