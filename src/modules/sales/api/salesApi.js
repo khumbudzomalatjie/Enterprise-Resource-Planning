@@ -40,7 +40,6 @@ export const salesApi = {
   },
 
   async createQuotation(quotationData, items) {
-    // Generate quotation number
     const yearSuffix = new Date().getFullYear().toString().slice(-2)
     const { count } = await supabase
       .from('quotations')
@@ -50,9 +49,6 @@ export const salesApi = {
     const nextNum = String((count || 0) + 1).padStart(4, '0')
     const quotationNumber = `Q-${yearSuffix}-${nextNum}`
     
-    console.log('Creating quotation:', quotationNumber)
-    
-    // Insert quotation
     const { data: quotation, error: qError } = await supabase
       .from('quotations')
       .insert([{ 
@@ -84,9 +80,6 @@ export const salesApi = {
       return { error: qError }
     }
 
-    console.log('Quotation created with ID:', quotation.id)
-
-    // Insert items - only valid ones with description and price
     if (items && items.length > 0) {
       const validItems = items.filter(item => item.description && (item.unit_price > 0 || item.quantity > 0))
       
@@ -102,23 +95,17 @@ export const salesApi = {
           tax_percent: item.tax_percent || 15
         }))
 
-        console.log('Inserting items:', itemsToInsert.length)
-
         const { error: iError } = await supabase
           .from('quotation_items')
           .insert(itemsToInsert)
 
         if (iError) {
-          console.error('Items insert error details:', iError)
-          // Return error but don't delete quotation - user can retry
+          console.error('Items insert error:', iError)
           return { error: iError }
         }
-        
-        console.log('Items inserted successfully')
       }
     }
 
-    // Fetch complete quotation with items
     return await this.getQuotation(quotation.id)
   },
 
@@ -146,17 +133,13 @@ export const salesApi = {
   },
 
   async deleteQuotation(id) {
-    // Delete items first
     const { error: itemsError } = await supabase
       .from('quotation_items')
       .delete()
       .eq('quotation_id', id)
     
-    if (itemsError) {
-      console.error('Error deleting items:', itemsError)
-    }
+    if (itemsError) console.error('Error deleting items:', itemsError)
 
-    // Delete the quotation
     const { error } = await supabase
       .from('quotations')
       .delete()
@@ -169,8 +152,6 @@ export const salesApi = {
   // ACCEPT QUOTATION - Creates Job
   // ============================================
   async acceptQuotation(id) {
-    console.log('Accepting quotation:', id)
-    
     const { data: jobId, error: jobError } = await supabase
       .rpc('create_job_from_quotation', { p_quotation_id: id })
 
@@ -178,8 +159,6 @@ export const salesApi = {
       console.error('Job creation error:', jobError)
       return { error: jobError }
     }
-
-    console.log('Job created with ID:', jobId)
 
     const { data: quotation, error: qError } = await supabase
       .from('quotations')
