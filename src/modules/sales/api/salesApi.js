@@ -114,7 +114,6 @@ export const salesApi = {
   },
 
   async deleteQuotation(id) {
-    // Delete items first (cascade should handle this, but being explicit)
     const { error: itemsError } = await supabase
       .from('quotation_items')
       .delete()
@@ -125,13 +124,52 @@ export const salesApi = {
       return { error: itemsError }
     }
 
-    // Delete the quotation
     const { error } = await supabase
       .from('quotations')
       .delete()
       .eq('id', id)
     
     return { error }
+  },
+
+  // ============================================
+  // ACCEPT QUOTATION - Creates Job
+  // ============================================
+  async acceptQuotation(id) {
+    const { data: jobId, error: jobError } = await supabase
+      .rpc('create_job_from_quotation', { p_quotation_id: id })
+
+    if (jobError) {
+      console.error('Job creation error:', jobError)
+      return { error: jobError }
+    }
+
+    const { data: quotation, error: qError } = await supabase
+      .from('quotations')
+      .update({ 
+        status: 'accepted',
+        converted_to_invoice: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (qError) {
+      console.error('Quotation update error:', qError)
+      return { error: qError }
+    }
+
+    const { data: job } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single()
+
+    return { 
+      data: { quotation, job: job || { id: jobId } }, 
+      error: null 
+    }
   },
 
   // ============================================
