@@ -9,17 +9,18 @@ import toast from 'react-hot-toast'
 import { 
   ArrowLeft, Download, Edit, FileText, Printer, X, Trash2, AlertTriangle,
   Sun, Moon, Sparkles, ChevronRight,
-  CheckCircle, XCircle, Send, Maximize2
+  CheckCircle, XCircle, Send, Maximize2, Briefcase
 } from 'lucide-react'
 
 export default function QuotationDetail() {
   const { id } = useParams()
-  const { selectedQuotation, fetchQuotation, updateQuotationStatus, deleteQuotation, loading } = useSalesStore()
+  const { selectedQuotation, fetchQuotation, updateQuotationStatus, deleteQuotation, acceptQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const pdfContainerRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
 
   useEffect(() => {
     fetchQuotation(id)
@@ -44,6 +45,11 @@ export default function QuotationDetail() {
   }
 
   const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'accepted') {
+      setShowAcceptConfirm(true)
+      return
+    }
+    
     const result = await updateQuotationStatus(id, newStatus)
     if (result.success) {
       toast.success(`Status updated to ${newStatus.replace('_', ' ')}`)
@@ -53,13 +59,27 @@ export default function QuotationDetail() {
     }
   }
 
+  const handleAcceptQuotation = async () => {
+    const result = await acceptQuotation(id)
+    if (result.success) {
+      toast.success('Quotation accepted! Job created! 🎉')
+      if (result.data?.job) {
+        toast.success(`Job #${result.data.job.job_number} created`)
+      }
+      navigate('/sales/quotations')
+    } else {
+      toast.error('Failed to accept quotation')
+    }
+    setShowAcceptConfirm(false)
+  }
+
   const handleDelete = async () => {
     const result = await deleteQuotation(id)
     if (result.success) {
-      toast.success('Quotation deleted successfully')
+      toast.success('Quotation deleted')
       navigate('/sales/quotations')
     } else {
-      toast.error('Failed to delete quotation')
+      toast.error('Failed to delete')
     }
     setShowDeleteConfirm(false)
   }
@@ -133,19 +153,54 @@ export default function QuotationDetail() {
         </div>
       )}
 
+      {/* Accept Confirmation Modal */}
+      {showAcceptConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4">
+                <Briefcase className="w-10 h-10 text-emerald-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept & Create Job?</h3>
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Important:</p>
+                    <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1 list-disc list-inside">
+                      <li>This quotation will be marked as <strong>Accepted</strong></li>
+                      <li>A <strong>Job</strong> will be automatically created</li>
+                      <li>All services/items will transfer to the job</li>
+                      <li>The quotation will <strong>disappear</strong> from the list</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <p className="text-slate-500 mb-6 text-sm">Are you sure?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowAcceptConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600">Cancel</button>
+                <button onClick={handleAcceptQuotation} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2">
+                  <CheckCircle className="w-5 h-5" />Yes, Accept & Create Job
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-md w-full bg-white dark:bg-slate-800">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Quotation?</h3>
-              <p className="text-slate-500 dark:text-slate-400 mb-6">This action cannot be undone. All data will be permanently deleted.</p>
+              <p className="text-slate-500 mb-6">This cannot be undone.</p>
               <div className="flex gap-3">
-                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600 dark:text-slate-300">Cancel</button>
-                <button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" /> Delete</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button>
+                <button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button>
               </div>
             </div>
           </motion.div>
@@ -182,9 +237,9 @@ export default function QuotationDetail() {
               {quote.client_name} · {formatDate(quote.quotation_date)} · <span className="font-semibold text-emerald-600 ml-2">{formatCurrency(quote.total_amount)}</span>
             </p>
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => setIsFullscreen(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Maximize2 className="w-4 h-4" /><span className="hidden sm:inline">Full A4 Preview</span></button>
-            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">Download PDF</span></button>
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={() => setIsFullscreen(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Maximize2 className="w-4 h-4" /><span className="hidden sm:inline">Full Preview</span></button>
+            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">PDF</span></button>
             <button onClick={printQuotation} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-purple-600 text-white hover:bg-purple-700"><Printer className="w-4 h-4" /><span className="hidden sm:inline">Print</span></button>
             <button onClick={() => navigate(`/sales/quotations/${id}/edit`)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700"><Edit className="w-4 h-4" /><span className="hidden sm:inline">Edit</span></button>
             <button onClick={() => setShowDeleteConfirm(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-red-600 text-white hover:bg-red-700"><Trash2 className="w-4 h-4" /><span className="hidden sm:inline">Delete</span></button>
@@ -194,13 +249,13 @@ export default function QuotationDetail() {
         {/* Status Bar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6 flex flex-wrap items-center gap-4">
           <span className="text-sm text-slate-500">Status:</span>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : quote.status === 'sent' ? 'bg-blue-100 text-blue-700' : quote.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : quote.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
             {quote.status?.replace('_', ' ')}
           </span>
-          <div className="border-l border-slate-300 dark:border-slate-600 pl-4 flex flex-wrap gap-2">
-            {quote.status !== 'sent' && <button onClick={() => handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-100 text-slate-600"><Send className="w-3 h-3 inline mr-1" />Mark as Sent</button>}
-            {quote.status !== 'accepted' && <button onClick={() => handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-emerald-100 text-slate-600"><CheckCircle className="w-3 h-3 inline mr-1" />Mark as Accepted</button>}
-            {quote.status !== 'rejected' && <button onClick={() => handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-100 text-slate-600"><XCircle className="w-3 h-3 inline mr-1" />Mark as Rejected</button>}
+          <div className="border-l border-slate-300 pl-4 flex flex-wrap gap-2">
+            {quote.status !== 'sent' && <button onClick={() => handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-100 text-slate-600"><Send className="w-3 h-3 inline mr-1" />Mark Sent</button>}
+            {quote.status !== 'accepted' && <button onClick={() => handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-emerald-100 text-slate-600"><Briefcase className="w-3 h-3 inline mr-1" />Accept → Create Job</button>}
+            {quote.status !== 'rejected' && <button onClick={() => handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-100 text-slate-600"><XCircle className="w-3 h-3 inline mr-1" />Reject</button>}
           </div>
         </motion.div>
 
