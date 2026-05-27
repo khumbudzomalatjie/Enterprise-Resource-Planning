@@ -36,7 +36,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', borderBottom: '2px solid #059669', paddingBottom: '8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', borderBottom: '2px solid #2563eb', paddingBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img 
             src="/logo.png" 
@@ -45,16 +45,16 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: '#059669', margin: '0' }}>
+            <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e40af', margin: '0' }}>
               NDANDULENI GROUP
             </h1>
-            <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0', fontStyle: 'italic' }}>
+            <p style={{ fontSize: '10px', color: '#3b82f6', margin: '2px 0', fontStyle: 'italic' }}>
               Innovation Without End
             </p>
-            <p style={{ fontSize: '9px', color: '#94a3b8', margin: '0' }}>
+            <p style={{ fontSize: '9px', color: '#64748b', margin: '0' }}>
               2220 Manthata Str, Ivory Park
             </p>
-            <p style={{ fontSize: '9px', color: '#94a3b8', margin: '1px 0' }}>
+            <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>
               Tel: 070 419 9457 | Email: accounts@ndandulenigroup.co.za
             </p>
           </div>
@@ -63,7 +63,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
           <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1e293b', margin: '0', letterSpacing: '2px' }}>
             QUOTATION
           </h2>
-          <p style={{ fontSize: '14px', color: '#059669', margin: '3px 0', fontWeight: 'bold' }}>
+          <p style={{ fontSize: '14px', color: '#2563eb', margin: '3px 0', fontWeight: 'bold' }}>
             {quotation?.quotation_number || 'Q-25-0001'}
           </p>
           <div style={{ marginTop: '8px', fontSize: '9px', color: '#64748b' }}>
@@ -103,7 +103,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
       {/* Items Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8px' }}>
         <thead>
-          <tr style={{ backgroundColor: '#059669', color: 'white' }}>
+          <tr style={{ backgroundColor: '#1e40af', color: 'white' }}>
             <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', fontWeight: 'bold', width: '5%' }}>#</th>
             <th style={{ padding: '6px 8px', textAlign: 'left', fontSize: '10px', fontWeight: 'bold', width: '50%' }}>Description</th>
             <th style={{ padding: '6px 8px', textAlign: 'center', fontSize: '10px', fontWeight: 'bold', width: '10%' }}>Qty</th>
@@ -130,47 +130,47 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
         <div style={{ width: '250px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #e2e8f0', fontSize: '10px' }}>
-            <span style={{ color: '#64748b' }}>Subtotal:</span>
+            <span style={{ color: '#64748b' }}>Subtotal (Excl. VAT):</span>
             <span style={{ color: '#1e293b', fontWeight: '500' }}>{formatCurrency(quotation?.subtotal)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #e2e8f0', fontSize: '10px' }}>
             <span style={{ color: '#64748b' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(quotation?.tax_amount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#f0fdf4', marginTop: '3px', borderRadius: '4px' }}>
-            <span style={{ color: '#059669' }}>TOTAL (incl. VAT):</span>
-            <span style={{ color: '#059669', fontSize: '16px' }}>{formatCurrency(quotation?.total_amount)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#eff6ff', marginTop: '3px', borderRadius: '4px' }}>
+            <span style={{ color: '#1e40af' }}>TOTAL (Incl. VAT):</span>
+            <span style={{ color: '#1e40af', fontSize: '16px' }}>{formatCurrency(quotation?.total_amount)}</span>
           </div>
         </div>
       </div>
 
       {/* Terms & Conditions */}
       <div style={{ marginBottom: '6px' }}>
-        <h3 style={{ fontSize: '10px', fontWeight: 'bold', color: '#059669', textTransform: 'uppercase', marginBottom: '3px', borderBottom: '1px solid #e2e8f0', paddingBottom: '2px' }}>
+        <h3 style={{ fontSize: '10px', fontWeight: 'bold', color: '#1e40af', textTransform: 'uppercase', marginBottom: '3px', borderBottom: '1px solid #bfdbfe', paddingBottom: '2px' }}>
           Terms & Conditions
         </h3>
         <div style={{ fontSize: '8.5px', color: '#64748b', lineHeight: '1.4', display: 'flex', gap: '15px' }}>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: '0 0 3px 0', fontWeight: 'bold' }}>Deposit & Payment:</p>
+            <p style={{ margin: '0 0 3px 0', fontWeight: 'bold', color: '#1e293b' }}>Deposit & Payment:</p>
             <ul style={{ margin: '0', paddingLeft: '15px' }}>
               <li>50% deposit required to secure booking</li>
               <li>Balance payable upon completion</li>
               <li>Payment methods: EFT and card (no cash)</li>
             </ul>
-            <p style={{ margin: '5px 0 3px 0', fontWeight: 'bold' }}>Cancellation & Rescheduling:</p>
+            <p style={{ margin: '5px 0 3px 0', fontWeight: 'bold', color: '#1e293b' }}>Cancellation & Rescheduling:</p>
             <ul style={{ margin: '0', paddingLeft: '15px' }}>
               <li>24-hour notice required for full refund</li>
               <li>Rescheduling subject to availability</li>
             </ul>
           </div>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: '0 0 3px 0', fontWeight: 'bold' }}>Client Responsibilities:</p>
+            <p style={{ margin: '0 0 3px 0', fontWeight: 'bold', color: '#1e293b' }}>Client Responsibilities:</p>
             <ul style={{ margin: '0', paddingLeft: '15px' }}>
               <li>Provide access to premises</li>
               <li>Ensure pets are secured or removed</li>
               <li>Remove clutter and obstacles</li>
             </ul>
-            <p style={{ margin: '5px 0 3px 0', fontWeight: 'bold', color: '#059669' }}>
+            <p style={{ margin: '5px 0 3px 0', fontWeight: 'bold', color: '#1e40af' }}>
               ✓ 100% Satisfaction Guaranteed
             </p>
           </div>
