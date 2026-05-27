@@ -9,6 +9,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
   }
 
   const formatDate = (date) => {
+    if (!date) return 'N/A'
     return new Date(date).toLocaleDateString('en-ZA', {
       year: 'numeric',
       month: 'long',
@@ -28,7 +29,6 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
         color: '#1e293b',
         position: 'relative'
       }}
-      className="quotation-a4"
     >
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', borderBottom: '2px solid #059669', paddingBottom: '20px' }}>
@@ -59,7 +59,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             QUOTATION
           </h2>
           <p style={{ fontSize: '16px', color: '#059669', margin: '5px 0', fontWeight: 'bold' }}>
-            #{quotation?.quotation_number}
+            #{quotation?.quotation_number || 'DRAFT'}
           </p>
           <div style={{ marginTop: '15px', fontSize: '11px', color: '#64748b' }}>
             <p style={{ margin: '2px 0' }}>Date: {formatDate(quotation?.quotation_date)}</p>
@@ -75,7 +75,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             Bill To:
           </h3>
           <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>
-            {quotation?.client_name || quotation?.clients?.company_name}
+            {quotation?.client_name || quotation?.clients?.company_name || 'Client Name'}
           </p>
           {quotation?.client_email && (
             <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0' }}>
@@ -88,7 +88,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             </p>
           )}
           <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0', whiteSpace: 'pre-line' }}>
-            {quotation?.client_address}
+            {quotation?.client_address || ''}
           </p>
         </div>
         <div style={{ flex: 1 }}>
@@ -96,7 +96,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             Prepared By:
           </h3>
           <p style={{ fontSize: '14px', color: '#1e293b', margin: '0' }}>
-            {quotation?.prepared_by_name || 'Sales Department'}
+            Sales Department
           </p>
           <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0' }}>
             Payment Terms: {quotation?.payment_terms || '30 Days'}
@@ -117,15 +117,15 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
           </tr>
         </thead>
         <tbody>
-          {items?.map((item, index) => (
+          {(items || []).map((item, index) => (
             <tr key={item.id || index} style={{ borderBottom: '1px solid #e2e8f0' }}>
               <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b' }}>{index + 1}</td>
               <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b' }}>
-                <p style={{ margin: '0', fontWeight: '500' }}>{item.description}</p>
+                <p style={{ margin: '0', fontWeight: '500' }}>{item.description || 'Item description'}</p>
                 {item.notes && <p style={{ margin: '2px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>{item.notes}</p>}
               </td>
-              <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
-              <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b', textAlign: 'center' }}>{item.unit}</td>
+              <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'center' }}>{item.quantity || 1}</td>
+              <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b', textAlign: 'center' }}>{item.unit || 'each'}</td>
               <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
               <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'right', fontWeight: '500' }}>{formatCurrency(item.total_price)}</td>
             </tr>
@@ -147,7 +147,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>
-            <span style={{ color: '#64748b' }}>Tax (15% VAT):</span>
+            <span style={{ color: '#64748b' }}>Tax (VAT):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(quotation?.tax_amount)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontSize: '16px', fontWeight: 'bold', backgroundColor: '#f0fdf4', marginTop: '5px', borderRadius: '4px', paddingLeft: '15px', paddingRight: '15px' }}>
@@ -167,8 +167,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
 2. Payment terms: 30 days from invoice date.
 3. All prices include VAT at 15% where applicable.
 4. Services will be rendered as per the agreed schedule.
-5. Cancellation requires 30 days written notice.
-6. Ndanduleni Group reserves the right to adjust pricing for any changes in scope.`}
+5. Cancellation requires 30 days written notice.`}
         </div>
       </div>
 
@@ -183,7 +182,7 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
       {/* Footer */}
       <div style={{ position: 'absolute', bottom: '20mm', left: '20mm', right: '20mm', borderTop: '1px solid #e2e8f0', paddingTop: '15px', textAlign: 'center' }}>
         <p style={{ fontSize: '10px', color: '#94a3b8', margin: '0' }}>
-          Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123
+          Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07
         </p>
         <p style={{ fontSize: '10px', color: '#94a3b8', margin: '3px 0' }}>
           {companyInfo?.address || '123 Main Street, Johannesburg, 2000'} | 
@@ -192,21 +191,6 @@ const QuotationPDF = forwardRef(({ quotation, items, companyInfo }, ref) => {
         <p style={{ fontSize: '10px', color: '#94a3b8', margin: '3px 0' }}>
           Thank you for your business!
         </p>
-      </div>
-
-      {/* Watermark */}
-      <div style={{ 
-        position: 'absolute', 
-        top: '50%', 
-        left: '50%', 
-        transform: 'translate(-50%, -50%) rotate(-45deg)',
-        fontSize: '60px',
-        color: 'rgba(5, 150, 105, 0.03)',
-        fontWeight: 'bold',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap'
-      }}>
-        {quotation?.status === 'draft' ? 'DRAFT' : 'NDANDULENI GROUP'}
       </div>
     </div>
   )
