@@ -51,11 +51,12 @@ export default function Dashboard() {
   ]
 
   // Module definitions with routes and required roles
+  // Attendance is now under HR, not a separate module on main dashboard
   const modules = [
     { 
       icon: Users, 
       label: 'Human Resources', 
-      description: 'Staff lifecycle, recruitment, attendance',
+      description: 'Staff lifecycle, recruitment, attendance, leave',
       path: '/hr',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER]
     },
@@ -65,13 +66,6 @@ export default function Dashboard() {
       description: 'Salary, taxes, compliance, payslips',
       path: '/payroll',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER]
-    },
-    { 
-      icon: Clock, 
-      label: 'Attendance', 
-      description: 'Clock in/out, QR codes, GPS tracking',
-      path: '/hr/attendance',
-      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.CLEANER]
     },
     { 
       icon: Building2, 
@@ -169,7 +163,7 @@ export default function Dashboard() {
     }
     
     // Check if module route exists (built modules)
-    const availableModules = ['/hr', '/hr/attendance', '/payroll', '/crm', '/dashboard', '/users']
+    const availableModules = ['/hr', '/payroll', '/crm', '/dashboard', '/users']
     
     if (availableModules.includes(module.path)) {
       navigate(module.path)
@@ -188,7 +182,7 @@ export default function Dashboard() {
 
   // Check if module is built and deployed
   const isModuleBuilt = (module) => {
-    const builtModules = ['/hr', '/hr/attendance', '/payroll', '/crm']
+    const builtModules = ['/hr', '/payroll', '/crm']
     return builtModules.includes(module.path)
   }
 
@@ -532,20 +526,20 @@ export default function Dashboard() {
                 <div className="neu-raised p-6 rounded-3xl stat-card">
                   <h2 className="text-xl font-semibold flex gap-2 text-slate-800 dark:text-white">
                     <Clock className="w-6 h-6 text-emerald-600" />
-                    Time Tracking
+                    Attendance Tracking
                   </h2>
                   <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                     <li className="flex justify-between">
-                      <span>Sarah K.</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">42 hrs</span>
+                      <span>Present Today</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">22/28</span>
                     </li>
                     <li className="flex justify-between">
-                      <span>Miguel R.</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">38 hrs</span>
+                      <span>Absent</span>
+                      <span className="text-red-500">4</span>
                     </li>
                     <li className="flex justify-between">
-                      <span>Lisa M.</span>
-                      <span className="text-slate-500 dark:text-slate-400">35 hrs</span>
+                      <span>On Leave</span>
+                      <span className="text-amber-500">2</span>
                     </li>
                   </ul>
                   <button 
