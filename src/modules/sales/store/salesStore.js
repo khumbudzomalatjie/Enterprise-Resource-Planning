@@ -15,15 +15,21 @@ const useSalesStore = create((set, get) => ({
   fetchQuotations: async (filters = {}) => {
     set({ loading: true })
     const { data, error } = await salesApi.getQuotations(filters)
-    if (error) { set({ error: error.message, loading: false }); return { success: false, error: error.message } }
-    set({ quotations: data, loading: false })
+    if (error) { 
+      set({ error: error.message, loading: false })
+      return { success: false, error: error.message } 
+    }
+    set({ quotations: data || [], loading: false })
     return { success: true, data }
   },
 
   fetchQuotation: async (id) => {
     set({ loading: true })
     const { data, error } = await salesApi.getQuotation(id)
-    if (error) { set({ error: error.message, loading: false }); return { success: false, error: error.message } }
+    if (error) { 
+      set({ error: error.message, loading: false })
+      return { success: false, error: error.message } 
+    }
     set({ selectedQuotation: data, loading: false })
     return { success: true, data }
   },
@@ -55,22 +61,33 @@ const useSalesStore = create((set, get) => ({
     return { success: true }
   },
 
+  // ============================================
+  // ACCEPT QUOTATION - Creates Job & Removes from list
+  // ============================================
   acceptQuotation: async (id) => {
+    set({ loading: true })
+    
     const result = await salesApi.acceptQuotation(id)
-    if (result.error) return { success: false, error: result.error.message }
+    
+    if (result.error) {
+      set({ loading: false })
+      return { success: false, error: result.error.message || 'Failed to accept quotation' }
+    }
+    
+    // IMPORTANT: Remove the accepted quotation from the list
     set(state => ({
       quotations: state.quotations.filter(q => q.id !== id),
-      selectedQuotation: state.selectedQuotation?.id === id 
-        ? { ...state.selectedQuotation, status: 'accepted' } 
-        : state.selectedQuotation
+      selectedQuotation: state.selectedQuotation?.id === id ? null : state.selectedQuotation,
+      loading: false
     }))
+    
     return { success: true, data: result.data }
   },
 
   fetchInvoices: async (filters = {}) => {
     const { data, error } = await salesApi.getInvoices(filters)
     if (error) return { success: false, error: error.message }
-    set({ invoices: data })
+    set({ invoices: data || [] })
     return { success: true, data }
   },
 
@@ -97,7 +114,7 @@ const useSalesStore = create((set, get) => ({
   fetchProductsServices: async () => {
     const { data, error } = await salesApi.getProductsServices()
     if (error) return { success: false, error: error.message }
-    set({ productsServices: data })
+    set({ productsServices: data || [] })
     return { success: true, data }
   },
 
