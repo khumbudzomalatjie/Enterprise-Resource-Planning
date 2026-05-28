@@ -16,6 +16,7 @@ import SalesRoutes from '../modules/sales/routes/SalesRoutes'
 import OperationsRoutes from '../modules/operations/routes/OperationsRoutes'
 import InventoryRoutes from '../modules/inventory/routes/InventoryRoutes'
 import ProcurementRoutes from '../modules/procurement/routes/ProcurementRoutes'
+import FinanceRoutes from '../modules/finance/routes/FinanceRoutes'
 
 import { USER_ROLES } from '../types/authTypes'
 
@@ -143,11 +144,19 @@ export default function AppRoutes() {
           </ProtectedRoute>
         } 
       />
-      
+
       {/* ============================================ */}
       {/* MODULE 9 - FINANCE & ACCOUNTING              */}
-      {/* (Coming Soon)                                */}
+      {/* Access: Super Admin, Finance Officer, Ops Mgr */}
       {/* ============================================ */}
+      <Route 
+        path="/finance/*" 
+        element={
+          <ProtectedRoute>
+            <FinanceRoutes />
+          </ProtectedRoute>
+        } 
+      />
       
       {/* ============================================ */}
       {/* MODULE 10 - FLEET MANAGEMENT                 */}
