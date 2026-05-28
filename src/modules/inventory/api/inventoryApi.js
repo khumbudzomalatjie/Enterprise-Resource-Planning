@@ -27,18 +27,30 @@ export const inventoryApi = {
   },
 
   async createItem(itemData) {
+    // Clean up empty strings to null for UUID fields
+    const cleanedData = { ...itemData }
+    if (cleanedData.category_id === '') cleanedData.category_id = null
+    if (cleanedData.default_warehouse_id === '') cleanedData.default_warehouse_id = null
+    if (cleanedData.preferred_supplier_id === '') cleanedData.preferred_supplier_id = null
+    
     const { data, error } = await supabase
       .from('inventory_items')
-      .insert([itemData])
+      .insert([cleanedData])
       .select()
       .single()
     return { data, error }
   },
 
   async updateItem(id, updates) {
+    // Clean up empty strings to null for UUID fields
+    const cleanedData = { ...updates }
+    if (cleanedData.category_id === '') cleanedData.category_id = null
+    if (cleanedData.default_warehouse_id === '') cleanedData.default_warehouse_id = null
+    if (cleanedData.preferred_supplier_id === '') cleanedData.preferred_supplier_id = null
+    
     const { data, error } = await supabase
       .from('inventory_items')
-      .update(updates)
+      .update(cleanedData)
       .eq('id', id)
       .select()
       .single()
@@ -62,9 +74,17 @@ export const inventoryApi = {
   },
 
   async createStockMovement(movementData) {
+    // Clean up empty strings to null for UUID fields
+    const cleanedData = { ...movementData }
+    if (cleanedData.warehouse_id === '') cleanedData.warehouse_id = null
+    if (cleanedData.batch_id === '') cleanedData.batch_id = null
+    if (cleanedData.source_warehouse_id === '') cleanedData.source_warehouse_id = null
+    if (cleanedData.destination_warehouse_id === '') cleanedData.destination_warehouse_id = null
+    if (cleanedData.job_id === '') cleanedData.job_id = null
+    
     const { data, error } = await supabase
       .from('stock_movements')
-      .insert([movementData])
+      .insert([cleanedData])
       .select()
       .single()
     return { data, error }
