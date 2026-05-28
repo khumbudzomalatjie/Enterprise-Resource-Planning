@@ -5,7 +5,6 @@ const useInventoryStore = create((set, get) => ({
   items: [],
   selectedItem: null,
   stockMovements: [],
-  stockCounts: [],
   warehouses: [],
   categories: [],
   suppliers: [],
@@ -58,6 +57,7 @@ const useInventoryStore = create((set, get) => ({
     const { data, error } = await inventoryApi.createStockMovement(movementData)
     if (error) return { success: false, error: error.message }
     set(state => ({ stockMovements: [data, ...state.stockMovements] }))
+    await get().fetchItems()
     return { success: true, data }
   },
 
@@ -94,21 +94,6 @@ const useInventoryStore = create((set, get) => ({
     if (error) return { success: false }
     set({ purchaseOrders: data })
     return { success: true, data }
-  },
-
-  createPurchaseOrder: async (poData, items) => {
-    const result = await inventoryApi.createPurchaseOrder(poData, items)
-    if (result.error) return { success: false, error: result.error.message }
-    return { success: true, data: result.data }
-  },
-
-  receivePurchaseOrder: async (poId) => {
-    const result = await inventoryApi.receivePurchaseOrder(poId)
-    if (result.success) {
-      await get().fetchItems()
-      await get().fetchStockMovements()
-    }
-    return result
   },
 
   fetchInventoryStats: async () => {
