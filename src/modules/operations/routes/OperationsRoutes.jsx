@@ -16,7 +16,12 @@ export default function OperationsRoutes() {
       {/* Operations Main Dashboard */}
       <Route path="/" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR,
+            USER_ROLES.HR_MANAGER
+          ]}>
             <OperationsDashboard />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -25,7 +30,11 @@ export default function OperationsRoutes() {
       {/* Jobs Management */}
       <Route path="/jobs" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <JobList />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -33,7 +42,11 @@ export default function OperationsRoutes() {
 
       <Route path="/jobs/new" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <CreateJob />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -41,7 +54,12 @@ export default function OperationsRoutes() {
 
       <Route path="/jobs/:id" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.CLEANER]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR,
+            USER_ROLES.CLEANER
+          ]}>
             <JobDetail />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -50,7 +68,11 @@ export default function OperationsRoutes() {
       {/* Calendar & Scheduling */}
       <Route path="/calendar" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <SchedulingCalendar />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -59,7 +81,11 @@ export default function OperationsRoutes() {
       {/* Quality Inspections */}
       <Route path="/quality" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <QualityInspections />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -68,7 +94,11 @@ export default function OperationsRoutes() {
       {/* Route Planning / Map */}
       <Route path="/routes" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <RoutePlanning />
           </RoleBasedRoute>
         </ProtectedRoute>
@@ -77,13 +107,17 @@ export default function OperationsRoutes() {
       {/* Teams - Coming Soon */}
       <Route path="/teams" element={
         <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]}>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN, 
+            USER_ROLES.OPERATIONS_MANAGER, 
+            USER_ROLES.SUPERVISOR
+          ]}>
             <OperationsDashboard />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
 
-      {/* Catch-all */}
+      {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/operations" replace />} />
     </Routes>
   )
