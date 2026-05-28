@@ -4,16 +4,15 @@ import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useInventoryStore from '../store/inventoryStore'
 import useThemeStore from '../../../store/themeStore'
-import toast from 'react-hot-toast'
 import { 
-  Package, AlertTriangle, Warehouse, ShoppingCart, 
+  Package, AlertTriangle, ShoppingCart, 
   TrendingDown, DollarSign, BarChart3, Plus,
   ArrowDown, ArrowUp, Truck, Clock,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft
 } from 'lucide-react'
 
 export default function InventoryDashboard() {
-  const { stats, fetchInventoryStats, fetchItems, fetchStockMovements, loading } = useInventoryStore()
+  const { stats, fetchInventoryStats, fetchItems, fetchStockMovements } = useInventoryStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const [lowStockItems, setLowStockItems] = useState([])
@@ -69,13 +68,13 @@ export default function InventoryDashboard() {
             <p className="text-slate-500 dark:text-slate-400 ml-11">Stock control, warehouses, suppliers, and purchase orders</p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => navigate('/inventory/stock-in')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
+            <button onClick={() => navigate('/inventory/stock-in')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
               <ArrowDown className="w-5 h-5" /><span>Stock In</span>
             </button>
-            <button onClick={() => navigate('/inventory/stock-out')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2">
+            <button onClick={() => navigate('/inventory/stock-out')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2 text-sm">
               <ArrowUp className="w-5 h-5" /><span>Stock Out</span>
             </button>
-            <button onClick={() => navigate('/inventory/items/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2">
+            <button onClick={() => navigate('/inventory/items/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-sm">
               <Plus className="w-5 h-5" /><span>New Item</span>
             </button>
           </div>
@@ -92,13 +91,12 @@ export default function InventoryDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Low Stock Alert */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />Low Stock Alert
               </h2>
-              <Link to="/inventory/items?filter=low_stock" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+              <Link to="/inventory/items" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
             <div className="space-y-3">
               {lowStockItems.map(item => (
@@ -117,7 +115,6 @@ export default function InventoryDashboard() {
             </div>
           </motion.div>
 
-          {/* Recent Movements */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -129,7 +126,7 @@ export default function InventoryDashboard() {
               {stats.recentMovements?.map(m => (
                 <div key={m.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/30 text-sm">
                   <div className="flex items-center gap-2">
-                    {m.movement_type.includes('in') || m.movement_type === 'purchase' ? 
+                    {m.movement_type === 'purchase' || m.movement_type === 'return' || m.movement_type === 'transfer_in' ? 
                       <ArrowDown className="w-4 h-4 text-emerald-600" /> : 
                       <ArrowUp className="w-4 h-4 text-red-600" />
                     }
@@ -141,23 +138,12 @@ export default function InventoryDashboard() {
                   </div>
                 </div>
               ))}
+              {(!stats.recentMovements || stats.recentMovements.length === 0) && (
+                <p className="text-center text-slate-500 py-4">No recent movements</p>
+              )}
             </div>
           </motion.div>
         </div>
-
-        {/* Quick Links */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-          {[
-            { label: 'Stock List', icon: Package, path: '/inventory/items' },
-            { label: 'Warehouses', icon: Warehouse, path: '/inventory/warehouses' },
-            { label: 'Suppliers', icon: ShoppingCart, path: '/inventory/suppliers' },
-            { label: 'Reports', icon: BarChart3, path: '/inventory/reports' },
-          ].map(action => (
-            <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105">
-              <action.icon className="w-6 h-6 text-emerald-600" /><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
-            </button>
-          ))}
-        </motion.div>
       </main>
     </div>
   )
