@@ -6,43 +6,45 @@ import useFinanceStore from '../store/financeStore'
 import useThemeStore from '../../../store/themeStore'
 import { 
   Landmark, DollarSign, TrendingUp, TrendingDown, 
-  CheckCircle2, Clock, AlertCircle, FileText, 
+  FileText, Receipt, BarChart3, ShoppingCart,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Users, ShoppingCart, Send, Receipt, BarChart3
+  CheckCircle2, AlertCircle
 } from 'lucide-react'
 
 export default function FinanceDashboard() {
-  const { stats, fetchFinanceStats, pendingApprovals, fetchPendingApprovals, fetchPendingVendors, pendingVendors, approveRequest, rejectRequest } = useFinanceStore()
+  const { stats, fetchFinanceStats } = useFinanceStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
 
   useEffect(() => {
     fetchFinanceStats()
-    fetchPendingApprovals()
-    fetchPendingVendors()
   }, [])
 
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
 
-  const handleApprove = async (approvalId) => {
-    const result = await approveRequest(approvalId)
-    if (result.success) {
-      // Show success via the re-render
-    }
-  }
-
-  const handleReject = async (approvalId) => {
-    const reason = prompt('Rejection reason (optional):')
-    await rejectRequest(approvalId, null, reason)
-  }
-
   const statCards = [
-    { icon: AlertCircle, label: 'Pending Approvals', value: stats.pendingApprovals || 0, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-    { icon: TrendingUp, label: 'Receivables', value: formatCurrency(stats.totalReceivables), color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-    { icon: TrendingDown, label: 'Payables', value: formatCurrency(stats.totalPayables), color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-    { icon: DollarSign, label: 'Budget Used', value: `${stats.budgetUtilization || 0}%`, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-    { icon: Landmark, label: 'Total Budget', value: formatCurrency(stats.totalBudget), color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-    { icon: Receipt, label: 'Monthly Payments', value: formatCurrency(stats.monthlyPayments), color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+    { icon: TrendingUp, label: 'Receivables', value: formatCurrency(stats.totalReceivables), color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', path: '/finance/receivables' },
+    { icon: TrendingDown, label: 'Payables', value: formatCurrency(stats.totalPayables), color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30', path: '/finance/payables' },
+    { icon: DollarSign, label: 'Budget Used', value: `${stats.budgetUtilization || 0}%`, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', path: '/finance/budgets' },
+    { icon: Landmark, label: 'Total Budget', value: formatCurrency(stats.totalBudget), color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30', path: '/finance/budgets' },
+    { icon: Receipt, label: 'Monthly Payments', value: formatCurrency(stats.monthlyPayments), color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30', path: '/finance/payments' },
+    { icon: AlertCircle, label: 'Pending Approvals', value: stats.pendingApprovals || 0, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30', path: '/procurement/vendors' },
+  ]
+
+  const navigationCards = [
+    { title: 'Vendor Approvals', desc: 'Approve or reject pending vendors from Procurement', icon: ShoppingCart, path: '/procurement/vendors', color: 'from-amber-500 to-orange-600' },
+    { title: 'Accounts Payable', desc: 'Manage bills, vendor payments, and outstanding payables', icon: TrendingDown, path: '/finance/payables', color: 'from-red-500 to-pink-600' },
+    { title: 'Accounts Receivable', desc: 'Track client invoices and payments received', icon: TrendingUp, path: '/finance/receivables', color: 'from-blue-500 to-cyan-600' },
+    { title: 'Budget Management', desc: 'Create and manage departmental budgets', icon: DollarSign, path: '/finance/budgets', color: 'from-purple-500 to-violet-600' },
+    { title: 'General Ledger', desc: 'View all financial transactions and journal entries', icon: FileText, path: '/finance/ledger', color: 'from-emerald-500 to-teal-600' },
+    { title: 'Payment Records', desc: 'Record and track all payments made and received', icon: Receipt, path: '/finance/payments', color: 'from-indigo-500 to-blue-600' },
+  ]
+
+  const quickLinks = [
+    { label: 'Procurement', icon: ShoppingCart, path: '/procurement' },
+    { label: 'Reports', icon: BarChart3, path: '/finance/reports' },
+    { label: 'Sales', icon: TrendingUp, path: '/sales' },
+    { label: 'Payroll', icon: DollarSign, path: '/payroll' },
   ]
 
   return (
@@ -68,106 +70,73 @@ export default function FinanceDashboard() {
             <Landmark className="w-8 h-8 text-emerald-600" />
             <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Finance & Accounting</h1>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 ml-11">Approvals, budgets, ledger, payables & receivables</p>
+          <p className="text-slate-500 dark:text-slate-400 ml-11">Accounts payable, receivable, budgets, ledger, and payments</p>
         </motion.div>
 
-        {/* Stats */}
+        {/* Stats - Clickable */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {statCards.map((stat, i) => (
-            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }} className="neu-raised rounded-2xl p-4 stat-card">
-              <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}><stat.icon className={`w-5 h-5 ${stat.color}`} /></div>
+            <motion.div 
+              key={stat.label} 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.1 + i * 0.05 }}
+              onClick={() => stat.path && navigate(stat.path)}
+              className={`neu-raised rounded-2xl p-4 stat-card ${stat.path ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
+            >
+              <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
+                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+              </div>
               <p className="text-lg font-bold text-slate-800 dark:text-white">{stat.value}</p>
               <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
             </motion.div>
           ))}
         </div>
 
-        {/* PENDING APPROVALS - MAIN SECTION */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-8 border-2 border-amber-200 dark:border-amber-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <AlertCircle className="w-6 h-6 text-amber-600" />
-              Pending Approvals
-              {stats.pendingApprovals > 0 && (
-                <span className="px-2 py-1 rounded-full text-xs bg-amber-600 text-white">{stats.pendingApprovals}</span>
-              )}
-            </h2>
-            <Link to="/finance/approvals" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
-          </div>
-
-          {/* Vendor Approvals */}
-          {pendingVendors.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-slate-500 mb-3 flex items-center gap-2">
-                <Users className="w-4 h-4" /> Vendor Approvals ({pendingVendors.length})
-              </h3>
-              <div className="space-y-3">
-                {pendingVendors.map(vendor => (
-                  <div key={vendor.id} className="flex items-center justify-between p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
-                    <div>
-                      <p className="font-semibold text-slate-800 dark:text-white">{vendor.company_name}</p>
-                      <p className="text-xs text-slate-500">{vendor.vendor_code} · {vendor.email} · {vendor.city}</p>
-                      <p className="text-xs text-slate-400 mt-1">Category: {vendor.vendor_category?.replace('_', ' ')}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleApprove(vendor.id)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm flex items-center gap-1">
-                        <CheckCircle2 className="w-4 h-4" /> Approve
-                      </button>
-                      <button onClick={() => handleReject(vendor.id)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 text-sm">
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
+        {/* Main Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {navigationCards.map((card, i) => (
+            <motion.div 
+              key={card.title} 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.2 + i * 0.05 }}
+              onClick={() => navigate(card.path)}
+              className="neu-raised rounded-3xl p-6 cursor-pointer hover:scale-[1.02] transition-all"
+            >
+              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${card.color} flex items-center justify-center mb-4 shadow-lg`}>
+                <card.icon className="w-7 h-7 text-white" />
               </div>
-            </div>
-          )}
-
-          {/* Other Approvals */}
-          {pendingApprovals.filter(a => a.approval_type !== 'vendor').length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-slate-500 mb-3">Other Approvals</h3>
-              <div className="space-y-2">
-                {pendingApprovals.filter(a => a.approval_type !== 'vendor').map(approval => (
-                  <div key={approval.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10">
-                    <div>
-                      <p className="font-medium text-sm">{approval.reference_name || approval.reference_number}</p>
-                      <p className="text-xs text-slate-500 capitalize">{approval.approval_type} · Requested {new Date(approval.requested_at).toLocaleDateString()}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleApprove(approval.id)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs">Approve</button>
-                      <button onClick={() => handleReject(approval.id)} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs">Reject</button>
-                    </div>
-                  </div>
-                ))}
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">{card.title}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{card.desc}</p>
+              <div className="flex items-center gap-1 mt-3 text-emerald-600 text-sm font-medium">
+                <span>Open</span>
+                <ChevronRight className="w-4 h-4" />
               </div>
-            </div>
-          )}
-
-          {pendingVendors.length === 0 && pendingApprovals.filter(a => a.approval_type !== 'vendor').length === 0 && (
-            <div className="text-center py-8">
-              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-2" />
-              <p className="text-slate-500">No pending approvals! 🎉</p>
-            </div>
-          )}
-        </motion.div>
+            </motion.div>
+          ))}
+        </div>
 
         {/* Quick Links */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-          {[
-            { label: 'Approvals', icon: CheckCircle2, path: '/finance/approvals' },
-            { label: 'Payables', icon: TrendingDown, path: '/finance/payables' },
-            { label: 'Receivables', icon: TrendingUp, path: '/finance/receivables' },
-            { label: 'Budgets', icon: DollarSign, path: '/finance/budgets' },
-            { label: 'Ledger', icon: FileText, path: '/finance/ledger' },
-            { label: 'Payments', icon: Receipt, path: '/finance/payments' },
-            { label: 'Procurement', icon: ShoppingCart, path: '/procurement' },
-            { label: 'Reports', icon: BarChart3, path: '/finance/reports' },
-          ].map(action => (
-            <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105">
-              <action.icon className="w-6 h-6 text-emerald-600" /><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
-            </button>
-          ))}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.5 }} 
+          className="neu-raised rounded-3xl p-6"
+        >
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Quick Links</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {quickLinks.map(action => (
+              <button 
+                key={action.label} 
+                onClick={() => navigate(action.path)} 
+                className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform"
+              >
+                <action.icon className="w-6 h-6 text-emerald-600" />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
+              </button>
+            ))}
+          </div>
         </motion.div>
       </main>
     </div>
