@@ -13,7 +13,7 @@ import {
   Eye, Download, X
 } from 'lucide-react'
 
-// A4 Invoice Template Component - BLUE THEME (Single Page)
+// A4 Invoice Template Component - BLUE THEME (Single Page with Logo)
 function InvoiceTemplate({ invoice, job }) {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -34,11 +34,33 @@ function InvoiceTemplate({ invoice, job }) {
       boxSizing: 'border-box',
       overflow: 'hidden'
     }}>
-      {/* Header */}
+      {/* Header with Logo */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px', borderBottom: '3px solid #2563eb', paddingBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#2563eb' }}>NG</span>
+          <div style={{ 
+            width: '65px', 
+            height: '65px', 
+            borderRadius: '50%', 
+            backgroundColor: '#eff6ff', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            flexShrink: 0, 
+            overflow: 'hidden',
+            border: '2px solid #dbeafe'
+          }}>
+            <img 
+              src="/logo.png" 
+              alt="Ndanduleni Group Logo" 
+              style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+              onError={(e) => {
+                e.target.style.display = 'none'
+                const parent = e.target.parentElement
+                if (parent) {
+                  parent.innerHTML = '<span style="font-size:22px;font-weight:bold;color:#2563eb">NG</span>'
+                }
+              }}
+            />
           </div>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e40af', margin: '0' }}>NDANDULENI GROUP</h1>
