@@ -9,6 +9,9 @@ import MyProfile from '../pages/MyProfile'
 import FieldDashboard from '../pages/FieldDashboard'
 import ActiveCleaners from '../pages/ActiveCleaners'
 import JobPhotos from '../pages/JobPhotos'
+import LiveMap from '../pages/LiveMap'
+import IncidentReports from '../pages/IncidentReports'
+import SupplyOrders from '../pages/SupplyOrders'
 
 export default function MobileRoutes() {
   return (
@@ -27,8 +30,9 @@ export default function MobileRoutes() {
       <Route path="/field" element={<ProtectedRoute><FieldDashboard /></ProtectedRoute>} />
       <Route path="/field/cleaners" element={<ProtectedRoute><ActiveCleaners /></ProtectedRoute>} />
       <Route path="/field/photos" element={<ProtectedRoute><JobPhotos /></ProtectedRoute>} />
-      <Route path="/field/incidents" element={<ProtectedRoute><FieldDashboard /></ProtectedRoute>} />
-      <Route path="/field/supplies" element={<ProtectedRoute><FieldDashboard /></ProtectedRoute>} />
+      <Route path="/field/incidents" element={<ProtectedRoute><IncidentReports /></ProtectedRoute>} />
+      <Route path="/field/supplies" element={<ProtectedRoute><SupplyOrders /></ProtectedRoute>} />
+      <Route path="/field/map" element={<ProtectedRoute><LiveMap /></ProtectedRoute>} />
     </Routes>
   )
 }
