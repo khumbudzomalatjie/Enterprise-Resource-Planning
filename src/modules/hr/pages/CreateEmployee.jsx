@@ -86,7 +86,7 @@ export default function CreateEmployee() {
     setUploading(false)
   }
 
-  // Save Employee
+  // Save Employee - SAFE VERSION
   const handleSave = async () => {
     // Validation
     if (!formData.first_name || !formData.last_name) {
@@ -99,7 +99,25 @@ export default function CreateEmployee() {
     }
 
     setSaving(true)
-    const result = await createEmployee(formData)
+    
+    // Only send fields that have values (filter out empty strings, null, undefined)
+    const cleanData = {}
+    Object.keys(formData).forEach(key => {
+      const value = formData[key]
+      if (value !== '' && value !== null && value !== undefined) {
+        cleanData[key] = value
+      }
+    })
+
+    // Ensure required fields are present
+    cleanData.first_name = formData.first_name
+    cleanData.last_name = formData.last_name
+    cleanData.email = formData.email
+    cleanData.employment_status = formData.employment_status || 'active'
+
+    console.log('Saving employee with data:', cleanData)
+
+    const result = await createEmployee(cleanData)
     
     if (result.success) {
       toast.success('Employee added successfully! 🎉')
