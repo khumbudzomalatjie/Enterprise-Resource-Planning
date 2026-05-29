@@ -29,7 +29,7 @@ export default function FinanceRoutes() {
       />
 
       {/* ============================================ */}
-      {/* APPROVALS                                    */}
+      {/* VENDOR APPROVALS                             */}
       {/* ============================================ */}
       <Route 
         path="/approvals" 
@@ -121,20 +121,6 @@ export default function FinanceRoutes() {
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
               <FinanceJobs />
-            </RoleBasedRoute>
-          </ProtectedRoute>
-        } 
-      />
-
-      {/* ============================================ */}
-      {/* REPORTS                                      */}
-      {/* ============================================ */}
-      <Route 
-        path="/reports" 
-        element={
-          <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={allowedRoles}>
-              <FinanceDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
