@@ -10,10 +10,10 @@ import {
   Briefcase, DollarSign, CheckCircle2, 
   Search, ArrowLeft, Sun, Moon, Sparkles,
   Building2, MapPin, Clock, Receipt, RefreshCw,
-  Eye, Download, FileText
+  Eye, Download, X
 } from 'lucide-react'
 
-// A4 Invoice Template Component
+// A4 Invoice Template Component - BLUE THEME
 function InvoiceTemplate({ invoice, job }) {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -34,21 +34,21 @@ function InvoiceTemplate({ invoice, job }) {
       position: 'relative'
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', borderBottom: '3px solid #059669', paddingBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', borderBottom: '3px solid #2563eb', paddingBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#059669' }}>NG</span>
+          <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#2563eb' }}>NG</span>
           </div>
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669', margin: '0' }}>NDANDULENI GROUP</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af', margin: '0' }}>NDANDULENI GROUP</h1>
             <p style={{ fontSize: '12px', color: '#64748b', margin: '5px 0' }}>Professional Cleaning & Hygiene Services</p>
             <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg, 2000</p>
             <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0' }}>Tel: +27 11 234 5678 | info@ndanduleni.co.za</p>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e293b', margin: '0', letterSpacing: '2px' }}>INVOICE</h2>
-          <p style={{ fontSize: '16px', color: '#059669', margin: '5px 0', fontWeight: 'bold' }}>#{invoice?.invoice_number || 'N/A'}</p>
+          <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e3a5f', margin: '0', letterSpacing: '2px' }}>INVOICE</h2>
+          <p style={{ fontSize: '18px', color: '#2563eb', margin: '5px 0', fontWeight: 'bold' }}>#{invoice?.invoice_number || 'N/A'}</p>
           <div style={{ marginTop: '15px', fontSize: '11px', color: '#64748b' }}>
             <p style={{ margin: '2px 0' }}>Date: {formatDate(invoice?.invoice_date)}</p>
             <p style={{ margin: '2px 0' }}>Due Date: {formatDate(invoice?.due_date)}</p>
@@ -56,79 +56,99 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Bill To */}
+      {/* Bill To & Job Reference */}
       <div style={{ marginBottom: '30px', display: 'flex', gap: '40px' }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Bill To:</h3>
+          <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '1px' }}>Bill To:</h3>
           <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
           {invoice?.client_email && <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0' }}>{invoice.client_email}</p>}
-          <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0' }}>{invoice?.client_address || ''}</p>
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0', whiteSpace: 'pre-line' }}>{invoice?.client_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Job Reference:</h3>
-          <p style={{ fontSize: '14px', color: '#1e293b', margin: '0' }}>{job?.job_number || 'N/A'}</p>
+          <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '1px' }}>Job Reference:</h3>
+          <p style={{ fontSize: '14px', color: '#1e293b', margin: '0', fontWeight: '500' }}>{job?.job_number || 'N/A'}</p>
           <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0' }}>{job?.title || 'Cleaning Service'}</p>
+          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '2px 0' }}>{job?.site_address || ''}</p>
         </div>
       </div>
 
       {/* Items Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
         <thead>
-          <tr style={{ backgroundColor: '#059669', color: 'white' }}>
-            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold' }}>#</th>
-            <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}>Qty</th>
-            <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}>Unit</th>
-            <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 'bold' }}>Unit Price</th>
-            <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 'bold' }}>Total</th>
+          <tr style={{ backgroundColor: '#1e40af', color: 'white' }}>
+            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+            <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Qty</th>
+            <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unit</th>
+            <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unit Price</th>
+            <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b' }}>1</td>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b' }}>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#64748b' }}>1</td>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#1e293b' }}>
               <p style={{ margin: '0', fontWeight: '500' }}>{job?.title || 'Cleaning Service'}</p>
-              <p style={{ margin: '2px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Job: {job?.job_number || 'N/A'}</p>
+              <p style={{ margin: '2px 0 0 0', fontSize: '10px', color: '#94a3b8' }}>Job Ref: {job?.job_number || 'N/A'}</p>
             </td>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'center' }}>1</td>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#64748b', textAlign: 'center' }}>service</td>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
-            <td style={{ padding: '10px 12px', fontSize: '12px', color: '#1e293b', textAlign: 'right', fontWeight: '500' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#1e293b', textAlign: 'center' }}>1</td>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#64748b', textAlign: 'center' }}>service</td>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
+            <td style={{ padding: '12px 16px', fontSize: '12px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
           </tr>
         </tbody>
       </table>
 
       {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
-        <div style={{ width: '300px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>
-            <span style={{ color: '#64748b' }}>Subtotal:</span>
-            <span style={{ color: '#1e293b', fontWeight: '500' }}>{formatCurrency(invoice?.subtotal)}</span>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '40px' }}>
+        <div style={{ width: '320px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', backgroundColor: '#f8fafc' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>Subtotal:</span>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #e2e8f0', fontSize: '12px' }}>
-            <span style={{ color: '#64748b' }}>VAT (15%):</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 20px', borderBottom: '1px solid #e2e8f0', fontSize: '12px', backgroundColor: '#f8fafc' }}>
+            <span style={{ color: '#64748b', fontWeight: '500' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(invoice?.tax_amount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontSize: '16px', fontWeight: 'bold', backgroundColor: '#f0fdf4', marginTop: '5px', borderRadius: '4px', paddingLeft: '15px', paddingRight: '15px' }}>
-            <span style={{ color: '#059669' }}>TOTAL DUE:</span>
-            <span style={{ color: '#059669', fontSize: '18px' }}>{formatCurrency(invoice?.total_amount)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', fontSize: '16px', fontWeight: 'bold', backgroundColor: '#eff6ff' }}>
+            <span style={{ color: '#1e40af' }}>TOTAL DUE:</span>
+            <span style={{ color: '#1e40af', fontSize: '20px' }}>{formatCurrency(invoice?.total_amount)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Info */}
+      <div style={{ marginBottom: '30px', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Payment Information</h3>
+        <div style={{ display: 'flex', gap: '40px', fontSize: '11px', color: '#64748b' }}>
+          <div>
+            <p style={{ margin: '2px 0' }}><strong>Bank:</strong> First National Bank (FNB)</p>
+            <p style={{ margin: '2px 0' }}><strong>Account Name:</strong> Ndanduleni Group (Pty) Ltd</p>
+          </div>
+          <div>
+            <p style={{ margin: '2px 0' }}><strong>Account Number:</strong> 6277 123 45678</p>
+            <p style={{ margin: '2px 0' }}><strong>Branch Code:</strong> 250655</p>
+          </div>
+          <div>
+            <p style={{ margin: '2px 0' }}><strong>Payment Terms:</strong> 30 Days</p>
+            <p style={{ margin: '2px 0' }}><strong>Reference:</strong> {invoice?.invoice_number || job?.job_number}</p>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <div style={{ position: 'absolute', bottom: '20mm', left: '20mm', right: '20mm', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+      <div style={{ position: 'absolute', bottom: '20mm', left: '20mm', right: '20mm', borderTop: '2px solid #2563eb', paddingTop: '15px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b', margin: '0' }}>Payment Terms: 30 Days</p>
-            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '2px 0' }}>Bank: FNB | Account: 6277 123 45678 | Branch: 250655</p>
+            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '0' }}>Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07</p>
+            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '2px 0' }}>VAT Registration: 4567890123</p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '0' }}>Ndanduleni Group (Pty) Ltd</p>
-            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '2px 0' }}>Reg: 2020/123456/07 | VAT: 4567890123</p>
+            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg, 2000</p>
+            <p style={{ fontSize: '10px', color: '#94a3b8', margin: '2px 0' }}>Tel: +27 11 234 5678 | info@ndanduleni.co.za</p>
           </div>
         </div>
-        <p style={{ fontSize: '12px', color: '#059669', textAlign: 'center', margin: '10px 0 0 0', fontWeight: 'bold' }}>
+        <p style={{ fontSize: '14px', color: '#2563eb', textAlign: 'center', margin: '15px 0 0 0', fontWeight: 'bold', letterSpacing: '1px' }}>
           Thank you for your business!
         </p>
       </div>
@@ -139,7 +159,6 @@ function InvoiceTemplate({ invoice, job }) {
 export default function FinanceJobs() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const invoiceRef = useRef(null)
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -232,9 +251,7 @@ export default function FinanceJobs() {
         quotation_date: new Date().toISOString().split('T')[0],
         valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         subtotal: quotationAmount, tax_rate: 15, tax_amount: quotationAmount * 0.15, total_amount: quotationAmount * 1.15,
-        status: 'accepted',
-        notes: `Generated from completed job: ${job.job_number} - ${job.title}`,
-        payment_terms: '30 Days'
+        status: 'accepted', notes: `Generated from completed job: ${job.job_number} - ${job.title}`, payment_terms: '30 Days'
       }]).select().single()
       if (qError) throw qError
 
@@ -249,8 +266,7 @@ export default function FinanceJobs() {
       
       const { data: invoice, error: iError } = await supabase.from('invoices').insert([{
         invoice_number: invoiceNumber, quotation_id: quotation.id, client_id: job.client_id,
-        client_name: job.clients?.company_name || 'Client',
-        client_email: job.clients?.email || '',
+        client_name: job.clients?.company_name || 'Client', client_email: job.clients?.email || '',
         client_address: [job.clients?.address_line1, job.clients?.city].filter(Boolean).join(', ') || '',
         invoice_date: new Date().toISOString().split('T')[0],
         due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -275,22 +291,16 @@ export default function FinanceJobs() {
     }
   }
 
-  // View Invoice
   const handleViewInvoice = (job) => {
     setViewingInvoice(job)
   }
 
-  // Download Invoice as A4 PDF
   const handleDownloadInvoice = async (job) => {
     setDownloadingInvoice(job.id)
     
     try {
       const element = document.getElementById(`invoice-preview-${job.id}`)
-      if (!element) {
-        toast.error('Invoice preview not found')
-        setDownloadingInvoice(null)
-        return
-      }
+      if (!element) { toast.error('Invoice preview not found'); setDownloadingInvoice(null); return }
 
       const opt = {
         margin: [0, 0, 0, 0],
@@ -482,17 +492,19 @@ export default function FinanceJobs() {
       {viewingInvoice && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setViewingInvoice(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="font-bold text-lg">Invoice Preview</h3>
+            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-lg">Invoice Preview - {viewingInvoice.invoice?.invoice_number}</h3>
               <div className="flex gap-2">
-                <button onClick={() => handleDownloadInvoice(viewingInvoice)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2">
+                <button onClick={() => handleDownloadInvoice(viewingInvoice)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-blue-700">
                   <Download className="w-4 h-4" /> Download PDF
                 </button>
-                <button onClick={() => setViewingInvoice(null)} className="px-4 py-2 bg-slate-200 rounded-xl text-sm">Close</button>
+                <button onClick={() => setViewingInvoice(null)} className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
-            <div className="p-4">
-              <div id={`invoice-preview-${viewingInvoice.id}`}>
+            <div className="p-4 bg-slate-100">
+              <div className="bg-white shadow-lg" id={`invoice-preview-${viewingInvoice.id}`}>
                 <InvoiceTemplate invoice={viewingInvoice.invoice} job={viewingInvoice} />
               </div>
             </div>
@@ -501,11 +513,13 @@ export default function FinanceJobs() {
       )}
 
       {/* Hidden invoice templates for download */}
-      {jobs.filter(j => j.quotation_id).map(job => (
-        <div key={`hidden-${job.id}`} id={`invoice-preview-${job.id}`} style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <InvoiceTemplate invoice={job.invoice} job={job} />
-        </div>
-      ))}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        {jobs.filter(j => j.quotation_id).map(job => (
+          <div key={`hidden-${job.id}`} id={`invoice-preview-${job.id}`}>
+            <InvoiceTemplate invoice={job.invoice} job={job} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
