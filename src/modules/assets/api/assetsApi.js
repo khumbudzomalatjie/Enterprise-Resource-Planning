@@ -1,7 +1,9 @@
 import { supabase } from '../../../lib/supabaseClient'
 
 export const assetsApi = {
-  // Assets CRUD
+  // ============================================
+  // ASSETS CRUD
+  // ============================================
   async getAssets(filters = {}) {
     let query = supabase
       .from('assets')
@@ -11,7 +13,9 @@ export const assetsApi = {
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.category_id) query = query.eq('category_id', filters.category_id)
     if (filters.location) query = query.eq('location', filters.location)
-    if (filters.search) query = query.or(`name.ilike.%${filters.search}%,asset_code.ilike.%${filters.search}%,serial_number.ilike.%${filters.search}%`)
+    if (filters.search) {
+      query = query.or(`name.ilike.%${filters.search}%,asset_code.ilike.%${filters.search}%,serial_number.ilike.%${filters.search}%`)
+    }
 
     const { data, error } = await query
     return { data, error }
@@ -53,7 +57,9 @@ export const assetsApi = {
     return { error }
   },
 
-  // Categories
+  // ============================================
+  // CATEGORIES CRUD
+  // ============================================
   async getCategories() {
     const { data, error } = await supabase
       .from('asset_categories')
@@ -63,14 +69,43 @@ export const assetsApi = {
     return { data, error }
   },
 
-  // Maintenance
+  async createCategory(categoryData) {
+    const { data, error } = await supabase
+      .from('asset_categories')
+      .insert([categoryData])
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async updateCategory(id, updates) {
+    const { data, error } = await supabase
+      .from('asset_categories')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async deleteCategory(id) {
+    const { error } = await supabase
+      .from('asset_categories')
+      .update({ is_active: false })
+      .eq('id', id)
+    return { error }
+  },
+
+  // ============================================
+  // MAINTENANCE CRUD
+  // ============================================
   async getMaintenance(assetId = null) {
     let query = supabase
       .from('asset_maintenance')
       .select('*, assets(name, asset_code)')
       .order('maintenance_date', { ascending: false })
     if (assetId) query = query.eq('asset_id', assetId)
-    const { data, error } = await query
+    const { data, error } = await query.limit(50)
     return { data, error }
   },
 
@@ -83,14 +118,34 @@ export const assetsApi = {
     return { data, error }
   },
 
-  // Transfers
+  async updateMaintenance(id, updates) {
+    const { data, error } = await supabase
+      .from('asset_maintenance')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async deleteMaintenance(id) {
+    const { error } = await supabase
+      .from('asset_maintenance')
+      .delete()
+      .eq('id', id)
+    return { error }
+  },
+
+  // ============================================
+  // TRANSFERS CRUD
+  // ============================================
   async getTransfers(assetId = null) {
     let query = supabase
       .from('asset_transfers')
       .select('*, assets(name, asset_code)')
       .order('transfer_date', { ascending: false })
     if (assetId) query = query.eq('asset_id', assetId)
-    const { data, error } = await query
+    const { data, error } = await query.limit(50)
     return { data, error }
   },
 
@@ -101,15 +156,32 @@ export const assetsApi = {
       .select()
       .single()
     
-    if (!error) {
+    if (!error && data) {
+      // Update asset location
       await supabase.from('assets')
-        .update({ location: transferData.to_location, department: transferData.to_department })
+        .update({ 
+          location: transferData.to_location, 
+          department: transferData.to_department,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', transferData.asset_id)
     }
     return { data, error }
   },
 
-  // Disposals
+  // ============================================
+  // DISPOSALS CRUD
+  // ============================================
+  async getDisposals(assetId = null) {
+    let query = supabase
+      .from('asset_disposals')
+      .select('*, assets(name, asset_code)')
+      .order('disposal_date', { ascending: false })
+    if (assetId) query = query.eq('asset_id', assetId)
+    const { data, error } = await query.limit(50)
+    return { data, error }
+  },
+
   async createDisposal(disposalData) {
     const { data, error } = await supabase
       .from('asset_disposals')
@@ -117,15 +189,57 @@ export const assetsApi = {
       .select()
       .single()
     
-    if (!error) {
+    if (!error && data) {
+      // Mark asset as disposed
       await supabase.from('assets')
-        .update({ status: 'disposed' })
+        .update({ status: 'disposed', updated_at: new Date().toISOString() })
         .eq('id', disposalData.asset_id)
     }
     return { data, error }
   },
 
-  // Dashboard Stats
+  // ============================================
+  // AUDITS
+  // ============================================
+  async getAudits() {
+    const { data, error } = await supabase
+      .from('asset_audits')
+      .select('*')
+      .order('audit_date', { ascending: false })
+      .limit(20)
+    return { data, error }
+  },
+
+  async createAudit(auditData) {
+    const { data, error } = await supabase
+      .from('asset_audits')
+      .insert([auditData])
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async getAuditItems(auditId) {
+    const { data, error } = await supabase
+      .from('asset_audit_items')
+      .select('*, assets(name, asset_code, location)')
+      .eq('audit_id', auditId)
+    return { data, error }
+  },
+
+  async updateAuditItem(id, updates) {
+    const { data, error } = await supabase
+      .from('asset_audit_items')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  // ============================================
+  // DASHBOARD STATS
+  // ============================================
   async getAssetsStats() {
     const [
       { count: totalAssets },
@@ -140,9 +254,13 @@ export const assetsApi = {
       supabase.from('assets').select('*', { count: 'exact', head: true }).in('status', ['active', 'in_use']),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('status', 'maintenance'),
       supabase.from('assets').select('*', { count: 'exact', head: true }).eq('status', 'disposed'),
-      supabase.from('assets').select('current_value').in('status', ['active', 'in_use']),
+      supabase.from('assets').select('current_value').in('status', ['active', 'in_use', 'available']),
       supabase.from('assets').select('*, asset_categories(name)').order('created_at', { ascending: false }).limit(5),
-      supabase.from('asset_maintenance').select('*, assets(name)').gte('next_maintenance_date', new Date().toISOString().split('T')[0]).lte('next_maintenance_date', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).limit(10)
+      supabase.from('asset_maintenance')
+        .select('*, assets(name)')
+        .gte('next_maintenance_date', new Date().toISOString().split('T')[0])
+        .lte('next_maintenance_date', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+        .limit(10)
     ])
 
     const totalCurrentValue = totalValue?.reduce((sum, a) => sum + (a.current_value || 0), 0) || 0
