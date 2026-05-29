@@ -11,7 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const { signIn, loading } = useAuthStore()
+  const { signIn, loading, profile } = useAuthStore()
   const { isDark, toggleTheme, initTheme } = useThemeStore()
   const navigate = useNavigate()
 
@@ -31,7 +31,18 @@ export default function Login() {
     
     if (result.success) {
       toast.success('Welcome back!')
-      navigate('/dashboard')
+      
+      // Role-based redirect
+      // Get the profile after login to check role
+      const { profile } = useAuthStore.getState()
+      
+      if (profile?.role === 'cleaner') {
+        // Cleaners go to mobile workforce view
+        navigate('/mobile')
+      } else {
+        // All other roles go to main dashboard
+        navigate('/dashboard')
+      }
     } else {
       toast.error(result.error || 'Login failed')
     }
@@ -49,6 +60,10 @@ export default function Login() {
           onClick={toggleTheme}
           className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110 transition-transform"
           title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          style={{
+            background: isDark ? 'linear-gradient(145deg, #1e293b, #0f172a)' : 'linear-gradient(145deg, #eef2f8, #e2e8f0)',
+            boxShadow: isDark ? '8px 8px 16px #020617, -8px -8px 16px #334155' : '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff'
+          }}
         >
           {isDark ? (
             <Sun className="w-6 h-6 text-amber-400" />
