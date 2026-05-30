@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useOperationsStore from '../store/operationsStore'
 import useThemeStore from '../../../store/themeStore'
@@ -11,7 +11,7 @@ import {
   Briefcase, Calendar, Clock, CheckCircle2, AlertTriangle,
   Users, MapPin, BarChart3, Plus, TrendingUp,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Truck, ClipboardCheck, Map, Pause, Play
+  Truck, ClipboardCheck, Map, Pause, Play, Edit3, X, Save
 } from 'lucide-react'
 
 export default function OperationsDashboard() {
@@ -21,8 +21,22 @@ export default function OperationsDashboard() {
   const navigate = useNavigate()
   const [todayJobs, setTodayJobs] = useState([])
   const [recentJobs, setRecentJobs] = useState([])
+  
+  // Edit Modal State
+  const [editingJob, setEditingJob] = useState(null)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    status: '',
+    priority: '',
+    scheduled_date: '',
+    scheduled_start_time: '',
+    scheduled_end_time: '',
+    site_address: '',
+    notes: ''
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
 
-  // Check if user can manage job status (supervisor and above)
+  // Check if user can manage jobs
   const canManageJobs = ['super_admin', 'operations_manager', 'supervisor'].includes(profile?.role)
 
   useEffect(() => {
@@ -40,7 +54,68 @@ export default function OperationsDashboard() {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   }
 
-  // HOLD JOB - Only for supervisors and above
+  // OPEN EDIT MODAL
+  const handleOpenEdit = (job, e) => {
+    e.stopPropagation()
+    setEditingJob(job)
+    setEditForm({
+      title: job.title || '',
+      status: job.status || 'pending',
+      priority: job.priority || 'medium',
+      scheduled_date: job.scheduled_date || '',
+      scheduled_start_time: job.scheduled_start_time?.slice(0,5) || '',
+      scheduled_end_time: job.scheduled_end_time?.slice(0,5) || '',
+      site_address: job.site_address || '',
+      notes: job.notes || ''
+    })
+  }
+
+  // SAVE EDIT
+  const handleSaveEdit = async () => {
+    if (!editingJob) return
+    setSavingEdit(true)
+    
+    try {
+      const updates = {
+        title: editForm.title,
+        status: editForm.status,
+        priority: editForm.priority,
+        scheduled_date: editForm.scheduled_date,
+        scheduled_start_time: editForm.scheduled_start_time,
+        scheduled_end_time: editForm.scheduled_end_time,
+        site_address: editForm.site_address,
+        notes: editForm.notes,
+        updated_at: new Date().toISOString()
+      }
+
+      // If status changed to completed, set actual_end_time
+      if (editForm.status === 'completed' && editingJob.status !== 'completed') {
+        updates.actual_end_time = new Date().toISOString()
+      }
+      // If status changed to in_progress, set actual_start_time
+      if (editForm.status === 'in_progress' && editingJob.status !== 'in_progress') {
+        updates.actual_start_time = new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('jobs')
+        .update(updates)
+        .eq('id', editingJob.id)
+
+      if (error) throw error
+
+      toast.success('Job updated successfully! ✅')
+      setEditingJob(null)
+      loadData()
+    } catch (error) {
+      console.error('Update error:', error)
+      toast.error('Failed to update job')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // HOLD JOB
   const handleHoldJob = async (jobId, e) => {
     e.stopPropagation()
     const reason = prompt('Reason for putting job on hold:')
@@ -55,7 +130,6 @@ export default function OperationsDashboard() {
           updated_at: new Date().toISOString()
         })
         .eq('id', jobId)
-
       if (error) throw error
       toast.success('Job put on hold ⏸️')
       loadData()
@@ -64,7 +138,7 @@ export default function OperationsDashboard() {
     }
   }
 
-  // RESUME JOB from hold
+  // RESUME JOB
   const handleResumeJob = async (jobId, e) => {
     e.stopPropagation()
     try {
@@ -75,7 +149,6 @@ export default function OperationsDashboard() {
           updated_at: new Date().toISOString()
         })
         .eq('id', jobId)
-
       if (error) throw error
       toast.success('Job resumed ▶️')
       loadData()
@@ -88,16 +161,11 @@ export default function OperationsDashboard() {
   const handleCancelJob = async (jobId, e) => {
     e.stopPropagation()
     if (!window.confirm('Cancel this job? This cannot be undone.')) return
-    
     try {
       const { error } = await supabase
         .from('jobs')
-        .update({ 
-          status: 'cancelled', 
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', jobId)
-
       if (error) throw error
       toast.success('Job cancelled')
       loadData()
@@ -158,7 +226,6 @@ export default function OperationsDashboard() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Main Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -174,7 +241,6 @@ export default function OperationsDashboard() {
           </div>
         </motion.div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {statCards.map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }} className="neu-raised rounded-2xl p-4 stat-card">
@@ -185,8 +251,7 @@ export default function OperationsDashboard() {
           ))}
         </div>
 
-        {/* Quick Actions */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
             { label: 'All Jobs', icon: Briefcase, path: '/operations/jobs' },
             { label: 'Calendar', icon: Calendar, path: '/operations/calendar' },
@@ -197,28 +262,25 @@ export default function OperationsDashboard() {
               <action.icon className="w-6 h-6 text-emerald-600" /><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
             </button>
           ))}
-        </motion.div>
+        </div>
 
-        {/* Job Categories Quick View */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="neu-raised rounded-3xl p-6 mb-8">
+        {/* Job Categories */}
+        <div className="neu-raised rounded-3xl p-6 mb-8">
           <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-purple-600" />Job Categories ({jobCategories.length})
           </h2>
           <div className="flex flex-wrap gap-2">
             {jobCategories.map(cat => (
-              <span 
-                key={cat.id}
-                className="px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer hover:scale-105 transition-transform"
-                style={{ backgroundColor: cat.color + '20', color: cat.color, border: '1px solid ' + cat.color + '40' }}
-              >
+              <span key={cat.id} className="px-3 py-1.5 rounded-full text-xs font-medium"
+                style={{ backgroundColor: cat.color + '20', color: cat.color, border: '1px solid ' + cat.color + '40' }}>
                 {cat.name}
               </span>
             ))}
           </div>
-        </motion.div>
+        </div>
 
-        {/* Today's Jobs */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6 mb-8">
+        {/* Today's Jobs Table */}
+        <div className="neu-raised rounded-3xl p-6 mb-8">
           <div className="flex justify-between mb-4">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" />Today's Schedule</h2>
             <Link to="/operations/calendar" className="text-sm text-emerald-600 flex items-center gap-1">Calendar <ChevronRight className="w-4 h-4" /></Link>
@@ -239,14 +301,12 @@ export default function OperationsDashboard() {
               </thead>
               <tbody>
                 {todayJobs.map(job => (
-                  <tr key={job.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer" onClick={() => navigate(`/operations/jobs/${job.id}`)}>
-                    <td className="py-3 px-2 text-sm font-medium text-slate-800 dark:text-white">{job.job_number}</td>
+                  <tr key={job.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="py-3 px-2 text-sm font-medium text-slate-800 dark:text-white cursor-pointer" onClick={() => navigate(`/operations/jobs/${job.id}`)}>{job.job_number}</td>
                     <td className="py-3 px-2 text-sm text-slate-600 dark:text-slate-400">{job.clients?.company_name || '-'}</td>
                     <td className="py-3 px-2">
                       {job.job_categories ? (
-                        <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: job.job_categories.color + '20', color: job.job_categories.color }}>
-                          {job.job_categories.name}
-                        </span>
+                        <span className="px-2 py-1 rounded-full text-xs" style={{ backgroundColor: job.job_categories.color + '20', color: job.job_categories.color }}>{job.job_categories.name}</span>
                       ) : '-'}
                     </td>
                     <td className="py-3 px-2 text-sm text-slate-600">{job.scheduled_start_time?.slice(0,5) || '-'}</td>
@@ -256,9 +316,15 @@ export default function OperationsDashboard() {
                     {canManageJobs && (
                       <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
+                          {/* EDIT BUTTON - Opens modal to change everything including status */}
+                          <button onClick={(e) => handleOpenEdit(job, e)}
+                            className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 flex items-center gap-1"
+                            title="Edit Job">
+                            <Edit3 className="w-3 h-3" /> Edit
+                          </button>
                           {job.status === 'on_hold' ? (
                             <button onClick={(e) => handleResumeJob(job.id, e)}
-                              className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 flex items-center gap-1"
+                              className="px-2 py-1 rounded-lg bg-green-100 text-green-700 text-xs hover:bg-green-200 flex items-center gap-1"
                               title="Resume Job">
                               <Play className="w-3 h-3" /> Resume
                             </button>
@@ -283,34 +349,26 @@ export default function OperationsDashboard() {
             </table>
           </div>
           {todayJobs.length === 0 && <p className="text-center text-slate-500 py-8">No jobs scheduled for today</p>}
-        </motion.div>
+        </div>
 
         {/* Recent Jobs */}
         <div className="neu-raised rounded-3xl p-6">
           <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-emerald-600" />Recent Jobs</h2>
           <div className="space-y-3">
             {recentJobs.map(job => (
-              <div key={job.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer" onClick={() => navigate(`/operations/jobs/${job.id}`)}>
-                <div>
+              <div key={job.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50">
+                <div className="flex-1 cursor-pointer" onClick={() => navigate(`/operations/jobs/${job.id}`)}>
                   <p className="font-medium text-slate-800 dark:text-white text-sm">{job.title}</p>
                   <p className="text-xs text-slate-500">{job.clients?.company_name} · {job.job_number}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(job.status)}`}>{job.status.replace('_', ' ')}</span>
-                  {canManageJobs && job.status !== 'completed' && job.status !== 'cancelled' && (
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      {job.status === 'on_hold' ? (
-                        <button onClick={(e) => handleResumeJob(job.id, e)}
-                          className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 flex items-center gap-1">
-                          <Play className="w-3 h-3" />
-                        </button>
-                      ) : (
-                        <button onClick={(e) => handleHoldJob(job.id, e)}
-                          className="px-2 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs hover:bg-purple-200">
-                          <Pause className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+                  {canManageJobs && (
+                    <button onClick={(e) => handleOpenEdit(job, e)}
+                      className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 flex items-center gap-1"
+                      title="Edit Job">
+                      <Edit3 className="w-3 h-3" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -318,6 +376,120 @@ export default function OperationsDashboard() {
           </div>
         </div>
       </main>
+
+      {/* EDIT JOB MODAL */}
+      <AnimatePresence>
+        {editingJob && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => setEditingJob(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Edit Job</h3>
+                  <p className="text-xs text-slate-500">{editingJob.job_number}</p>
+                </div>
+                <button onClick={() => setEditingJob(null)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Job Title</label>
+                  <input type="text" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
+                </div>
+
+                {/* Status - KEY FIELD */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Status</label>
+                  <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm font-medium">
+                    <option value="pending">Pending</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Priority</label>
+                  <select value={editForm.priority} onChange={e => setEditForm({...editForm, priority: e.target.value})}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                {/* Date & Time */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Date</label>
+                    <input type="date" value={editForm.scheduled_date} onChange={e => setEditForm({...editForm, scheduled_date: e.target.value})}
+                      className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Start Time</label>
+                    <input type="time" value={editForm.scheduled_start_time} onChange={e => setEditForm({...editForm, scheduled_start_time: e.target.value})}
+                      className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1 block">End Time</label>
+                    <input type="time" value={editForm.scheduled_end_time} onChange={e => setEditForm({...editForm, scheduled_end_time: e.target.value})}
+                      className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Site Address</label>
+                  <input type="text" value={editForm.site_address} onChange={e => setEditForm({...editForm, site_address: e.target.value})}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm" />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Notes</label>
+                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} rows={3}
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm resize-none" />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700">
+                <button onClick={() => setEditingJob(null)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-300">
+                  Cancel
+                </button>
+                <button onClick={handleSaveEdit} disabled={savingEdit}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
+                  {savingEdit ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
