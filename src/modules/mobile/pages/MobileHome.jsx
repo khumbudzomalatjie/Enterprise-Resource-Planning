@@ -44,7 +44,7 @@ export default function MobileHome() {
   }, [])
 
   useEffect(() => {
-    loadAllJobs()
+    if (myEmployeeId) loadAllJobs()
   }, [selectedDate, myEmployeeId])
 
   useEffect(() => {
@@ -65,65 +65,85 @@ export default function MobileHome() {
     await setupEmployee()
   }
 
-  // Find or create employee record for this user
+  // AUTO-SETUP: Find or create employee record for ANY logged-in cleaner
   const setupEmployee = async () => {
-    console.log('🔍 Setting up employee for:', user?.email)
-    
-    // Try to find by user_id
-    let { data: emp } = await supabase
-      .from('employees')
-      .select('id, email')
-      .eq('user_id', user?.id)
-      .single()
+    try {
+      console.log('🔍 Setting up employee for:', user?.email)
 
-    if (emp) {
-      console.log('✅ Found by user_id:', emp.id)
-      setMyEmployeeId(emp.id)
-      return
-    }
+      // Step 1: Try to find by user_id
+      let { data: emp } = await supabase
+        .from('employees')
+        .select('id, email, first_name')
+        .eq('user_id', user?.id)
+        .single()
 
-    // Try by email
-    const { data: empByEmail } = await supabase
-      .from('employees')
-      .select('id, email')
-      .eq('email', user?.email)
-      .single()
+      if (emp) {
+        console.log('✅ Found employee by user_id:', emp.id, emp.first_name)
+        setMyEmployeeId(emp.id)
+        return
+      }
 
-    if (empByEmail) {
-      console.log('✅ Found by email:', empByEmail.id)
-      // Link user_id
-      await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
-      setMyEmployeeId(empByEmail.id)
-      return
-    }
+      // Step 2: Try to find by email
+      const { data: empByEmail } = await supabase
+        .from('employees')
+        .select('id, email, first_name')
+        .eq('email', user?.email)
+        .single()
 
-    // Create new employee record
-    const { data: newEmp, error: createError } = await supabase
-      .from('employees')
-      .insert([{
-        user_id: user?.id,
-        first_name: user?.email?.split('@')[0] || 'Cleaner',
-        last_name: '',
-        email: user?.email,
-        employment_status: 'active',
-        department: 'Cleaning'
-      }])
-      .select('id')
-      .single()
+      if (empByEmail) {
+        console.log('✅ Found employee by email:', empByEmail.id)
+        // Link user_id for future logins
+        await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
+        setMyEmployeeId(empByEmail.id)
+        return
+      }
 
-    if (newEmp) {
-      console.log('✅ Created employee:', newEmp.id)
-      setMyEmployeeId(newEmp.id)
-    } else {
-      console.error('❌ Failed to create employee:', createError)
+      // Step 3: Auto-create employee record from auth user data
+      console.log('🆕 Creating new employee record for:', user?.email)
+      
+      const firstName = profile?.full_name?.split(' ')[0] || 
+                        user?.user_metadata?.full_name?.split(' ')[0] ||
+                        user?.email?.split('@')[0] || 'Cleaner'
+      
+      const lastName = profile?.full_name?.split(' ').slice(1).join(' ') || 
+                       user?.user_metadata?.full_name?.split(' ').slice(1).join(' ') || ''
+
+      const { data: newEmp, error: createError } = await supabase
+        .from('employees')
+        .insert([{
+          user_id: user?.id,
+          first_name: firstName,
+          last_name: lastName,
+          email: user?.email,
+          phone: user?.phone || null,
+          employment_status: 'active',
+          employment_type: 'full_time',
+          department: 'Cleaning',
+          date_of_hire: new Date().toISOString().split('T')[0]
+        }])
+        .select('id, first_name')
+        .single()
+
+      if (newEmp) {
+        console.log('✅ Created new employee:', newEmp.id, newEmp.first_name)
+        setMyEmployeeId(newEmp.id)
+        toast.success(`Welcome, ${newEmp.first_name}! Your profile has been created.`)
+      } else {
+        console.error('❌ Failed to create employee:', createError)
+        toast.error('Could not create employee profile. Contact admin.')
+      }
+    } catch (error) {
+      console.error('❌ Setup error:', error.message)
     }
   }
 
   const loadAllJobs = async () => {
+    if (!myEmployeeId) return
+    
     setLoadingAllJobs(true)
     
     try {
-      // OPEN POOL: status = pending or scheduled
+      // OPEN POOL: All jobs with status pending/scheduled
       let openQuery = supabase
         .from('jobs')
         .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, clients(company_name, phone), job_categories(name, color)')
@@ -139,11 +159,12 @@ export default function MobileHome() {
       console.log('📋 Open Pool:', openJobs?.length || 0)
       setAllOpenJobs(openJobs || [])
 
-      // MY JOBS: status = in_progress (show all in progress jobs for now)
+      // MY JOBS: Jobs in_progress AND assigned to THIS employee
       let myQuery = supabase
         .from('jobs')
         .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, assigned_to, clients(company_name, phone), job_categories(name, color)')
         .eq('status', 'in_progress')
+        .eq('assigned_to', myEmployeeId)
         .order('scheduled_date', { ascending: true })
         .order('scheduled_start_time', { ascending: true })
 
@@ -151,15 +172,25 @@ export default function MobileHome() {
         myQuery = myQuery.eq('scheduled_date', selectedDate)
       }
 
-      const { data: myJobsData } = await myQuery
-      console.log('👤 My Jobs (all in_progress):', myJobsData?.length || 0)
-      if (myJobsData?.length > 0) {
-        console.log('   First:', myJobsData[0].title, 'assigned_to:', myJobsData[0].assigned_to)
+      const { data: myJobsData, error: myError } = await myQuery
+      
+      if (myError) {
+        // If assigned_to column doesn't exist, fallback to all in_progress
+        console.log('⚠️ assigned_to query failed, using fallback')
+        const { data: fallback } = await supabase
+          .from('jobs')
+          .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, clients(company_name, phone), job_categories(name, color)')
+          .eq('status', 'in_progress')
+          .order('scheduled_date', { ascending: true })
+        console.log('👤 My Jobs (fallback):', fallback?.length || 0)
+        setMyActiveJobs(fallback || [])
+      } else {
+        console.log('👤 My Jobs:', myJobsData?.length || 0)
+        setMyActiveJobs(myJobsData || [])
       }
-      setMyActiveJobs(myJobsData || [])
 
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error loading jobs:', error)
     } finally {
       setLoadingAllJobs(false)
     }
@@ -173,55 +204,80 @@ export default function MobileHome() {
     toast.success('Refreshed!')
   }
 
+  // Touch handlers
+  const handleTouchStart = (e) => {
+    if (scrollRef.current?.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY
+      setIsPulling(true)
+    }
+  }
+  const handleTouchMove = (e) => {
+    if (!isPulling) return
+    const currentY = e.touches[0].clientY
+    const distance = currentY - touchStartY.current
+    if (distance > 0) setPullDistance(Math.min(distance * 0.5, pullThreshold))
+  }
+  const handleTouchEnd = async () => {
+    if (pullDistance >= pullThreshold && !refreshing) await handleRefresh()
+    setPullDistance(0); setIsPulling(false)
+  }
+
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
-  // SELECT JOB
+  // SELECT JOB - Cleaner picks up a job from Open Pool
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) {
-      toast.error('Employee profile not found. Please contact admin.')
+      toast.error('Profile not ready. Please wait or refresh.')
       return
     }
 
     setUpdatingJob(jobId)
-    console.log('📝 Selecting job:', jobId, 'for employee:', myEmployeeId)
+    console.log('📝 Cleaner', myEmployeeId, 'selecting job:', jobId)
 
     try {
-      const updateData = {
-        status: 'in_progress',
-        actual_start_time: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-
-      // Only add assigned_to if the column exists
+      // Try update with assigned_to
       const { error } = await supabase
         .from('jobs')
-        .update(updateData)
+        .update({ 
+          status: 'in_progress',
+          assigned_to: myEmployeeId,
+          actual_start_time: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', jobId)
 
       if (error) {
-        // Try with assigned_to
-        const { error: error2 } = await supabase
-          .from('jobs')
-          .update({ ...updateData, assigned_to: myEmployeeId })
-          .eq('id', jobId)
-        
-        if (error2) {
-          console.error('❌ Both updates failed:', error.message, error2.message)
+        // If assigned_to column doesn't exist, try without it
+        if (error.message.includes('assigned_to')) {
+          const { error: fallbackError } = await supabase
+            .from('jobs')
+            .update({ 
+              status: 'in_progress',
+              actual_start_time: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', jobId)
+          
+          if (fallbackError) {
+            console.error('❌ Update failed:', fallbackError.message)
+            toast.error('Failed to select job')
+            return
+          }
+        } else {
+          console.error('❌ Update failed:', error.message)
           toast.error('Failed to select job')
           return
         }
       }
 
-      console.log('✅ Job updated successfully')
-      toast.success('Job selected! Switching to My Jobs ✅')
-      
-      // Refresh and switch tabs
-      await loadAllJobs()
+      console.log('✅ Job selected successfully')
+      toast.success('Job selected! ✅')
+      loadAllJobs()
       setActiveTab('mine')
       
     } catch (error) {
-      console.error('❌ Exception:', error)
-      toast.error('Failed')
+      console.error('❌ Exception:', error.message)
+      toast.error('Failed to select job')
     } finally {
       setUpdatingJob(null)
     }
@@ -229,13 +285,13 @@ export default function MobileHome() {
 
   // COMPLETE JOB
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark as completed?')) return
+    if (!window.confirm('Mark as completed? This will send for invoicing.')) return
     setUpdatingJob(jobId)
     try {
       await supabase.from('jobs').update({ 
         status: 'completed', actual_end_time: new Date().toISOString(), updated_at: new Date().toISOString()
       }).eq('id', jobId)
-      toast.success('Completed! ✅')
+      toast.success('Completed! Moving to finance ✅')
       loadAllJobs()
     } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
@@ -243,14 +299,14 @@ export default function MobileHome() {
 
   // PAUSE JOB
   const handlePauseJob = async (jobId) => {
-    const reason = prompt('Reason:')
+    const reason = prompt('Reason for pausing:')
     if (!reason) return
     setUpdatingJob(jobId)
     try {
       await supabase.from('jobs').update({ 
         status: 'on_hold', updated_at: new Date().toISOString()
       }).eq('id', jobId)
-      toast.success('Paused')
+      toast.success('Paused - supervisor will review')
       loadAllJobs()
     } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
@@ -284,9 +340,16 @@ export default function MobileHome() {
            (job.site_address || '').toLowerCase().includes(s)
   })
 
-  const dateOptions = [{ value: 'all', label: 'All Dates' }, { value: todayStr, label: 'Today' }]
+  const dateOptions = [
+    { value: 'all', label: 'All Dates' },
+    { value: todayStr, label: 'Today' },
+  ]
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   dateOptions.push({ value: tomorrow.toISOString().split('T')[0], label: 'Tomorrow' })
+  for (let i = 2; i < 5; i++) {
+    const d = new Date(); d.setDate(d.getDate() + i)
+    dateOptions.push({ value: d.toISOString().split('T')[0], label: formatDateShort(d.toISOString().split('T')[0]) })
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-700 font-['Inter'] pb-20"
@@ -301,6 +364,7 @@ export default function MobileHome() {
       </AnimatePresence>
 
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
+        {/* Header */}
         <div className="px-5 pt-6 pb-6 text-white">
           <div className="flex justify-between items-start mb-1">
             <div className="flex-1">
@@ -308,17 +372,18 @@ export default function MobileHome() {
               <h1 className="text-xl font-bold mt-0.5">{greeting}, {myProfile?.first_name || user?.email?.split('@')[0] || 'Cleaner'}!</h1>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={handleRefresh} className="p-2 rounded-xl bg-white/20"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /></button>
-              <button onClick={handleSignOut} className="p-2 rounded-xl bg-white/20"><LogOut className="w-4 h-4" /></button>
+              <button onClick={handleRefresh} className="p-2 rounded-xl bg-white/20 hover:bg-white/30"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /></button>
+              <button onClick={handleSignOut} className="p-2 rounded-xl bg-white/20 hover:bg-white/30"><LogOut className="w-4 h-4" /></button>
             </div>
           </div>
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
         </div>
 
+        {/* Stats */}
         <div className="px-5 -mt-3">
           <div className="grid grid-cols-4 gap-2">
             {[
-              { icon: List, label: 'Open', value: allOpenJobs.length, color: 'from-blue-400 to-blue-500' },
+              { icon: List, label: 'Open Pool', value: allOpenJobs.length, color: 'from-blue-400 to-blue-500' },
               { icon: User, label: 'My Jobs', value: myActiveJobs.length, color: 'from-amber-400 to-amber-500' },
               { icon: Clock, label: 'Clock', value: stats.isClockedIn ? 'In' : 'Out', color: stats.isClockedIn ? 'from-green-400 to-green-500' : 'from-slate-400 to-slate-500' },
               { icon: CheckCircle2, label: 'Done', value: stats.completedJobs || 0, color: 'from-emerald-400 to-emerald-500' },
@@ -333,6 +398,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Quick Actions */}
         <div className="px-5 mt-4">
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -349,6 +415,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="px-5 mt-5">
           <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
             <button onClick={() => setActiveTab('all')}
@@ -362,6 +429,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Search & Date */}
         <div className="px-5 mt-3 mb-3 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
@@ -376,7 +444,7 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* OPEN POOL */}
+        {/* OPEN POOL TAB */}
         {activeTab === 'all' && (
           <div className="px-5 mb-4">
             {loadingAllJobs ? <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
@@ -402,7 +470,7 @@ export default function MobileHome() {
           </div>
         )}
 
-        {/* MY JOBS */}
+        {/* MY JOBS TAB */}
         {activeTab === 'mine' && (
           <div className="px-5 mb-4">
             {loadingAllJobs ? <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
