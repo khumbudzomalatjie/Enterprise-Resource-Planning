@@ -29,13 +29,12 @@ export default function MobileHome() {
   const touchStartY = useRef(0)
   const pullThreshold = 80
 
-  // Jobs State
-  const [allOpenJobs, setAllOpenJobs] = useState([])      // All scheduled jobs (any cleaner can see)
-  const [myActiveJobs, setMyActiveJobs] = useState([])     // Jobs THIS cleaner has started
+  const [allOpenJobs, setAllOpenJobs] = useState([])
+  const [myActiveJobs, setMyActiveJobs] = useState([])
   const [loadingAllJobs, setLoadingAllJobs] = useState(false)
   const [jobSearch, setJobSearch] = useState('')
   const [selectedDate, setSelectedDate] = useState('all')
-  const [activeTab, setActiveTab] = useState('all')        // 'all' or 'mine'
+  const [activeTab, setActiveTab] = useState('all')
 
   useEffect(() => {
     loadData()
@@ -62,7 +61,6 @@ export default function MobileHome() {
     }
   }
 
-  // Load ALL scheduled jobs (open pool) AND this cleaner's active jobs
   const loadAllJobs = async () => {
     setLoadingAllJobs(true)
     
@@ -81,7 +79,10 @@ export default function MobileHome() {
 
       const { data: openJobs, error: openError } = await openQuery
       if (openError) console.error('Error loading open jobs:', openError)
-      else setAllOpenJobs(openJobs || [])
+      else {
+        console.log('📋 Open Pool jobs loaded:', openJobs?.length || 0)
+        setAllOpenJobs(openJobs || [])
+      }
 
       // 2. Load THIS cleaner's active jobs (in_progress) - assigned to them
       const { data: employee } = await supabase
@@ -104,7 +105,10 @@ export default function MobileHome() {
         }
 
         const { data: myJobsData } = await myQuery
+        console.log('👤 My Jobs loaded:', myJobsData?.length || 0)
         setMyActiveJobs(myJobsData || [])
+      } else {
+        console.log('⚠️ No employee record found for user:', user?.id)
       }
 
     } catch (error) {
@@ -155,7 +159,6 @@ export default function MobileHome() {
   const handleSelectJob = async (jobId) => {
     setUpdatingJob(jobId)
     try {
-      // Get employee ID
       const { data: employee } = await supabase
         .from('employees')
         .select('id')
@@ -163,11 +166,10 @@ export default function MobileHome() {
         .single()
 
       if (!employee) {
-        toast.error('Employee record not found')
+        toast.error('Employee record not found. Contact admin.')
         return
       }
 
-      // Update job: set status to in_progress AND assign to this cleaner
       const { error } = await supabase
         .from('jobs')
         .update({ 
@@ -180,7 +182,7 @@ export default function MobileHome() {
       
       if (error) throw error
 
-      toast.success('Job selected! Now in My Jobs ✅')
+      toast.success('Job selected! Moved to My Jobs ✅')
       loadAllJobs()
     } catch (error) {
       console.error('Select job error:', error)
@@ -189,7 +191,7 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
-  // COMPLETE JOB - Moves to finance for invoicing
+  // COMPLETE JOB
   const handleCompleteJob = async (jobId) => {
     if (!window.confirm('Mark as completed? This will send for invoicing.')) return
     setUpdatingJob(jobId)
@@ -209,7 +211,7 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
-  // PAUSE JOB - Goes on hold, removed from mobile
+  // PAUSE JOB
   const handlePauseJob = async (jobId) => {
     const reason = prompt('Reason for pausing this job:')
     if (reason === null) return
@@ -240,7 +242,6 @@ export default function MobileHome() {
 
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Filter by search
   const filteredOpenJobs = allOpenJobs.filter(job => {
     if (!jobSearch) return true
     const s = jobSearch.toLowerCase()
@@ -287,7 +288,6 @@ export default function MobileHome() {
       </AnimatePresence>
 
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
-        {/* Header */}
         <div className="px-5 pt-6 pb-6 text-white safe-area-top">
           <div className="flex justify-between items-start mb-1">
             <div className="flex-1">
@@ -302,7 +302,6 @@ export default function MobileHome() {
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
         </div>
 
-        {/* Stats */}
         <div className="px-5 -mt-3">
           <div className="grid grid-cols-4 gap-2">
             {[
@@ -321,7 +320,6 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="px-5 mt-4">
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -340,25 +338,19 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Tab Switcher */}
         <div className="px-5 mt-5">
           <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
             <button onClick={() => setActiveTab('all')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'all' ? 'bg-white text-emerald-700 shadow-lg' : 'text-white/70 hover:text-white'
-              }`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'all' ? 'bg-white text-emerald-700 shadow-lg' : 'text-white/70 hover:text-white'}`}>
               <Users className="w-4 h-4" /> Open Pool ({filteredOpenJobs.length})
             </button>
             <button onClick={() => setActiveTab('mine')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'mine' ? 'bg-white text-amber-700 shadow-lg' : 'text-white/70 hover:text-white'
-              }`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'mine' ? 'bg-white text-amber-700 shadow-lg' : 'text-white/70 hover:text-white'}`}>
               <User className="w-4 h-4" /> My Jobs ({filteredMyJobs.length})
             </button>
           </div>
         </div>
 
-        {/* Search & Date Filter */}
         <div className="px-5 mt-3 mb-3 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
@@ -446,7 +438,6 @@ export default function MobileHome() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
                       
-                      {/* Action Buttons */}
                       <div className="flex gap-2 mb-2">
                         <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id}
                           className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50 shadow-sm">
@@ -458,7 +449,6 @@ export default function MobileHome() {
                         </button>
                       </div>
 
-                      {/* Quick Actions for My Job */}
                       <div className="grid grid-cols-3 gap-1.5">
                         <button onClick={() => navigate(`/mobile/photos`)} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1">
                           <Camera className="w-3 h-3" /> Photos
