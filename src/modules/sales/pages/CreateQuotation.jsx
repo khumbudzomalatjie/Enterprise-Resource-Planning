@@ -12,7 +12,7 @@ import {
   Save, Send, Briefcase
 } from 'lucide-react'
 
-// UPDATED Pre-defined services with new prices
+// Pre-defined services with prices
 var SERVICES = [
   // Once-Off Cleaning
   { category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
@@ -190,7 +190,6 @@ function QuotationTemplate({ quotation, items }) {
 
 export default function CreateQuotation() {
   var createQuotation = useSalesStore(function(state) { return state.createQuotation })
-  var convertQuotationToJob = useSalesStore(function(state) { return state.convertQuotationToJob })
   var clients = useCRMStore(function(state) { return state.clients })
   var fetchClients = useCRMStore(function(state) { return state.fetchClients })
   var isDark = useThemeStore(function(state) { return state.isDark })
@@ -223,9 +222,7 @@ export default function CreateQuotation() {
     fetchClients({ status: 'active' })
   }, [])
 
-  // ============================================
-  // BACKGROUND CALCULATOR
-  // ============================================
+  // Calculator functions
   var calculateLineTotal = function(item) {
     return (item.quantity || 0) * (item.unit_price || 0)
   }
@@ -246,9 +243,7 @@ export default function CreateQuotation() {
   var vatAmount = calculateVAT()
   var totalAmount = calculateTotal()
 
-  // ============================================
-  // CLIENT & SERVICE HANDLERS
-  // ============================================
+  // Client & Service handlers
   var handleClientSelect = function(clientId) {
     var client = clients.find(function(c) { return c.id === clientId })
     if (client) {
@@ -294,9 +289,7 @@ export default function CreateQuotation() {
     setItems(newItems)
   }
 
-  // ============================================
-  // SAVE, DOWNLOAD & CONVERT HANDLERS
-  // ============================================
+  // Save, Download handlers
   var handleSave = async function(status) {
     status = status || 'draft'
     
@@ -344,26 +337,10 @@ export default function CreateQuotation() {
     }
   }
 
-  var handleConvertToJob = async function() {
-    if (!savedQuotationId) {
-      toast.error('Please save the quotation first')
-      return
-    }
-
-    var result = await convertQuotationToJob(savedQuotationId)
-    if (result.success) {
-      toast.success('Quotation converted to job successfully!')
-      navigate('/operations/jobs/' + result.data.id)
-    } else {
-      toast.error('Failed to convert to job: ' + (result.error || 'Unknown error'))
-    }
-  }
-
   var downloadPDF = async function() {
     try {
       var html2pdf = (await import('html2pdf.js')).default
       
-      // Create temporary element for clean single-page PDF
       var tempDiv = document.createElement('div')
       tempDiv.style.position = 'absolute'
       tempDiv.style.left = '-9999px'
@@ -371,7 +348,8 @@ export default function CreateQuotation() {
       tempDiv.style.width = '794px'
       document.body.appendChild(tempDiv)
       
-      // Render the template into the temp div
+      var ReactDOM = (await import('react-dom/client')).default
+      var React = (await import('react'))
       var root = ReactDOM.createRoot(tempDiv)
       root.render(
         React.createElement(QuotationTemplate, {
@@ -380,7 +358,6 @@ export default function CreateQuotation() {
         })
       )
       
-      // Wait for render
       await new Promise(function(resolve) { setTimeout(resolve, 500) })
 
       var opt = {
@@ -402,7 +379,6 @@ export default function CreateQuotation() {
         pdf.save(opt.filename)
       })
 
-      // Cleanup
       root.unmount()
       document.body.removeChild(tempDiv)
       toast.success('PDF downloaded successfully!')
@@ -477,7 +453,7 @@ export default function CreateQuotation() {
               <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Quotation Saved!</p>
               <p className="text-xs text-orange-600 dark:text-orange-400">You can now convert this quotation to a job or continue editing.</p>
             </div>
-            <button onClick={handleConvertToJob} className="px-5 py-2.5 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2 transition-colors">
+            <button onClick={function() { navigate('/operations/jobs/new') }} className="px-5 py-2.5 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2 transition-colors">
               <Briefcase className="w-4 h-4" />
               <span>Convert to Job</span>
             </button>
@@ -583,4 +559,43 @@ export default function CreateQuotation() {
                   <span className="text-slate-500">Subtotal (Excl. VAT):</span>
                   <span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">VAT (15%):</span>
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(vatAmount)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-200 dark:border-slate-600">
+                  <span className="text-slate-800 dark:text-white">Total (Incl. VAT):</span>
+                  <span className="text-emerald-600">{formatCurrency(totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="neu-raised rounded-3xl p-4">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <Eye className="w-5 h-5 text-emerald-600" />
+                Preview
+              </h2>
+              <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
+                <div style={{ transform: 'scale(0.45)', transformOrigin: 'top left', width: '222%' }}>
+                  <QuotationTemplate 
+                    quotation={{ ...quotationData, quotation_number: 'PREVIEW' }}
+                    items={items.filter(function(item) { return item.description })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Hidden PDF element */}
+      <div ref={pdfRef} style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px' }}>
+        <QuotationTemplate 
+          quotation={{ ...quotationData, quotation_number: 'DRAFT' }}
+          items={items.filter(function(item) { return item.description })}
+        />
+      </div>
+    </div>
+  )
+}
