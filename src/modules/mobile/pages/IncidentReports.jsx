@@ -1,154 +1,205 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import Navbar from '../../../components/Navbar'
-import useThemeStore from '../../../store/themeStore'
-import { supabase } from '../../../lib/supabaseClient'
+import { useNavigate } from 'react-router-dom'
+import useAuthStore from '../../../store/authStore'
+import useMobileStore from '../store/mobileStore'
+import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
-import { AlertCircle, ArrowLeft, Search, Filter, CheckCircle2, Eye, Sun, Moon, Sparkles } from 'lucide-react'
+import { supabase } from '../../../lib/supabaseClient'
+import { AlertCircle, ArrowLeft, Send, Camera } from 'lucide-react'
 
-export default function IncidentReports() {
-  const { isDark, toggleTheme } = useThemeStore()
-  const [incidents, setIncidents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [severityFilter, setSeverityFilter] = useState('all')
-  const [selectedIncident, setSelectedIncident] = useState(null)
+export default function IncidentReport() {
+  const { user, profile } = useAuthStore()
+  const { myJobs, fetchMyJobs } = useMobileStore()
+  const navigate = useNavigate()
+  const [submitting, setSubmitting] = useState(false)
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
 
-  useEffect(() => { loadIncidents() }, [statusFilter, severityFilter])
-
-  const loadIncidents = async () => {
-    setLoading(true)
-    let query = supabase
-      .from('incident_reports')
-      .select('*, employees(first_name, last_name, employee_code, phone), jobs(title, job_number, site_address)')
-      .order('incident_date', { ascending: false })
-
-    if (statusFilter !== 'all') query = query.eq('status', statusFilter)
-    if (severityFilter !== 'all') query = query.eq('severity', severityFilter)
-
-    const { data } = await query
-    setIncidents(data || [])
-    setLoading(false)
-  }
-
-  const handleResolve = async (id) => {
-    await supabase.from('incident_reports').update({ status: 'resolved' }).eq('id', id)
-    toast.success('Incident resolved!')
-    loadIncidents()
-  }
-
-  const filteredIncidents = incidents.filter(i => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (i.employees?.first_name || '').toLowerCase().includes(s) ||
-           (i.employees?.last_name || '').toLowerCase().includes(s) ||
-           (i.description || '').toLowerCase().includes(s) ||
-           (i.incident_type || '').toLowerCase().includes(s)
+  const [formData, setFormData] = useState({
+    job_id: '',
+    incident_type: 'other',
+    description: '',
+    severity: 'medium'
   })
 
+  useEffect(() => {
+    if (profile?.id) fetchMyJobs(profile.id)
+  }, [])
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => setPhotoPreview(ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    if (!formData.description.trim()) {
+      toast.error('Please describe the incident')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      let photoUrl = null
+
+      // Upload photo if selected
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop()
+        const fileName = `incidents/${Date.now()}.${fileExt}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('fleet')
+          .upload(fileName, photoFile, { upsert: true })
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('fleet').getPublicUrl(fileName)
+          photoUrl = publicUrl
+        }
+      }
+
+      // Get employee ID
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single()
+
+      // Save incident report
+      const { error } = await supabase
+        .from('incident_reports')
+        .insert([{
+          employee_id: employee?.id,
+          job_id: formData.job_id || null,
+          incident_type: formData.incident_type,
+          description: formData.description,
+          severity: formData.severity,
+          photo_url: photoUrl,
+          status: 'reported'
+        }])
+
+      if (error) throw error
+
+      toast.success('Incident reported! Supervisor will review ✅')
+      setFormData({ job_id: '', incident_type: 'other', description: '', severity: 'medium' })
+      setPhotoFile(null)
+      setPhotoPreview(null)
+      
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Failed to submit incident report')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
-      <Navbar />
-      <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
-        </div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110">
-          {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
+    <div className="min-h-screen bg-slate-50 font-['Inter'] pb-20">
+      {/* Header */}
+      <div className="bg-gradient-to-b from-red-500 to-red-600 px-4 pt-8 pb-6 text-white">
+        <button onClick={() => navigate('/mobile')} className="p-1 rounded-lg hover:bg-white/20 mb-4">
+          <ArrowLeft className="w-5 h-5" />
         </button>
+        <h1 className="text-2xl font-bold">Report Incident</h1>
+        <p className="text-red-100 text-sm">Report damages, injuries, or issues on site</p>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        <Link to="/mobile/field" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
-          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Field Operations</span>
-        </Link>
-
-        <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3 mb-6">
-          <AlertCircle className="w-8 h-8 text-red-600" />Incident Reports
-        </h1>
-
-        {/* Filters */}
-        <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search incidents..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
-          </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-sm">
-            <option value="all">All Status</option>
-            <option value="reported">Reported</option>
-            <option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option>
-          </select>
-          <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-sm">
-            <option value="all">All Severity</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
+      <div className="px-4 -mt-4 space-y-4 pt-4">
+        {/* Job Selection */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <label className="text-sm font-semibold text-slate-500 mb-2 block">Related Job (optional)</label>
+          <select value={formData.job_id} onChange={e => setFormData({...formData, job_id: e.target.value})}
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+            <option value="">No specific job</option>
+            {myJobs?.map(job => <option key={job.id} value={job.id}>{job.title} - {job.job_number}</option>)}
           </select>
         </div>
 
-        {/* Incidents Table */}
-        {loading ? (
-          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div></div>
-        ) : (
-          <div className="neu-raised rounded-3xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <th className="text-left py-3 px-4 text-slate-500">Date</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Cleaner</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Type</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Severity</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Description</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Job</th>
-                    <th className="text-left py-3 px-4 text-slate-500">Status</th>
-                    <th className="text-right py-3 px-4 text-slate-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredIncidents.map(incident => (
-                    <tr key={incident.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                      <td className="py-3 px-4 text-xs">{new Date(incident.incident_date).toLocaleDateString()}</td>
-                      <td className="py-3 px-4 font-medium">{incident.employees?.first_name} {incident.employees?.last_name}</td>
-                      <td className="py-3 px-4 capitalize">{incident.incident_type}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          incident.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                          incident.severity === 'high' ? 'bg-orange-100 text-orange-700' :
-                          incident.severity === 'medium' ? 'bg-amber-100 text-amber-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>{incident.severity}</span>
-                      </td>
-                      <td className="py-3 px-4 max-w-xs truncate">{incident.description?.slice(0, 60)}</td>
-                      <td className="py-3 px-4 text-xs">{incident.jobs?.job_number || 'N/A'}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          incident.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' :
-                          incident.status === 'investigating' ? 'bg-amber-100 text-amber-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>{incident.status}</span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setSelectedIncident(incident)} className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View"><Eye className="w-4 h-4" /></button>
-                          {incident.status !== 'resolved' && (
-                            <button onClick={() => handleResolve(incident.id)} className="p-1.5 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Resolve"><CheckCircle2 className="w-4 h-4" /></button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        {/* Incident Type */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <label className="text-sm font-semibold text-slate-500 mb-2 block">Incident Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { value: 'damage', label: '🔨 Damage' },
+              { value: 'injury', label: '🤕 Injury' },
+              { value: 'complaint', label: '📢 Complaint' },
+              { value: 'security', label: '🔒 Security' },
+              { value: 'other', label: '📋 Other' },
+            ].map(type => (
+              <button key={type.value} onClick={() => setFormData({...formData, incident_type: type.value})}
+                className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  formData.incident_type === type.value 
+                    ? 'bg-red-500 text-white' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}>
+                {type.label}
+              </button>
+            ))}
           </div>
-        )}
-      </main>
+        </div>
+
+        {/* Severity */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <label className="text-sm font-semibold text-slate-500 mb-2 block">Severity</label>
+          <div className="flex gap-2">
+            {[
+              { value: 'low', label: 'Low', color: 'bg-blue-500' },
+              { value: 'medium', label: 'Medium', color: 'bg-amber-500' },
+              { value: 'high', label: 'High', color: 'bg-orange-500' },
+              { value: 'critical', label: 'Critical', color: 'bg-red-500' },
+            ].map(sev => (
+              <button key={sev.value} onClick={() => setFormData({...formData, severity: sev.value})}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  formData.severity === sev.value ? `${sev.color} text-white` : 'bg-slate-100 text-slate-600'
+                }`}>
+                {sev.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <label className="text-sm font-semibold text-slate-500 mb-2 block">Description *</label>
+          <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
+            rows={4} placeholder="Describe what happened..." 
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm resize-none" />
+        </div>
+
+        {/* Photo Upload */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <label className="text-sm font-semibold text-slate-500 mb-2 block">Photo (optional)</label>
+          {photoPreview ? (
+            <div className="relative">
+              <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover rounded-xl" />
+              <button onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center">✕</button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50">
+              <Camera className="w-8 h-8 text-slate-400 mb-1" />
+              <span className="text-sm text-slate-400">Tap to add photo</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
+            </label>
+          )}
+        </div>
+
+        {/* Submit */}
+        <button onClick={handleSubmit} disabled={submitting}
+          className="w-full bg-red-500 text-white rounded-2xl p-4 font-bold text-lg hover:bg-red-600 disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg">
+          <Send className="w-5 h-5" />
+          {submitting ? 'Submitting...' : 'Submit Incident Report'}
+        </button>
+
+        <div className="text-center text-xs text-slate-400 pb-4">
+          Your report will be reviewed by a supervisor
+        </div>
+      </div>
+
+      <BottomNav />
     </div>
   )
 }
