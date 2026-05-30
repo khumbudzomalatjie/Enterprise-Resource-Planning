@@ -17,23 +17,23 @@ export default function BottomNav({ active }) {
   
   const getActiveTab = () => {
     if (active) return active
+    // Exact match for home
     if (currentPath === '/mobile' || currentPath === '/mobile/') return 'home'
-    if (currentPath.includes('/mobile/jobs')) return 'jobs'
-    if (currentPath.includes('/mobile/clock')) return 'clock'
-    if (currentPath.includes('/mobile/photos')) return 'photos'
-    if (currentPath.includes('/mobile/profile')) return 'profile'
+    if (currentPath.startsWith('/mobile/jobs')) return 'jobs'
+    if (currentPath.startsWith('/mobile/clock')) return 'clock'
+    if (currentPath.startsWith('/mobile/photos')) return 'photos'
+    if (currentPath.startsWith('/mobile/profile')) return 'profile'
     return 'home'
   }
 
   const currentActive = getActiveTab()
 
   const handleNavigation = (path) => {
-    // Use window.location for mobile compatibility
+    console.log('Navigating to:', path, 'Current:', currentPath)
     if (path === currentPath) {
-      // If already on this page, force refresh
-      window.location.href = path
+      // Already on this page - force refresh
+      window.location.reload()
     } else {
-      // Navigate to new page
       navigate(path)
     }
   }
@@ -54,13 +54,13 @@ export default function BottomNav({ active }) {
             }}
             className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[60px] cursor-pointer select-none ${
               currentActive === item.id 
-                ? 'text-emerald-600 scale-110' 
+                ? 'text-emerald-600' 
                 : 'text-slate-400 hover:text-slate-600 active:scale-95'
             }`}
             type="button"
             style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
           >
-            <item.icon className={`w-6 h-6 ${currentActive === item.id ? 'text-emerald-600' : ''}`} />
+            <item.icon className="w-6 h-6" />
             <span className="text-[10px] font-medium">{item.label}</span>
           </button>
         ))}
