@@ -13,18 +13,38 @@ export default function BottomNav({ active }) {
     { id: 'profile', icon: User, label: 'Profile', path: '/mobile/profile' },
   ]
 
+  // Determine active tab from URL if not passed as prop
+  const currentPath = location.pathname
+  const getActiveTab = () => {
+    if (active) return active
+    if (currentPath === '/mobile' || currentPath === '/mobile/') return 'home'
+    if (currentPath.includes('/mobile/jobs')) return 'jobs'
+    if (currentPath.includes('/mobile/clock')) return 'clock'
+    if (currentPath.includes('/mobile/photos')) return 'photos'
+    if (currentPath.includes('/mobile/profile')) return 'profile'
+    return 'home'
+  }
+
+  const currentActive = getActiveTab()
+
+  const handleNavigation = (path) => {
+    navigate(path)
+  }
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 safe-area-bottom">
+      <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
         {navItems.map(item => (
           <button
             key={item.id}
-            onClick={() => navigate(item.path)}
-            className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-colors ${
-              active === item.id ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
+            onClick={() => handleNavigation(item.path)}
+            className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[60px] ${
+              currentActive === item.id 
+                ? 'text-emerald-600 scale-110' 
+                : 'text-slate-400 hover:text-slate-600 active:scale-95'
             }`}
           >
-            <item.icon className="w-6 h-6" />
+            <item.icon className={`w-6 h-6 ${currentActive === item.id ? 'fill-emerald-100' : ''}`} />
             <span className="text-[10px] font-medium">{item.label}</span>
           </button>
         ))}
