@@ -11,7 +11,7 @@ import {
   Camera, AlertCircle, Package, LogOut,
   Play, RefreshCw, ChevronDown,
   Calendar, Search, List, User, Users,
-  Hand
+  Hand, Lock
 } from 'lucide-react'
 
 export default function MobileHome() {
@@ -137,8 +137,18 @@ export default function MobileHome() {
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
+  // SELECT JOB - Only ONE job at a time
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready. Refresh and try again.'); return }
+    
+    // CHECK: Does this cleaner already have an active job?
+    if (myActiveJobs.length > 0) {
+      const activeJobTitle = myActiveJobs[0].title || 'another job'
+      toast.error('You already have an active job: ' + activeJobTitle + '. Complete it first before selecting a new one.')
+      setActiveTab('mine')
+      return
+    }
+
     setUpdatingJob(jobId)
     
     try {
@@ -156,7 +166,7 @@ export default function MobileHome() {
 
       if (error) { toast.error('Failed to select job'); return }
 
-      toast.success('Job selected!')
+      toast.success('Job selected! You can now work on this job.')
       await loadAllJobs()
       setActiveTab('mine')
       
@@ -164,6 +174,7 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
+  // START JOB
   const handleStartJob = async (jobId) => {
     setUpdatingJob(jobId)
     try {
@@ -176,8 +187,9 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
+  // COMPLETE JOB - Frees up cleaner for new job
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark as completed?')) return
+    if (!window.confirm('Mark as completed? You can then select a new job.')) return
     setUpdatingJob(jobId)
     
     try {
@@ -192,10 +204,9 @@ export default function MobileHome() {
         return
       }
 
-      toast.success('Completed! Moving to finance')
+      toast.success('Completed! You can now select a new job.')
       await loadAllJobs()
-      
-      if (myActiveJobs.length <= 1) setActiveTab('all')
+      setActiveTab('all') // Switch to Open Pool for next job
       
     } catch (error) {
       console.error('Exception:', error.message)
@@ -213,6 +224,7 @@ export default function MobileHome() {
   }
 
   const todayStr = new Date().toISOString().split('T')[0]
+  const hasActiveJob = myActiveJobs.length > 0
 
   const filteredOpenJobs = allOpenJobs.filter(job => {
     if (!jobSearch) return true
@@ -249,6 +261,7 @@ export default function MobileHome() {
       </AnimatePresence>
 
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
+        {/* Header */}
         <div className="px-5 pt-6 pb-6 text-white">
           <div className="flex justify-between items-start mb-1">
             <div className="flex-1">
@@ -261,8 +274,20 @@ export default function MobileHome() {
             </div>
           </div>
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
+          
+          {/* Active Job Warning */}
+          {hasActiveJob && (
+            <div className="mt-2 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
+              <div>
+                <p className="text-amber-200 text-sm font-semibold">Active Job: {myActiveJobs[0]?.title}</p>
+                <p className="text-amber-300/70 text-xs">Complete this job before selecting a new one</p>
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* Stats */}
         <div className="px-5 -mt-3">
           <div className="grid grid-cols-4 gap-2">
             {[
@@ -281,6 +306,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Quick Actions */}
         <div className="px-5 mt-4">
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -297,6 +323,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="px-5 mt-5">
           <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
             <button onClick={() => setActiveTab('all')}
@@ -310,6 +337,7 @@ export default function MobileHome() {
           </div>
         </div>
 
+        {/* Search & Date */}
         <div className="px-5 mt-3 mb-3 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
@@ -332,17 +360,24 @@ export default function MobileHome() {
               <div className="space-y-2">
                 {filteredOpenJobs.map((job, i) => (
                   <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                    className="bg-white rounded-2xl p-4 shadow-md border-l-4 border-l-blue-400">
+                    className={`bg-white rounded-2xl p-4 shadow-md border-l-4 ${hasActiveJob ? 'border-l-slate-300 opacity-60' : 'border-l-blue-400'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name || 'Client'}</p></div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">Open</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                    <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
-                      className="w-full py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
-                      <Hand className="w-4 h-4" /> Select Job
-                    </button>
+                    
+                    {hasActiveJob ? (
+                      <div className="w-full py-2.5 bg-slate-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed">
+                        <Lock className="w-4 h-4" /> Complete current job first
+                      </div>
+                    ) : (
+                      <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
+                        className="w-full py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
+                        <Hand className="w-4 h-4" /> Select Job
+                      </button>
+                    )}
                   </motion.div>
                 ))}
               </div>
@@ -363,6 +398,9 @@ export default function MobileHome() {
                       <div className="flex-1" onClick={() => navigate(`/mobile/jobs/${job.id}`)}>
                         <h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3>
                         <p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name || 'Client'}</p>
+                        {job.notes?.includes('SELECTED BY:') && (
+                          <p className="text-[10px] text-amber-600 mt-0.5">{job.notes.split('at')[0]}</p>
+                        )}
                       </div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Active</span>
                     </div>
