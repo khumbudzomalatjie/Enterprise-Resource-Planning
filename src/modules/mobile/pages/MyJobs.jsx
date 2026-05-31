@@ -18,7 +18,7 @@ export default function MyJobs() {
   const { fetchMyJobs, fetchMobileStats } = useMobileStore()
   const navigate = useNavigate()
   
-  const [activeTab, setActiveTab] = useState('open') // 'open' or 'mine'
+  const [activeTab, setActiveTab] = useState('open')
   const [openJobs, setOpenJobs] = useState([])
   const [myJobs, setMyJobs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -81,9 +81,18 @@ export default function MyJobs() {
     finally { setLoading(false) }
   }
 
-  // SELECT JOB
+  // SELECT JOB - Cleaner can only have ONE job at a time
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready'); return }
+    
+    // Check if cleaner already has an active job
+    if (myJobs.length > 0) {
+      const activeJobTitle = myJobs[0].title || 'another job'
+      toast.error('You already have an active job: ' + activeJobTitle + '. Complete it first before selecting a new one.')
+      setActiveTab('mine') // Switch to My Jobs tab to show the active job
+      return
+    }
+
     setUpdatingJob(jobId)
     try {
       const cleanerName = profile?.full_name || user?.email?.split('@')[0] || 'Cleaner'
@@ -95,7 +104,7 @@ export default function MyJobs() {
         })
         .eq('id', jobId)
       if (error) { toast.error('Failed'); return }
-      toast.success('Job selected!')
+      toast.success('Job selected! You can now work on this job.')
       loadAllJobs()
       setActiveTab('mine')
     } catch { toast.error('Failed') }
@@ -113,14 +122,15 @@ export default function MyJobs() {
     finally { setUpdatingJob(null) }
   }
 
-  // COMPLETE JOB
+  // COMPLETE JOB - Frees up the cleaner to select a new job
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark as completed?')) return
+    if (!window.confirm('Mark as completed? You can then select a new job.')) return
     setUpdatingJob(jobId)
     try {
       await supabase.from('jobs').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', jobId)
-      toast.success('Completed!')
+      toast.success('Completed! You can now select a new job.')
       loadAllJobs()
+      setActiveTab('open') // Switch to Open Pool so they can pick a new job
     } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
   }
@@ -145,12 +155,26 @@ export default function MyJobs() {
            (j.clients?.company_name || '').toLowerCase().includes(s) || (j.site_address || '').toLowerCase().includes(s)
   })
 
+  // Check if cleaner has an active job (for the warning badge)
+  const hasActiveJob = myJobs.length > 0
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
       {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white">
         <h1 className="text-2xl font-bold">Jobs</h1>
         <p className="text-blue-100 text-sm mt-1">Select and manage your jobs</p>
+        
+        {/* Active Job Warning */}
+        {hasActiveJob && (
+          <div className="mt-3 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
+            <div>
+              <p className="text-amber-200 text-sm font-semibold">Active Job: {myJobs[0]?.title}</p>
+              <p className="text-amber-300/70 text-xs">Complete this job before selecting a new one</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -186,7 +210,7 @@ export default function MyJobs() {
             <div className="space-y-2.5">
               {filteredOpen.map((job, i) => (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                  className="bg-white rounded-2xl p-4 shadow-md border-l-4 border-l-blue-400">
+                  className={`bg-white rounded-2xl p-4 shadow-md border-l-4 ${hasActiveJob ? 'border-l-slate-300 opacity-60' : 'border-l-blue-400'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3>
@@ -201,10 +225,17 @@ export default function MyJobs() {
                     <Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                  <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
-                    className="w-full py-2.5 bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
-                    <Hand className="w-4 h-4" /> Select Job
-                  </button>
+                  
+                  {hasActiveJob ? (
+                    <div className="w-full py-2.5 bg-slate-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed">
+                      🔒 Complete current job first
+                    </div>
+                  ) : (
+                    <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
+                      className="w-full py-2.5 bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
+                      <Hand className="w-4 h-4" /> Select Job
+                    </button>
+                  )}
                 </motion.div>
               ))}
             </div>
