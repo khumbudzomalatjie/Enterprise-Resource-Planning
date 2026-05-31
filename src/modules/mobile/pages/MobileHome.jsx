@@ -36,6 +36,7 @@ export default function MobileHome() {
   const [selectedDate, setSelectedDate] = useState('all')
   const [activeTab, setActiveTab] = useState('all')
   const [myEmployeeId, setMyEmployeeId] = useState(null)
+  const [myCleanerName, setMyCleanerName] = useState('')
 
   useEffect(() => {
     initData()
@@ -65,22 +66,31 @@ export default function MobileHome() {
 
   const setupEmployee = async () => {
     try {
-      let { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
-      if (emp) { setMyEmployeeId(emp.id); return }
+      let { data: emp } = await supabase.from('employees').select('id, first_name, last_name').eq('user_id', user?.id).single()
+      if (emp) { 
+        setMyEmployeeId(emp.id)
+        setMyCleanerName((emp.first_name || '') + ' ' + (emp.last_name || '')).trim()
+        return 
+      }
 
-      const { data: empByEmail } = await supabase.from('employees').select('id').eq('email', user?.email).single()
+      const { data: empByEmail } = await supabase.from('employees').select('id, first_name, last_name').eq('email', user?.email).single()
       if (empByEmail) {
         await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
         setMyEmployeeId(empByEmail.id)
+        setMyCleanerName((empByEmail.first_name || '') + ' ' + (empByEmail.last_name || '')).trim()
         return
       }
 
+      const firstName = user?.email?.split('@')[0] || 'Cleaner'
       const { data: newEmp } = await supabase.from('employees').insert([{
-        user_id: user?.id, first_name: user?.email?.split('@')[0] || 'Cleaner', last_name: '',
+        user_id: user?.id, first_name: firstName, last_name: '',
         email: user?.email, employment_status: 'active', department: 'Cleaning'
-      }]).select('id').single()
+      }]).select('id, first_name').single()
 
-      if (newEmp) setMyEmployeeId(newEmp.id)
+      if (newEmp) {
+        setMyEmployeeId(newEmp.id)
+        setMyCleanerName(newEmp.first_name || 'Cleaner')
+      }
     } catch (e) { console.error('Setup error:', e) }
   }
 
@@ -88,6 +98,7 @@ export default function MobileHome() {
     setLoadingAllJobs(true)
     
     try {
+      // OPEN POOL: pending or scheduled
       let openQuery = supabase
         .from('jobs')
         .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
@@ -99,6 +110,8 @@ export default function MobileHome() {
       const { data: openJobs } = await openQuery
       setAllOpenJobs(openJobs || [])
 
+      // MY JOBS: Only show jobs assigned to THIS cleaner
+      // Check by cleaner name in notes field
       let myQuery = supabase
         .from('jobs')
         .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
@@ -107,8 +120,27 @@ export default function MobileHome() {
         .order('scheduled_start_time', { ascending: true })
 
       if (selectedDate !== 'all') myQuery = myQuery.eq('scheduled_date', selectedDate)
-      const { data: myJobsData } = await myQuery
-      setMyActiveJobs(myJobsData || [])
+      
+      const { data: allActiveJobs } = await myQuery
+      
+      // Filter: Only show jobs assigned to THIS cleaner
+      const myName = myCleanerName || myProfile?.first_name || user?.email?.split('@')[0] || ''
+      console.log('🔍 Filtering jobs for cleaner:', myName)
+      
+      const myJobsOnly = (allActiveJobs || []).filter(job => {
+        if (!job.notes) return false
+        
+        // Check if this job was selected by or assigned to this cleaner
+        const selectedBy = job.notes.includes('SELECTED BY:') && 
+                          job.notes.toLowerCase().includes(myName.toLowerCase())
+        const assignedBy = job.notes.includes('ASSIGNED BY MANAGEMENT:') && 
+                          job.notes.toLowerCase().includes(myName.toLowerCase())
+        
+        return selectedBy || assignedBy
+      })
+      
+      console.log('👤 My filtered jobs:', myJobsOnly.length)
+      setMyActiveJobs(myJobsOnly)
 
     } catch (error) { console.error('Error:', error) }
     finally { setLoadingAllJobs(false) }
@@ -137,86 +169,47 @@ export default function MobileHome() {
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
-  // SELECT JOB - Only ONE job at a time
+  // SELECT JOB
   const handleSelectJob = async (jobId) => {
-    if (!myEmployeeId) { toast.error('Profile not ready. Refresh and try again.'); return }
-    
-    if (myActiveJobs.length > 0) {
-      const activeJobTitle = myActiveJobs[0].title || 'another job'
-      toast.error('You already have an active job: ' + activeJobTitle + '. Complete it first before selecting a new one.')
-      setActiveTab('mine')
-      return
-    }
-
+    if (!myEmployeeId) { toast.error('Profile not ready.'); return }
+    if (myActiveJobs.length > 0) { toast.error('You already have an active job. Complete it first.'); setActiveTab('mine'); return }
     setUpdatingJob(jobId)
-    
     try {
-      const cleanerName = myProfile?.first_name || user?.email?.split('@')[0] || 'Cleaner'
-      
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          status: 'in_progress',
-          actual_start_time: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          notes: 'SELECTED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
-        })
-        .eq('id', jobId)
-
-      if (error) { toast.error('Failed to select job'); return }
-
-      toast.success('Job selected! You can now work on this job.')
-      await loadAllJobs()
-      setActiveTab('mine')
-      
-    } catch (error) { toast.error('Failed') }
+      const cleanerName = myCleanerName || myProfile?.first_name || user?.email?.split('@')[0] || 'Cleaner'
+      const { error } = await supabase.from('jobs').update({ 
+        status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString(),
+        notes: 'SELECTED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
+      }).eq('id', jobId)
+      if (error) { toast.error('Failed'); return }
+      toast.success('Job selected!')
+      await loadAllJobs(); setActiveTab('mine')
+    } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
   }
 
   // START JOB
   const handleStartJob = async (jobId) => {
     setUpdatingJob(jobId)
-    try {
-      await supabase.from('jobs').update({ 
-        status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString()
-      }).eq('id', jobId)
-      toast.success('Job started!')
-      loadAllJobs()
+    try { 
+      await supabase.from('jobs').update({ status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', jobId)
+      toast.success('Job started!'); loadAllJobs() 
     } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
   }
 
-  // COMPLETE JOB - Saves cleaner name for Live Jobs tracking
+  // COMPLETE JOB
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark as completed? You can then select a new job.')) return
+    if (!window.confirm('Mark as completed?')) return
     setUpdatingJob(jobId)
-    
     try {
-      const cleanerName = myProfile?.first_name || user?.email?.split('@')[0] || 'Cleaner'
-      
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          status: 'completed', 
-          updated_at: new Date().toISOString(),
-          notes: 'COMPLETED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
-        })
-        .eq('id', jobId)
-
-      if (error) {
-        console.error('Complete error:', error.message)
-        toast.error('Failed: ' + error.message)
-        return
-      }
-
-      toast.success('Completed! You can now select a new job.')
-      await loadAllJobs()
-      setActiveTab('all')
-      
-    } catch (error) {
-      console.error('Exception:', error.message)
-      toast.error('Failed to complete job')
-    }
+      const cleanerName = myCleanerName || myProfile?.first_name || user?.email?.split('@')[0] || 'Cleaner'
+      const { error } = await supabase.from('jobs').update({ 
+        status: 'completed', updated_at: new Date().toISOString(),
+        notes: 'COMPLETED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
+      }).eq('id', jobId)
+      if (error) throw error
+      toast.success('Completed!'); await loadAllJobs(); setActiveTab('all')
+    } catch { toast.error('Failed') }
     finally { setUpdatingJob(null) }
   }
 
@@ -278,14 +271,10 @@ export default function MobileHome() {
             </div>
           </div>
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
-          
           {hasActiveJob && (
             <div className="mt-2 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
               <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
-              <div>
-                <p className="text-amber-200 text-sm font-semibold">Active Job: {myActiveJobs[0]?.title}</p>
-                <p className="text-amber-300/70 text-xs">Complete this job before selecting a new one</p>
-              </div>
+              <div><p className="text-amber-200 text-sm font-semibold">Active Job: {myActiveJobs[0]?.title}</p><p className="text-amber-300/70 text-xs">Complete this job before selecting a new one</p></div>
             </div>
           )}
         </div>
@@ -366,16 +355,11 @@ export default function MobileHome() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                    
                     {hasActiveJob ? (
-                      <div className="w-full py-2.5 bg-slate-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed">
-                        <Lock className="w-4 h-4" /> Complete current job first
-                      </div>
+                      <div className="w-full py-2.5 bg-slate-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed"><Lock className="w-4 h-4" /> Complete current job first</div>
                     ) : (
                       <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
-                        className="w-full py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
-                        <Hand className="w-4 h-4" /> Select Job
-                      </button>
+                        className="w-full py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm"><Hand className="w-4 h-4" /> Select Job</button>
                     )}
                   </motion.div>
                 ))}
@@ -384,7 +368,7 @@ export default function MobileHome() {
           </div>
         )}
 
-        {/* MY JOBS TAB */}
+        {/* MY JOBS TAB - Only shows THIS cleaner's jobs */}
         {activeTab === 'mine' && (
           <div className="px-5 mb-4">
             {loadingAllJobs ? <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
@@ -397,26 +381,17 @@ export default function MobileHome() {
                       <div className="flex-1" onClick={() => navigate(`/mobile/jobs/${job.id}`)}>
                         <h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3>
                         <p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name || 'Client'}</p>
-                        {job.notes?.includes('SELECTED BY:') && (
-                          <p className="text-[10px] text-amber-600 mt-0.5">{job.notes.split('at')[0]}</p>
-                        )}
                       </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Active</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">My Job</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                    
                     <div className="flex gap-2 mb-2">
                       <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id}
-                        className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm">
-                        <Play className="w-3.5 h-3.5" /> Start Job
-                      </button>
+                        className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><Play className="w-3.5 h-3.5" /> Start Job</button>
                       <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id}
-                        className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Complete
-                      </button>
+                        className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><CheckCircle2 className="w-3.5 h-3.5" /> Complete</button>
                     </div>
-
                     <div className="grid grid-cols-3 gap-1.5">
                       <button onClick={() => navigate('/mobile/photos')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Camera className="w-3 h-3" /> Photos</button>
                       <button onClick={() => navigate('/mobile/supplies')} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Package className="w-3 h-3" /> Supplies</button>
@@ -425,7 +400,7 @@ export default function MobileHome() {
                   </motion.div>
                 ))}
               </div>
-            ) : <div className="text-center py-10 bg-white/10 backdrop-blur rounded-2xl"><User className="w-12 h-12 text-white/60 mx-auto mb-2" /><p className="text-white font-semibold">No active jobs</p><p className="text-white/60 text-xs mt-1">Select a job from Open Pool</p></div>}
+            ) : <div className="text-center py-10 bg-white/10 backdrop-blur rounded-2xl"><User className="w-12 h-12 text-white/60 mx-auto mb-2" /><p className="text-white font-semibold">No jobs assigned to you</p><p className="text-white/60 text-xs mt-1">Select a job from Open Pool or wait for assignment</p></div>}
           </div>
         )}
 
