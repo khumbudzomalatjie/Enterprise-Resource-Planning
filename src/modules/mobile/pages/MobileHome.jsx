@@ -100,7 +100,7 @@ export default function MobileHome() {
       const { data: openJobs } = await openQuery
       setAllOpenJobs(openJobs || [])
 
-      // MY JOBS: Only in_progress (completed jobs disappear automatically)
+      // MY JOBS: Only in_progress
       let myQuery = supabase
         .from('jobs')
         .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
@@ -180,30 +180,53 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
-  // COMPLETE JOB - Disappears from My Jobs, shows as completed on ERP
+  // COMPLETE JOB - FIXED: Safe update that works with any column setup
   const handleCompleteJob = async (jobId) => {
     if (!window.confirm('Mark as completed? This will send for invoicing and disappear from your list.')) return
     setUpdatingJob(jobId)
+    
     try {
-      const { error } = await supabase.from('jobs').update({ 
-        status: 'completed', 
-        actual_end_time: new Date().toISOString(), 
-        updated_at: new Date().toISOString()
-      }).eq('id', jobId)
+      console.log('📝 Attempting to complete job:', jobId)
       
-      if (error) throw error
+      // Try basic update first (only essential fields)
+      const { error } = await supabase
+        .from('jobs')
+        .update({ 
+          status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId)
 
+      if (error) {
+        console.error('❌ Complete error:', error.message)
+        
+        // If it's a constraint error, the status might not be in the allowed list
+        if (error.message.includes('constraint') || error.message.includes('check')) {
+          toast.error('Database constraint issue. Please run the SQL fix in Supabase.')
+          console.log('Run this SQL: ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_status_check; ALTER TABLE jobs ADD CONSTRAINT jobs_status_check CHECK (status IN (''pending'',''scheduled'',''in_progress'',''completed'',''cancelled'',''on_hold''));')
+        } else {
+          toast.error('Failed: ' + error.message)
+        }
+        return
+      }
+
+      console.log('✅ Job completed successfully')
       toast.success('Completed! Moving to finance ✅')
       
-      // Refresh lists - completed job will NOT appear in My Jobs (only shows in_progress)
+      // Refresh lists
       await loadAllJobs()
       
-      // If no more My Jobs, auto-switch to Open Pool
-      if (myActiveJobs.length <= 1) {
-        setActiveTab('all')
-      }
+      // Auto-switch if no more My Jobs
+      setTimeout(() => {
+        if (myActiveJobs.length <= 1) {
+          setActiveTab('all')
+        }
+      }, 300)
       
-    } catch { toast.error('Failed to complete job') }
+    } catch (error) {
+      console.error('❌ Exception:', error.message)
+      toast.error('Failed to complete job')
+    }
     finally { setUpdatingJob(null) }
   }
 
@@ -252,7 +275,6 @@ export default function MobileHome() {
       </AnimatePresence>
 
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
-        {/* Header */}
         <div className="px-5 pt-6 pb-6 text-white">
           <div className="flex justify-between items-start mb-1">
             <div className="flex-1">
@@ -267,7 +289,6 @@ export default function MobileHome() {
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
         </div>
 
-        {/* Stats */}
         <div className="px-5 -mt-3">
           <div className="grid grid-cols-4 gap-2">
             {[
@@ -286,7 +307,6 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="px-5 mt-4">
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -303,7 +323,6 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="px-5 mt-5">
           <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
             <button onClick={() => setActiveTab('all')}
@@ -317,7 +336,6 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Search & Date */}
         <div className="px-5 mt-3 mb-3 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
@@ -380,7 +398,6 @@ export default function MobileHome() {
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
                     
-                    {/* Start & Complete Buttons */}
                     <div className="flex gap-2 mb-2">
                       <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id}
                         className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm">
@@ -392,7 +409,6 @@ export default function MobileHome() {
                       </button>
                     </div>
 
-                    {/* Quick Actions */}
                     <div className="grid grid-cols-3 gap-1.5">
                       <button onClick={() => navigate('/mobile/photos')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Camera className="w-3 h-3" /> Photos</button>
                       <button onClick={() => navigate('/mobile/supplies')} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Package className="w-3 h-3" /> Supplies</button>
