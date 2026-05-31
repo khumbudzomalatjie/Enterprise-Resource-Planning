@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import { 
   Briefcase, MapPin, Clock, Calendar, Search,
   Users, CheckCircle2, AlertCircle, ArrowLeft,
-  Sun, Moon, Sparkles, RefreshCw, Eye, Hand
+  Sun, Moon, Sparkles, RefreshCw, Eye
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -19,7 +19,6 @@ export default function LiveJobs() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [activeTab, setActiveTab] = useState('all')
 
   useEffect(() => {
     loadAllJobs()
@@ -31,11 +30,10 @@ export default function LiveJobs() {
     try {
       let query = supabase
         .from('jobs')
-        .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
+        .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, actual_end_time, clients(company_name, phone), job_categories(name, color)')
         .order('scheduled_date', { ascending: true })
         .order('scheduled_start_time', { ascending: true })
 
-      // Filter by status if selected
       if (statusFilter === 'open') {
         query = query.in('status', ['pending', 'scheduled'])
       } else if (statusFilter === 'active') {
@@ -45,13 +43,11 @@ export default function LiveJobs() {
       } else if (statusFilter === 'held') {
         query = query.eq('status', 'on_hold')
       } else {
-        // Show all except cancelled
         query = query.not('status', 'eq', 'cancelled')
       }
 
       const { data: jobs } = await query
       setAllJobs(jobs || [])
-      console.log('📊 Live Jobs loaded:', jobs?.length || 0)
       
     } catch (error) {
       console.error('Error loading jobs:', error)
@@ -61,12 +57,49 @@ export default function LiveJobs() {
   }
 
   // Extract cleaner name from job notes
+  // Works for: "SELECTED BY: Name at date", "PAUSED BY CLEANER: reason", etc.
   const getCleanerName = (job) => {
     if (!job?.notes) return null
+    
+    // Check for "SELECTED BY:" pattern (active jobs)
     if (job.notes.includes('SELECTED BY:')) {
-      return job.notes.split('SELECTED BY:')[1]?.split('at')[0]?.trim() || null
+      const name = job.notes.split('SELECTED BY:')[1]?.split('at')[0]?.trim()
+      if (name && name !== 'undefined') return name
     }
+    
+    // Check for "COMPLETED BY:" pattern
+    if (job.notes.includes('COMPLETED BY:')) {
+      const name = job.notes.split('COMPLETED BY:')[1]?.split('at')[0]?.trim()
+      if (name && name !== 'undefined') return name
+    }
+    
+    // Check for "PAUSED BY CLEANER:" pattern
+    if (job.notes.includes('PAUSED BY CLEANER:')) {
+      const name = job.notes.split('PAUSED BY CLEANER:')[1]?.split('\n')[0]?.trim()
+      if (name && name !== 'undefined') return name
+    }
+    
+    // Check for cleaner name pattern (any name followed by timestamp)
+    const nameMatch = job.notes.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+at\s+/)
+    if (nameMatch && nameMatch[1] && nameMatch[1] !== 'undefined') {
+      return nameMatch[1]
+    }
+    
     return null
+  }
+
+  // Get status label for cleaner column
+  const getCleanerStatus = (job) => {
+    const name = getCleanerName(job)
+    if (name) return { name, hasCleaner: true }
+    
+    if (job.status === 'pending' || job.status === 'scheduled') {
+      return { name: 'Available', hasCleaner: false }
+    }
+    if (job.status === 'completed') {
+      return { name: 'Completed', hasCleaner: false }
+    }
+    return { name: 'Unassigned', hasCleaner: false }
   }
 
   const formatDate = (date) => {
@@ -74,23 +107,31 @@ export default function LiveJobs() {
     return new Date(date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
+  const formatDateTime = (date) => {
+    if (!date) return 'N/A'
+    return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  }
+
   const todayStr = new Date().toISOString().split('T')[0]
 
   const filteredJobs = allJobs.filter(job => {
     if (!search) return true
     const s = search.toLowerCase()
+    const cleanerName = getCleanerName(job) || ''
     return (job.title || '').toLowerCase().includes(s) ||
            (job.job_number || '').toLowerCase().includes(s) ||
            (job.clients?.company_name || '').toLowerCase().includes(s) ||
            (job.site_address || '').toLowerCase().includes(s) ||
-           (getCleanerName(job) || '').toLowerCase().includes(s)
+           cleanerName.toLowerCase().includes(s)
   })
 
-  // Stats
   const openCount = allJobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length
   const activeCount = allJobs.filter(j => j.status === 'in_progress').length
   const completedCount = allJobs.filter(j => j.status === 'completed').length
   const heldCount = allJobs.filter(j => j.status === 'on_hold').length
+
+  // Count jobs with known cleaners
+  const jobsWithCleaner = allJobs.filter(j => getCleanerName(j)).length
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -123,7 +164,6 @@ export default function LiveJobs() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Field Operations</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -131,7 +171,7 @@ export default function LiveJobs() {
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Live Jobs Monitor</h1>
             </div>
             <p className="text-slate-500 dark:text-slate-400 ml-11">
-              Real-time sync with mobile - {allJobs.length} total jobs
+              Real-time sync with mobile · {allJobs.length} total jobs · {jobsWithCleaner} with cleaner assigned
             </p>
           </div>
           <button onClick={loadAllJobs} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
@@ -154,7 +194,7 @@ export default function LiveJobs() {
                 else if (s.label === 'Completed') setStatusFilter('completed')
                 else if (s.label === 'On Hold') setStatusFilter('held')
               }}
-              className={`neu-raised rounded-2xl p-4 stat-card cursor-pointer hover:scale-[1.02] transition-transform`}>
+              className="neu-raised rounded-2xl p-4 stat-card cursor-pointer hover:scale-[1.02] transition-transform">
               <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-5 h-5 ${s.color}`} /></div>
               <p className="text-lg font-bold text-slate-800 dark:text-white">{s.value}</p>
               <p className="text-xs text-slate-500 mt-1">{s.label}</p>
@@ -168,20 +208,20 @@ export default function LiveJobs() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by job #, title, client, cleaner, address..."
+              placeholder="Search by job #, title, client, cleaner name, address..."
               className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
           </div>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="px-4 py-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
-            <option value="all">All Status (except cancelled)</option>
-            <option value="open">Open Pool (Available)</option>
-            <option value="active">Active/Selected (In Progress)</option>
+            <option value="all">All Status</option>
+            <option value="open">Open Pool</option>
+            <option value="active">Active/Selected</option>
             <option value="completed">Completed</option>
             <option value="held">On Hold</option>
           </select>
           <button onClick={() => { setStatusFilter('all'); setSearch(''); loadAllJobs() }}
             className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm">
-            Clear Filters
+            Clear
           </button>
         </div>
 
@@ -196,25 +236,27 @@ export default function LiveJobs() {
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Job #</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Title</th>
+                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Title / Category</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Client</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Cleaner</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Location</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Date</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Time</th>
                       <th className="text-center py-3 px-3 text-slate-500 font-medium">Status</th>
+                      <th className="text-center py-3 px-3 text-slate-500 font-medium">Completed</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredJobs.map((job, i) => {
-                      const cleanerName = getCleanerName(job)
+                      const cleanerInfo = getCleanerStatus(job)
                       const isToday = job.scheduled_date === todayStr
                       const isActive = job.status === 'in_progress'
+                      const isCompleted = job.status === 'completed'
                       
                       return (
                         <tr key={job.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
                           isActive ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''
-                        }`}>
+                        } ${isCompleted ? 'bg-emerald-50/20 dark:bg-emerald-900/5' : ''}`}>
                           <td className="py-3 px-3">
                             <span className="font-mono text-xs font-medium text-slate-600 dark:text-slate-400">{job.job_number}</span>
                           </td>
@@ -234,22 +276,43 @@ export default function LiveJobs() {
                           <td className="py-3 px-3 text-sm text-slate-600 dark:text-slate-400">
                             {job.clients?.company_name || 'N/A'}
                             {job.clients?.phone && (
-                              <a href={`tel:${job.clients.phone}`} className="block text-[10px] text-blue-500 hover:underline">📞 Call</a>
+                              <a href={`tel:${job.clients.phone}`} className="block text-[10px] text-blue-500 hover:underline mt-0.5">📞 Call</a>
                             )}
                           </td>
                           <td className="py-3 px-3">
-                            {cleanerName ? (
+                            {cleanerInfo.hasCleaner ? (
                               <div className="flex items-center gap-2">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isActive ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                                  <Users className={`w-3.5 h-3.5 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                                  isActive ? 'bg-amber-100 dark:bg-amber-900/30' : 
+                                  isCompleted ? 'bg-emerald-100 dark:bg-emerald-900/30' : 
+                                  'bg-blue-100 dark:bg-blue-900/30'
+                                }`}>
+                                  <Users className={`w-3.5 h-3.5 ${
+                                    isActive ? 'text-amber-600' : 
+                                    isCompleted ? 'text-emerald-600' : 
+                                    'text-blue-600'
+                                  }`} />
                                 </div>
-                                <span className={`text-sm font-medium ${isActive ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`}>
-                                  {cleanerName}
-                                </span>
+                                <div>
+                                  <span className={`text-sm font-medium ${
+                                    isActive ? 'text-amber-700 dark:text-amber-400' : 
+                                    isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 
+                                    'text-blue-700 dark:text-blue-400'
+                                  }`}>
+                                    {cleanerInfo.name}
+                                  </span>
+                                  {isCompleted && (
+                                    <span className="block text-[9px] text-emerald-500">Completed job</span>
+                                  )}
+                                </div>
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-400 italic">
-                                {job.status === 'pending' || job.status === 'scheduled' ? 'Available' : 'Unassigned'}
+                              <span className={`text-xs italic ${
+                                cleanerInfo.name === 'Available' ? 'text-blue-400' : 
+                                cleanerInfo.name === 'Completed' ? 'text-emerald-400' : 
+                                'text-slate-400'
+                              }`}>
+                                {cleanerInfo.name}
                               </span>
                             )}
                           </td>
@@ -276,6 +339,17 @@ export default function LiveJobs() {
                               {(job.status || 'pending').replace('_', ' ')}
                             </span>
                           </td>
+                          <td className="py-3 px-3 text-center">
+                            {isCompleted && job.actual_end_time ? (
+                              <span className="text-[10px] text-emerald-600 font-medium">
+                                {formatDateTime(job.actual_end_time)}
+                              </span>
+                            ) : isCompleted ? (
+                              <span className="text-[10px] text-emerald-500">✓ Done</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">-</span>
+                            )}
+                          </td>
                         </tr>
                       )
                     })}
@@ -298,11 +372,11 @@ export default function LiveJobs() {
         <div className="mt-6 neu-raised rounded-2xl p-4 flex flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-            <span className="text-slate-600 dark:text-slate-400">Open Pool (Available)</span>
+            <span className="text-slate-600 dark:text-slate-400">Open Pool</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
-            <span className="text-slate-600 dark:text-slate-400">Active/Selected (In Progress)</span>
+            <span className="text-slate-600 dark:text-slate-400">Active</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
@@ -314,7 +388,7 @@ export default function LiveJobs() {
           </div>
           <div className="flex items-center gap-2">
             <Users className="w-3 h-3 text-amber-600" />
-            <span className="text-slate-600 dark:text-slate-400">Has Cleaner Assigned</span>
+            <span className="text-slate-600 dark:text-slate-400">Cleaner Name</span>
           </div>
         </div>
       </main>
