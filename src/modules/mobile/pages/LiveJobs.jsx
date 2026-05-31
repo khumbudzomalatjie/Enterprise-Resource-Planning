@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import { 
   Briefcase, MapPin, Clock, Calendar, Search,
   Users, CheckCircle2, AlertCircle, ArrowLeft,
-  Sun, Moon, Sparkles, RefreshCw, Eye
+  Sun, Moon, Sparkles, RefreshCw
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -57,7 +57,6 @@ export default function LiveJobs() {
   }
 
   // Extract cleaner name from job notes
-  // Works for: "SELECTED BY: Name at date", "PAUSED BY CLEANER: reason", etc.
   const getCleanerName = (job) => {
     if (!job?.notes) return null
     
@@ -79,7 +78,7 @@ export default function LiveJobs() {
       if (name && name !== 'undefined') return name
     }
     
-    // Check for cleaner name pattern (any name followed by timestamp)
+    // Generic name match
     const nameMatch = job.notes.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+at\s+/)
     if (nameMatch && nameMatch[1] && nameMatch[1] !== 'undefined') {
       return nameMatch[1]
@@ -129,8 +128,6 @@ export default function LiveJobs() {
   const activeCount = allJobs.filter(j => j.status === 'in_progress').length
   const completedCount = allJobs.filter(j => j.status === 'completed').length
   const heldCount = allJobs.filter(j => j.status === 'on_hold').length
-
-  // Count jobs with known cleaners
   const jobsWithCleaner = allJobs.filter(j => getCleanerName(j)).length
 
   const getStatusBadge = (status) => {
@@ -345,7 +342,7 @@ export default function LiveJobs() {
                                 {formatDateTime(job.actual_end_time)}
                               </span>
                             ) : isCompleted ? (
-                              <span className="text-[10px] text-emerald-500">✓ Done</span>
+                              <span className="text-[10px] text-emerald-500">Done</span>
                             ) : (
                               <span className="text-[10px] text-slate-400">-</span>
                             )}
@@ -372,11 +369,11 @@ export default function LiveJobs() {
         <div className="mt-6 neu-raised rounded-2xl p-4 flex flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-            <span className="text-slate-600 dark:text-slate-400">Open Pool</span>
+            <span className="text-slate-600 dark:text-slate-400">Open Pool (Available)</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
-            <span className="text-slate-600 dark:text-slate-400">Active</span>
+            <span className="text-slate-600 dark:text-slate-400">Active (In Progress)</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
@@ -388,7 +385,7 @@ export default function LiveJobs() {
           </div>
           <div className="flex items-center gap-2">
             <Users className="w-3 h-3 text-amber-600" />
-            <span className="text-slate-600 dark:text-slate-400">Cleaner Name</span>
+            <span className="text-slate-600 dark:text-slate-400">Cleaner Name Shown</span>
           </div>
         </div>
       </main>
