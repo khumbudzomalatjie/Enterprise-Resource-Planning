@@ -8,7 +8,8 @@ import toast from 'react-hot-toast'
 import { 
   Briefcase, MapPin, Clock, Calendar, Search,
   Users, CheckCircle2, AlertCircle, ArrowLeft,
-  Sun, Moon, Sparkles, RefreshCw, RotateCcw
+  Sun, Moon, Sparkles, RefreshCw, RotateCcw,
+  UserPlus, X
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -20,9 +21,17 @@ export default function LiveJobs() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [releasingJob, setReleasingJob] = useState(null)
+  
+  // Assign Modal State
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [assigningJob, setAssigningJob] = useState(null)
+  const [cleaners, setCleaners] = useState([])
+  const [selectedCleaner, setSelectedCleaner] = useState('')
+  const [assigning, setAssigning] = useState(false)
 
   useEffect(() => {
     loadAllJobs()
+    loadCleaners()
   }, [statusFilter])
 
   const loadAllJobs = async () => {
@@ -57,12 +66,81 @@ export default function LiveJobs() {
     }
   }
 
+  // Load all active cleaners for assignment
+  const loadCleaners = async () => {
+    try {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code')
+        .eq('employment_status', 'active')
+        .order('first_name')
+
+      setCleaners(data || [])
+    } catch (error) {
+      console.error('Error loading cleaners:', error)
+    }
+  }
+
+  // Open assign modal
+  const handleOpenAssign = (job) => {
+    setAssigningJob(job)
+    setSelectedCleaner('')
+    setShowAssignModal(true)
+  }
+
+  // Assign job to selected cleaner
+  const handleAssignJob = async () => {
+    if (!selectedCleaner) {
+      toast.error('Please select a cleaner')
+      return
+    }
+
+    setAssigning(true)
+    
+    try {
+      const cleaner = cleaners.find(c => c.id === selectedCleaner)
+      const cleanerName = cleaner ? cleaner.first_name + ' ' + cleaner.last_name : 'Assigned Cleaner'
+      
+      const { error } = await supabase
+        .from('jobs')
+        .update({ 
+          status: 'in_progress',
+          actual_start_time: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          notes: 'ASSIGNED BY MANAGEMENT: ' + cleanerName + ' at ' + new Date().toLocaleString()
+        })
+        .eq('id', assigningJob.id)
+
+      if (error) {
+        console.error('Assign error:', error)
+        toast.error('Failed to assign job')
+        return
+      }
+
+      toast.success('Job assigned to ' + cleanerName + '!')
+      setShowAssignModal(false)
+      setAssigningJob(null)
+      loadAllJobs()
+      
+    } catch (error) {
+      console.error('Assign exception:', error)
+      toast.error('Failed to assign job')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
   // Extract cleaner name from job notes
   const getCleanerName = (job) => {
     if (!job?.notes) return null
     
     if (job.notes.includes('SELECTED BY:')) {
       const name = job.notes.split('SELECTED BY:')[1]?.split('at')[0]?.trim()
+      if (name && name !== 'undefined') return name
+    }
+    
+    if (job.notes.includes('ASSIGNED BY MANAGEMENT:')) {
+      const name = job.notes.split('ASSIGNED BY MANAGEMENT:')[1]?.split('at')[0]?.trim()
       if (name && name !== 'undefined') return name
     }
     
@@ -84,25 +162,16 @@ export default function LiveJobs() {
     return null
   }
 
-  // Get status label for cleaner column
   const getCleanerStatus = (job) => {
     const name = getCleanerName(job)
-    
-    if (name) {
-      return { name, hasCleaner: true }
-    }
-    
-    if (job.status === 'pending' || job.status === 'scheduled') {
-      return { name: 'Available', hasCleaner: false }
-    }
-    
+    if (name) return { name, hasCleaner: true }
+    if (job.status === 'pending' || job.status === 'scheduled') return { name: 'Available', hasCleaner: false }
     return { name: 'Unassigned', hasCleaner: false }
   }
 
-  // RELEASE JOB - Send back to Open Pool (Management only)
+  // RELEASE JOB
   const handleReleaseJob = async (jobId, jobTitle) => {
-    if (!window.confirm('Release "' + jobTitle + '" back to Open Pool? The cleaner will no longer have this job.')) return
-    
+    if (!window.confirm('Release "' + jobTitle + '" back to Open Pool?')) return
     setReleasingJob(jobId)
     
     try {
@@ -118,7 +187,6 @@ export default function LiveJobs() {
         .eq('id', jobId)
 
       if (error) {
-        // If assigned_to column doesn't exist, try without it
         const { error: fallbackError } = await supabase
           .from('jobs')
           .update({ 
@@ -130,7 +198,6 @@ export default function LiveJobs() {
           .eq('id', jobId)
         
         if (fallbackError) {
-          console.error('Release error:', fallbackError)
           toast.error('Failed to release job')
           return
         }
@@ -140,7 +207,6 @@ export default function LiveJobs() {
       loadAllJobs()
       
     } catch (error) {
-      console.error('Release exception:', error)
       toast.error('Failed to release job')
     } finally {
       setReleasingJob(null)
@@ -296,6 +362,7 @@ export default function LiveJobs() {
                       const isToday = job.scheduled_date === todayStr
                       const isActive = job.status === 'in_progress'
                       const isCompleted = job.status === 'completed'
+                      const isOpen = job.status === 'pending' || job.status === 'scheduled'
                       
                       return (
                         <tr key={job.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
@@ -383,48 +450,40 @@ export default function LiveJobs() {
                           </td>
                           <td className="py-3 px-3 text-center">
                             {isCompleted && job.actual_end_time ? (
-                              <span className="text-[10px] text-emerald-600 font-medium">
-                                {formatDateTime(job.actual_end_time)}
-                              </span>
+                              <span className="text-[10px] text-emerald-600 font-medium">{formatDateTime(job.actual_end_time)}</span>
                             ) : isCompleted ? (
                               <span className="text-[10px] text-emerald-500">Done</span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400">-</span>
-                            )}
+                            ) : (<span className="text-[10px] text-slate-400">-</span>)}
                           </td>
                           <td className="py-3 px-3 text-center">
-                            {/* Release Button - Only for active/in_progress jobs */}
-                            {isActive && (
-                              <button 
-                                onClick={() => handleReleaseJob(job.id, job.title)}
-                                disabled={releasingJob === job.id}
-                                className="px-3 py-1.5 rounded-xl bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1 mx-auto transition-colors"
-                                title="Release job back to Open Pool"
-                              >
-                                {releasingJob === job.id ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                ) : (
-                                  <RotateCcw className="w-3 h-3" />
-                                )}
-                                Release
-                              </button>
-                            )}
-                            {/* Resume button for held jobs */}
-                            {job.status === 'on_hold' && (
-                              <button 
-                                onClick={() => handleReleaseJob(job.id, job.title)}
-                                disabled={releasingJob === job.id}
-                                className="px-3 py-1.5 rounded-xl bg-blue-500 text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1 mx-auto transition-colors"
-                                title="Resume job back to Open Pool"
-                              >
-                                {releasingJob === job.id ? (
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                ) : (
-                                  <RotateCcw className="w-3 h-3" />
-                                )}
-                                Resume
-                              </button>
-                            )}
+                            <div className="flex items-center justify-center gap-1">
+                              {/* Assign Button - For open/unassigned jobs */}
+                              {isOpen && (
+                                <button onClick={() => handleOpenAssign(job)}
+                                  className="px-2 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 text-xs hover:bg-indigo-200 flex items-center gap-1"
+                                  title="Assign to cleaner">
+                                  <UserPlus className="w-3 h-3" /> Assign
+                                </button>
+                              )}
+                              {/* Release Button - For active jobs */}
+                              {isActive && (
+                                <button onClick={() => handleReleaseJob(job.id, job.title)} disabled={releasingJob === job.id}
+                                  className="px-2 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs hover:bg-orange-200 disabled:opacity-50 flex items-center gap-1"
+                                  title="Release back to Open Pool">
+                                  {releasingJob === job.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div> : <RotateCcw className="w-3 h-3" />}
+                                  Release
+                                </button>
+                              )}
+                              {/* Resume for held jobs */}
+                              {job.status === 'on_hold' && (
+                                <button onClick={() => handleReleaseJob(job.id, job.title)} disabled={releasingJob === job.id}
+                                  className="px-2 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 disabled:opacity-50 flex items-center gap-1"
+                                  title="Resume to Open Pool">
+                                  {releasingJob === job.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div> : <RotateCcw className="w-3 h-3" />}
+                                  Resume
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -436,9 +495,6 @@ export default function LiveJobs() {
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
                 <p className="text-slate-500 text-lg mb-2">No jobs found</p>
-                <p className="text-slate-400 text-sm">
-                  {search || statusFilter !== 'all' ? 'Try adjusting your search or filters' : 'No jobs match the current criteria'}
-                </p>
               </div>
             )}
           </div>
@@ -446,28 +502,65 @@ export default function LiveJobs() {
 
         {/* Legend */}
         <div className="mt-6 neu-raised rounded-2xl p-4 flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-            <span className="text-slate-600 dark:text-slate-400">Open Pool (Available)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
-            <span className="text-slate-600 dark:text-slate-400">Active (In Progress)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-            <span className="text-slate-600 dark:text-slate-400">Completed</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-            <span className="text-slate-600 dark:text-slate-400">On Hold</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <RotateCcw className="w-3 h-3 text-orange-500" />
-            <span className="text-slate-600 dark:text-slate-400">Release Job</span>
-          </div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500"></span><span className="text-slate-600 dark:text-slate-400">Open Pool</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span><span className="text-slate-600 dark:text-slate-400">Active</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-500"></span><span className="text-slate-600 dark:text-slate-400">Completed</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-purple-500"></span><span className="text-slate-600 dark:text-slate-400">On Hold</span></div>
+          <div className="flex items-center gap-2"><UserPlus className="w-3 h-3 text-indigo-500" /><span className="text-slate-600 dark:text-slate-400">Assign</span></div>
+          <div className="flex items-center gap-2"><RotateCcw className="w-3 h-3 text-orange-500" /><span className="text-slate-600 dark:text-slate-400">Release</span></div>
         </div>
       </main>
+
+      {/* ASSIGN MODAL */}
+      {showAssignModal && assigningJob && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignModal(false)}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            
+            <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Assign Job</h3>
+                <p className="text-xs text-slate-500">{assigningJob.job_number} - {assigningJob.title}</p>
+              </div>
+              <button onClick={() => setShowAssignModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-sm font-semibold text-slate-500 mb-2 block">Select Cleaner</label>
+                <select value={selectedCleaner} onChange={e => setSelectedCleaner(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm">
+                  <option value="">Choose a cleaner...</option>
+                  {cleaners.map(cleaner => (
+                    <option key={cleaner.id} value={cleaner.id}>
+                      {cleaner.first_name} {cleaner.last_name} ({cleaner.employee_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400">
+                <p className="font-medium mb-1">Note:</p>
+                <p>This will assign the job directly to the selected cleaner. The job will appear in their "My Jobs" list.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700">
+              <button onClick={() => setShowAssignModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Cancel
+              </button>
+              <button onClick={handleAssignJob} disabled={assigning || !selectedCleaner}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2">
+                {assigning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <UserPlus className="w-4 h-4" />}
+                Assign Job
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
