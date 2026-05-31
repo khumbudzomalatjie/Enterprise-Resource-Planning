@@ -88,7 +88,7 @@ export default function LiveJobs() {
     setShowAssignModal(true)
   }
 
-  // Assign job to selected cleaner
+  // ASSIGN JOB - Completely replaces notes to clear old assignment
   const handleAssignJob = async () => {
     if (!selectedCleaner) {
       toast.error('Please select a cleaner')
@@ -101,6 +101,7 @@ export default function LiveJobs() {
       const cleaner = cleaners.find(c => c.id === selectedCleaner)
       const cleanerName = cleaner ? cleaner.first_name + ' ' + cleaner.last_name : 'Assigned Cleaner'
       
+      // IMPORTANT: Completely replace notes to remove any old cleaner assignment
       const { error } = await supabase
         .from('jobs')
         .update({ 
@@ -169,17 +170,17 @@ export default function LiveJobs() {
     return { name: 'Unassigned', hasCleaner: false }
   }
 
-  // RELEASE JOB
+  // RELEASE JOB - Completely replaces notes to clear old assignment
   const handleReleaseJob = async (jobId, jobTitle) => {
-    if (!window.confirm('Release "' + jobTitle + '" back to Open Pool?')) return
+    if (!window.confirm('Release "' + jobTitle + '" back to Open Pool? This will clear the current assignment.')) return
     setReleasingJob(jobId)
     
     try {
+      // COMPLETELY replace notes to remove old assignment
       const { error } = await supabase
         .from('jobs')
         .update({ 
           status: 'scheduled',
-          assigned_to: null,
           actual_start_time: null,
           updated_at: new Date().toISOString(),
           notes: 'RELEASED BY MANAGEMENT at ' + new Date().toLocaleString()
@@ -187,26 +188,16 @@ export default function LiveJobs() {
         .eq('id', jobId)
 
       if (error) {
-        const { error: fallbackError } = await supabase
-          .from('jobs')
-          .update({ 
-            status: 'scheduled',
-            actual_start_time: null,
-            updated_at: new Date().toISOString(),
-            notes: 'RELEASED BY MANAGEMENT at ' + new Date().toLocaleString()
-          })
-          .eq('id', jobId)
-        
-        if (fallbackError) {
-          toast.error('Failed to release job')
-          return
-        }
+        console.error('Release error:', error)
+        toast.error('Failed to release job')
+        return
       }
 
       toast.success('Job released back to Open Pool!')
       loadAllJobs()
       
     } catch (error) {
+      console.error('Release exception:', error)
       toast.error('Failed to release job')
     } finally {
       setReleasingJob(null)
@@ -329,9 +320,7 @@ export default function LiveJobs() {
             <option value="held">On Hold</option>
           </select>
           <button onClick={() => { setStatusFilter('all'); setSearch(''); loadAllJobs() }}
-            className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm">
-            Clear
-          </button>
+            className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm">Clear</button>
         </div>
 
         {/* Jobs Table */}
@@ -469,7 +458,7 @@ export default function LiveJobs() {
                               {isActive && (
                                 <button onClick={() => handleReleaseJob(job.id, job.title)} disabled={releasingJob === job.id}
                                   className="px-2 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs hover:bg-orange-200 disabled:opacity-50 flex items-center gap-1"
-                                  title="Release back to Open Pool">
+                                  title="Release back to Open Pool (clears assignment)">
                                   {releasingJob === job.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div> : <RotateCcw className="w-3 h-3" />}
                                   Release
                                 </button>
@@ -543,7 +532,7 @@ export default function LiveJobs() {
 
               <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400">
                 <p className="font-medium mb-1">Note:</p>
-                <p>This will assign the job directly to the selected cleaner. The job will appear in their "My Jobs" list.</p>
+                <p>This will assign the job to the selected cleaner and remove any previous assignment. The job will appear in their "My Jobs" list.</p>
               </div>
             </div>
 
