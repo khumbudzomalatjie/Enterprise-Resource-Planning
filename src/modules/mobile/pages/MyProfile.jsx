@@ -4,7 +4,7 @@ import useAuthStore from '../../../store/authStore'
 import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import { supabase } from '../../../lib/supabaseClient'
-import { User, Mail, Phone, MapPin, Briefcase, Shield, LogOut, ChevronRight, Calendar, Clock } from 'lucide-react'
+import { User, Mail, Phone, MapPin, Briefcase, Shield, LogOut, ChevronRight } from 'lucide-react'
 
 export default function MyProfile() {
   const { user, profile, signOut } = useAuthStore()
@@ -44,8 +44,6 @@ export default function MyProfile() {
     syncWithHR()
   }, [myProfile])
 
-  const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
-
   return (
     <div className="min-h-screen bg-slate-50 font-['Inter'] pb-20">
       {/* Header */}
@@ -72,8 +70,6 @@ export default function MyProfile() {
             { icon: MapPin, label: 'City', value: myProfile?.city || 'Not set' },
             { icon: Briefcase, label: 'Department', value: myProfile?.department || 'Not assigned' },
             { icon: Shield, label: 'Status', value: myProfile?.employment_status?.replace('_', ' ') || 'N/A' },
-            { icon: Calendar, label: 'Date Hired', value: formatDate(myProfile?.date_of_hire) },
-            { icon: Clock, label: 'Employee Since', value: formatDate(myProfile?.created_at) },
           ].map((item, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-slate-100 last:border-0">
               <div className="flex items-center gap-3">
