@@ -90,7 +90,6 @@ export default function FieldDashboard() {
       .not('clock_in_time', 'is', null)
       .order('clock_in_time', { ascending: false })
 
-    // Get assigned jobs for each active cleaner
     const cleanersWithJobs = await Promise.all((attendance || []).map(async (c) => {
       const { data: assignments } = await supabase
         .from('job_assignments')
@@ -166,6 +165,21 @@ export default function FieldDashboard() {
     { icon: Package, label: 'Supply Requests', value: stats.pendingSupplies || 0, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
   ]
 
+  // Helper function to get severity badge class
+  const getSeverityBadge = (severity) => {
+    if (severity === 'critical') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+    if (severity === 'high') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+    if (severity === 'medium') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+    return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+  }
+
+  // Helper function to get status badge class
+  const getStatusBadge = (status) => {
+    if (status === 'resolved' || status === 'approved') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+    if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+    return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+  }
+
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -199,7 +213,7 @@ export default function FieldDashboard() {
           </button>
         </motion.div>
 
-        {/* Quick Nav - Linked to dedicated pages */}
+        {/* Quick Nav */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
           {[
             { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600', count: stats.activeNow },
@@ -338,14 +352,12 @@ export default function FieldDashboard() {
                         <p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name} · {incident.jobs?.job_number}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                          incident.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                          incident.severity === 'high' ? 'bg-orange-100 text-orange-700' :
-                          'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                        }`}>{incident.severity}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                          incident.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                        }`}>{incident.status}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getSeverityBadge(incident.severity)}`}>
+                          {incident.severity || 'low'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(incident.status)}`}>
+                          {incident.status || 'reported'}
+                        </span>
                       </div>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{incident.description}</p>
@@ -388,14 +400,13 @@ export default function FieldDashboard() {
                         <p className="font-semibold text-sm text-slate-800 dark:text-white">{request.employees?.first_name} {request.employees?.last_name}</p>
                         <p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items requested</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        request.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                      }`}>{request.status}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(request.status)}`}>
+                        {request.status || 'pending'}
+                      </span>
                     </div>
                     <div className="space-y-1 mb-2">
                       {request.supplies_request_items?.slice(0, 3).map((item, i) => (
-                        <p key={i} className="text-xs text-slate-600">• {item.item_name} x{item.quantity} {item.unit}</p>
+                        <p key={i} className="text-xs text-slate-600 dark:text-slate-400">• {item.item_name} x{item.quantity} {item.unit}</p>
                       ))}
                       {(request.supplies_request_items?.length || 0) > 3 && (
                         <p className="text-xs text-slate-400">+{(request.supplies_request_items?.length || 0) - 3} more</p>
