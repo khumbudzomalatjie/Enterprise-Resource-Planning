@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../../store/authStore'
 import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
-import { User, Mail, Phone, MapPin, Briefcase, Shield, LogOut, ChevronRight } from 'lucide-react'
+import { supabase } from '../../../lib/supabaseClient'
+import { User, Mail, Phone, MapPin, Briefcase, Shield, LogOut, ChevronRight, Calendar, Clock } from 'lucide-react'
 
 export default function MyProfile() {
   const { user, profile, signOut } = useAuthStore()
@@ -19,8 +20,35 @@ export default function MyProfile() {
     navigate('/login')
   }
 
+  // Sync profile with HR
+  const syncWithHR = async () => {
+    if (!user?.id || !myProfile) return
+    
+    const updates = {}
+    if (profile?.full_name && profile.full_name !== `${myProfile.first_name} ${myProfile.last_name}`) {
+      const nameParts = profile.full_name.split(' ')
+      updates.first_name = nameParts[0]
+      updates.last_name = nameParts.slice(1).join(' ') || ''
+    }
+    if (profile?.phone && profile.phone !== myProfile.phone) {
+      updates.phone = profile.phone
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('employees').update(updates).eq('id', myProfile.id)
+      fetchMyProfile(user.id)
+    }
+  }
+
+  useEffect(() => {
+    syncWithHR()
+  }, [myProfile])
+
+  const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+
   return (
     <div className="min-h-screen bg-slate-50 font-['Inter'] pb-20">
+      {/* Header */}
       <div className="bg-gradient-to-b from-emerald-500 to-emerald-600 px-4 pt-8 pb-10 text-white">
         <h1 className="text-2xl font-bold mb-4">My Profile</h1>
         <div className="flex items-center gap-4">
@@ -30,29 +58,34 @@ export default function MyProfile() {
           <div>
             <p className="text-xl font-bold">{myProfile?.first_name} {myProfile?.last_name}</p>
             <p className="text-emerald-100 text-sm capitalize">{profile?.role?.replace('_', ' ') || 'Cleaner'}</p>
+            <p className="text-emerald-200 text-xs">{myProfile?.employee_code || 'N/A'}</p>
           </div>
         </div>
       </div>
 
+      {/* Profile Details */}
       <div className="px-4 -mt-4 space-y-1">
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
           {[
-            { icon: Mail, label: 'Email', value: myProfile?.email || user?.email },
+            { icon: Mail, label: 'Email', value: myProfile?.email || user?.email || 'N/A' },
             { icon: Phone, label: 'Phone', value: myProfile?.phone || 'Not set' },
             { icon: MapPin, label: 'City', value: myProfile?.city || 'Not set' },
             { icon: Briefcase, label: 'Department', value: myProfile?.department || 'Not assigned' },
-            { icon: Shield, label: 'Employee Code', value: myProfile?.employee_code || 'N/A' },
+            { icon: Shield, label: 'Status', value: myProfile?.employment_status?.replace('_', ' ') || 'N/A' },
+            { icon: Calendar, label: 'Date Hired', value: formatDate(myProfile?.date_of_hire) },
+            { icon: Clock, label: 'Employee Since', value: formatDate(myProfile?.created_at) },
           ].map((item, i) => (
             <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-slate-100 last:border-0">
               <div className="flex items-center gap-3">
                 <item.icon className="w-5 h-5 text-slate-400" />
                 <span className="text-sm text-slate-500">{item.label}</span>
               </div>
-              <span className="text-sm font-medium text-slate-700">{item.value}</span>
+              <span className="text-sm font-medium text-slate-700 capitalize">{item.value}</span>
             </div>
           ))}
         </div>
 
+        {/* Sign Out */}
         <button onClick={handleSignOut}
           className="w-full bg-white rounded-2xl p-4 mt-4 flex items-center justify-between shadow-sm hover:bg-red-50 transition-colors">
           <div className="flex items-center gap-3">
