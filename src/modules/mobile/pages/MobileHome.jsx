@@ -26,16 +26,19 @@ export default function MobileHome() {
   const touchStartY = useRef(0)
   const pullThreshold = 80
 
-  // ALL JOBS - simple flat list
   const [allJobs, setAllJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [jobSearch, setJobSearch] = useState('')
   const [selectedDate, setSelectedDate] = useState('all')
   const [updatingJob, setUpdatingJob] = useState(null)
 
-  // Modal state
   const [showModal, setShowModal] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
+  const [supplyItem, setSupplyItem] = useState('')
+  const [supplyQty, setSupplyQty] = useState(1)
+  const [incidentDesc, setIncidentDesc] = useState('')
+  const [incidentType, setIncidentType] = useState('damage')
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     loadAllJobs()
@@ -57,20 +60,26 @@ export default function MobileHome() {
   const loadAllJobs = async () => {
     setLoading(true)
     try {
-      // SIMPLE QUERY: Get all jobs that are not completed or cancelled
-      const { data, error } = await supabase
+      let query = supabase
         .from('jobs')
         .select('*')
         .neq('status', 'completed')
         .neq('status', 'cancelled')
         .order('scheduled_date', { ascending: true })
 
+      const { data, error } = await query
+
       if (error) {
         console.error('❌ Error:', error.message)
         setAllJobs([])
       } else {
-        console.log(`✅ Loaded ${data?.length || 0} jobs:`, data?.map(j => `${j.job_number}:${j.status}`))
-        setAllJobs(data || [])
+        console.log(`✅ Loaded ${data?.length || 0} jobs`)
+        // Apply date filter in JavaScript instead of SQL for reliability
+        if (selectedDate !== 'all') {
+          setAllJobs((data || []).filter(j => j.scheduled_date === selectedDate))
+        } else {
+          setAllJobs(data || [])
+        }
       }
     } catch (e) {
       console.error('❌ Exception:', e.message)
@@ -101,13 +110,10 @@ export default function MobileHome() {
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
-  // SELECT JOB
   const handleSelectJob = async (jobId) => {
     setUpdatingJob(jobId)
     try {
-      console.log('📝 Selecting job:', jobId)
-      
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('jobs')
         .update({ 
           status: 'in_progress',
@@ -115,26 +121,18 @@ export default function MobileHome() {
           updated_at: new Date().toISOString()
         })
         .eq('id', jobId)
-        .select()
 
-      if (error) {
-        console.error('❌ Update error:', error.message)
-        toast.error('Failed: ' + error.message)
-        return
-      }
-
-      console.log('✅ Job updated:', data)
-      toast.success('Job selected!')
+      if (error) throw error
+      toast.success('Job selected! ✅')
       await loadAllJobs()
     } catch (e) {
-      console.error('❌ Exception:', e.message)
-      toast.error('Failed')
+      console.error('Select error:', e.message)
+      toast.error('Failed to select job')
     } finally {
       setUpdatingJob(null)
     }
   }
 
-  // COMPLETE JOB
   const handleCompleteJob = async (jobId) => {
     if (!window.confirm('Mark as completed?')) return
     setUpdatingJob(jobId)
@@ -155,7 +153,6 @@ export default function MobileHome() {
     finally { setUpdatingJob(null) }
   }
 
-  // UPLOAD PHOTO
   const handleUploadPhoto = async (e) => {
     const file = e.target.files?.[0]
     if (!file || !selectedJob) return
@@ -169,16 +166,10 @@ export default function MobileHome() {
       await supabase.from('job_photos').insert([{
         job_id: selectedJob.id, photo_url: publicUrl, photo_type: 'before'
       }])
-
       toast.success('Photo uploaded! 📸')
     } catch { toast.error('Failed') }
     finally { if (fileInputRef.current) fileInputRef.current.value = '' }
   }
-
-  // REQUEST SUPPLIES
-  const [supplyItem, setSupplyItem] = useState('')
-  const [supplyQty, setSupplyQty] = useState(1)
-  const [actionLoading, setActionLoading] = useState(false)
 
   const handleRequestSupplies = async () => {
     if (!selectedJob || !supplyItem.trim()) { toast.error('Enter item name'); return }
@@ -199,10 +190,6 @@ export default function MobileHome() {
     finally { setActionLoading(false) }
   }
 
-  // REPORT INCIDENT
-  const [incidentDesc, setIncidentDesc] = useState('')
-  const [incidentType, setIncidentType] = useState('damage')
-
   const handleReportIncident = async () => {
     if (!selectedJob || !incidentDesc.trim()) { toast.error('Describe incident'); return }
     setActionLoading(true)
@@ -219,25 +206,23 @@ export default function MobileHome() {
   const formatTime = (date) => date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
   const formatDate = (date) => date.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })
   const formatDateShort = (date) => {
-    if (!date) return ''
+    if (!date) return 'No date'
     return new Date(date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
   const todayStr = new Date().toISOString().split('T')[0]
 
+  // Apply search filter
   const filteredJobs = allJobs.filter(job => {
     if (!jobSearch) return true
     const s = jobSearch.toLowerCase()
-    return (job.title || '').toLowerCase().includes(s) || (job.job_number || '').toLowerCase().includes(s) || (job.site_address || '').toLowerCase().includes(s)
+    return (job.title || '').toLowerCase().includes(s) || 
+           (job.job_number || '').toLowerCase().includes(s) || 
+           (job.site_address || '').toLowerCase().includes(s)
   })
 
-  // Apply date filter
-  const displayedJobs = selectedDate === 'all' ? filteredJobs : filteredJobs.filter(j => j.scheduled_date === selectedDate)
-
-  // Count statuses
-  const openCount = displayedJobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length
-  const activeCount = displayedJobs.filter(j => j.status === 'in_progress').length
-  const pausedCount = displayedJobs.filter(j => j.status === 'on_hold').length
+  const openCount = allJobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length
+  const activeCount = allJobs.filter(j => j.status === 'in_progress').length
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-700 font-['Inter'] pb-20"
@@ -253,7 +238,6 @@ export default function MobileHome() {
       </AnimatePresence>
 
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
-        {/* Header */}
         <div className="px-5 pt-6 pb-6 text-white">
           <div className="flex justify-between items-start mb-1">
             <div className="flex-1">
@@ -268,28 +252,21 @@ export default function MobileHome() {
           <p className="text-5xl font-bold text-center my-3 font-mono tracking-wider">{formatTime(currentTime)}</p>
         </div>
 
-        {/* Stats */}
         <div className="px-5 -mt-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-gradient-to-br from-blue-400 to-blue-500 rounded-2xl p-2.5 text-white text-center shadow-lg">
               <Briefcase className="w-4 h-4 mx-auto mb-1 opacity-80" />
               <p className="text-lg font-bold">{openCount}</p>
-              <p className="text-[9px] opacity-80 font-medium">Open</p>
+              <p className="text-[9px] opacity-80 font-medium">Open Jobs</p>
             </div>
             <div className="bg-gradient-to-br from-amber-400 to-amber-500 rounded-2xl p-2.5 text-white text-center shadow-lg">
               <Play className="w-4 h-4 mx-auto mb-1 opacity-80" />
               <p className="text-lg font-bold">{activeCount}</p>
-              <p className="text-[9px] opacity-80 font-medium">Active</p>
-            </div>
-            <div className="bg-gradient-to-br from-purple-400 to-purple-500 rounded-2xl p-2.5 text-white text-center shadow-lg">
-              <Clock className="w-4 h-4 mx-auto mb-1 opacity-80" />
-              <p className="text-lg font-bold">{pausedCount}</p>
-              <p className="text-[9px] opacity-80 font-medium">Paused</p>
+              <p className="text-[9px] opacity-80 font-medium">Active Jobs</p>
             </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="px-5 mt-4">
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => navigate('/mobile/clock')}
@@ -303,36 +280,28 @@ export default function MobileHome() {
           </div>
         </div>
 
-        {/* Jobs */}
         <div className="px-5 mt-5 mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-base font-bold text-white flex items-center gap-2"><Briefcase className="w-4 h-4" />Jobs</h2>
-            <span className="text-xs text-white/70 bg-white/20 px-2 py-0.5 rounded-full">{displayedJobs.length} jobs</span>
+            <h2 className="text-base font-bold text-white flex items-center gap-2"><Briefcase className="w-4 h-4" />All Jobs</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setSelectedDate('all')} className={`text-xs px-2 py-1 rounded-full ${selectedDate === 'all' ? 'bg-white text-emerald-700' : 'bg-white/20 text-white'}`}>All</button>
+              <button onClick={() => setSelectedDate(todayStr)} className={`text-xs px-2 py-1 rounded-full ${selectedDate === todayStr ? 'bg-white text-emerald-700' : 'bg-white/20 text-white'}`}>Today</button>
+            </div>
           </div>
 
-          {/* Search & Date Filter */}
-          <div className="mb-3 space-y-2">
+          <div className="mb-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
               <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
                 placeholder="Search jobs..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" />
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {[{ value: 'all', label: 'All' }, { value: todayStr, label: 'Today' }].map(opt => (
-                <button key={opt.value} onClick={() => setSelectedDate(opt.value)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium ${selectedDate === opt.value ? 'bg-white text-emerald-700 shadow-lg' : 'bg-white/20 text-white'}`}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Job Cards */}
           {loading ? (
             <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
-          ) : displayedJobs.length > 0 ? (
+          ) : filteredJobs.length > 0 ? (
             <div className="space-y-2">
-              {displayedJobs.map((job, i) => (
+              {filteredJobs.map((job, i) => (
                 <div key={job.id}
                   className={`bg-white rounded-2xl p-4 shadow-md ${
                     job.status === 'in_progress' ? 'border-l-4 border-l-amber-400' : 
@@ -340,11 +309,10 @@ export default function MobileHome() {
                     'border-l-4 border-l-blue-400'
                   }`}>
                   
-                  {/* Title + Status */}
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-slate-800 text-sm">{job.title || 'Untitled'}</h3>
-                      <p className="text-xs text-slate-400">{job.job_number}</p>
+                      <h3 className="font-semibold text-slate-800 text-sm">{job.title || 'Untitled Job'}</h3>
+                      <p className="text-xs text-slate-400">{job.job_number} · {formatDateShort(job.scheduled_date)}</p>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ml-2 ${
                       job.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
@@ -355,26 +323,21 @@ export default function MobileHome() {
                     </span>
                   </div>
 
-                  {/* Info */}
                   <div className="text-xs text-slate-500 mb-1">
-                    <Calendar className="w-3 h-3 inline mr-1" />
-                    {job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}
-                    <span className="mx-2">·</span>
                     <Clock className="w-3 h-3 inline mr-1" />
-                    {job.scheduled_start_time?.slice(0,5) || '--:--'}
+                    {job.scheduled_start_time?.slice(0,5) || '--:--'} - {job.scheduled_end_time?.slice(0,5) || '--:--'}
                   </div>
                   <div className="text-xs text-slate-500 mb-3">
                     <MapPin className="w-3 h-3 inline mr-1" />
                     {job.site_address?.slice(0, 40) || 'No address'}
                   </div>
 
-                  {/* Buttons */}
                   <div className="flex gap-2">
                     {job.status === 'in_progress' ? (
                       <>
-                        <button onClick={() => { setSelectedJob(job); setShowModal(true) }}
+                        <button onClick={() => { setSelectedJob(job); setShowModal(true); setSupplyItem(''); setSupplyQty(1); setIncidentDesc(''); setIncidentType('damage') }}
                           className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 active:scale-95">
-                          <Play className="w-3.5 h-3.5" /> Manage
+                          <Camera className="w-3.5 h-3.5" /> Manage
                         </button>
                         <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id}
                           className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 active:scale-95 disabled:opacity-50">
@@ -395,6 +358,9 @@ export default function MobileHome() {
             <div className="text-center py-10 bg-white/10 backdrop-blur rounded-2xl">
               <Briefcase className="w-12 h-12 text-white/60 mx-auto mb-2" />
               <p className="text-white font-semibold">No jobs found</p>
+              <p className="text-white/60 text-xs mt-1">
+                {selectedDate !== 'all' ? 'Try selecting "All" dates' : 'Pull down to refresh'}
+              </p>
             </div>
           )}
         </div>
@@ -402,7 +368,6 @@ export default function MobileHome() {
         <div className="h-4" />
       </div>
 
-      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleUploadPhoto} />
 
       {/* MODAL */}
@@ -424,7 +389,6 @@ export default function MobileHome() {
               </div>
 
               <div className="p-5 space-y-4">
-                {/* Photo Upload */}
                 <div className="bg-blue-50 rounded-2xl p-4">
                   <h4 className="font-semibold text-slate-700 mb-2 flex items-center gap-2"><Camera className="w-4 h-4 text-blue-600" />Upload Photo</h4>
                   <button onClick={() => fileInputRef.current?.click()}
@@ -433,7 +397,6 @@ export default function MobileHome() {
                   </button>
                 </div>
 
-                {/* Supplies */}
                 <div className="bg-purple-50 rounded-2xl p-4">
                   <h4 className="font-semibold text-slate-700 mb-2 flex items-center gap-2"><Package className="w-4 h-4 text-purple-600" />Request Supplies</h4>
                   <div className="flex gap-2 mb-2">
@@ -448,7 +411,6 @@ export default function MobileHome() {
                   </button>
                 </div>
 
-                {/* Incident */}
                 <div className="bg-red-50 rounded-2xl p-4">
                   <h4 className="font-semibold text-slate-700 mb-2 flex items-center gap-2"><AlertCircle className="w-4 h-4 text-red-600" />Report Incident</h4>
                   <select value={incidentType} onChange={e => setIncidentType(e.target.value)}
