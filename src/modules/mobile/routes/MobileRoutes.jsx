@@ -6,6 +6,7 @@ import ClockInOut from '../pages/ClockInOut'
 import PhotoUpload from '../pages/PhotoUpload'
 import SuppliesRequest from '../pages/SuppliesRequest'
 import MyProfile from '../pages/MyProfile'
+import MessagesPage from '../pages/MessagesPage'
 import FieldDashboard from '../pages/FieldDashboard'
 import ActiveCleaners from '../pages/ActiveCleaners'
 import JobPhotos from '../pages/JobPhotos'
@@ -99,7 +100,6 @@ function IncidentReportPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-['Inter'] pb-20">
-      {/* Header */}
       <div className="bg-gradient-to-b from-red-500 to-red-600 px-4 pt-8 pb-6 text-white">
         <button onClick={() => navigate('/mobile')} className="p-1 rounded-lg hover:bg-white/20 mb-4">
           <ArrowLeft className="w-5 h-5" />
@@ -109,7 +109,6 @@ function IncidentReportPage() {
       </div>
 
       <div className="px-4 -mt-4 space-y-4 pt-4">
-        {/* Job Selection */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <label className="text-sm font-semibold text-slate-500 mb-2 block">Related Job (optional)</label>
           <select value={formData.job_id} onChange={e => setFormData({...formData, job_id: e.target.value})} 
@@ -121,7 +120,6 @@ function IncidentReportPage() {
           </select>
         </div>
 
-        {/* Incident Type */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <label className="text-sm font-semibold text-slate-500 mb-2 block">Incident Type</label>
           <div className="grid grid-cols-2 gap-2">
@@ -140,7 +138,6 @@ function IncidentReportPage() {
           </div>
         </div>
 
-        {/* Severity */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <label className="text-sm font-semibold text-slate-500 mb-2 block">Severity</label>
           <div className="flex gap-2">
@@ -158,7 +155,6 @@ function IncidentReportPage() {
           </div>
         </div>
 
-        {/* Description */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <label className="text-sm font-semibold text-slate-500 mb-2 block">Description *</label>
           <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} 
@@ -166,7 +162,6 @@ function IncidentReportPage() {
             className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm resize-none" />
         </div>
 
-        {/* Photo Upload */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <label className="text-sm font-semibold text-slate-500 mb-2 block">Photo (optional)</label>
           {photoPreview ? (
@@ -184,7 +179,6 @@ function IncidentReportPage() {
           )}
         </div>
 
-        {/* Submit Button */}
         <button onClick={handleSubmit} disabled={submitting} 
           className="w-full bg-red-500 text-white rounded-2xl p-4 font-bold text-lg hover:bg-red-600 disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg">
           <Send className="w-5 h-5" />
@@ -217,6 +211,7 @@ export default function MobileRoutes() {
       <Route path="/supplies" element={<ProtectedRoute><SuppliesRequest /></ProtectedRoute>} />
       <Route path="/incident" element={<ProtectedRoute><IncidentReportPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
 
       {/* ============================================ */}
       {/* MANAGER FIELD OPERATIONS ROUTES              */}
@@ -227,6 +222,7 @@ export default function MobileRoutes() {
       <Route path="/field/photos" element={<ProtectedRoute><JobPhotos /></ProtectedRoute>} />
       <Route path="/field/incidents" element={<ProtectedRoute><IncidentReports /></ProtectedRoute>} />
       <Route path="/field/supplies" element={<ProtectedRoute><SupplyOrders /></ProtectedRoute>} />
+      <Route path="/field/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
       <Route path="/field/map" element={<ProtectedRoute><LiveMap /></ProtectedRoute>} />
     </Routes>
   )
