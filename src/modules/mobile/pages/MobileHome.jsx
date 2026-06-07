@@ -506,14 +506,135 @@ export default function MobileHome() {
     </div>
   )
 
-  // The rest of the render functions (Jobs, GPS, Photos, Supplies, Incident, Schedule, Messages, Leave, Performance, Profile) remain the same as the previous complete file.
-  // ... (all other render functions from the previous complete MobileHome.jsx)
+  // JOBS
+  const renderJobs = () => {
+    const fo = allOpenJobs.filter(j => !jobSearch || (j.title||'').toLowerCase().includes(jobSearch.toLowerCase()))
+    const fm = myActiveJobs.filter(j => !jobSearch || (j.title||'').toLowerCase().includes(jobSearch.toLowerCase()))
+    return (
+      <div className="space-y-4">
+        <button onClick={goBack} className={`${btnClasses} text-sm inline-flex items-center gap-2`}>← Back</button>
+        <div className={cardClasses}>
+          <h3 className="font-bold text-[#2e3b4e] text-lg mb-3">Jobs</h3>
+          <div className="flex gap-2 mb-3">
+            {[{ id: 'all', label: `Open (${fo.length})` }, { id: 'mine', label: `My Jobs (${fm.length})` }].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-2.5 rounded-[30px] font-semibold text-sm ${activeTab===tab.id?'bg-[#5f7d9c] text-white shadow-[inset_3px_3px_6px_#3e5268]':'bg-[#eef1f6] text-[#2e3b4e] shadow-[4px_4px_8px_#bcc3cf]'}`}>{tab.label}</button>
+            ))}
+          </div>
+          <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5e6f82]" /><input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)} placeholder="Search jobs..." className={inputClasses + " pl-9"} /></div>
+          {activeTab === 'all' && (
+            <div className="space-y-2 max-h-[350px] overflow-y-auto">
+              {loadingAllJobs ? <p className="text-center py-4">Loading...</p> : fo.length > 0 ? fo.map(job => (
+                <div key={job.id} className={cardInsetClasses + " border-l-4 border-l-[#5f7d9c]"}>
+                  <div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{job.title}</p><p className="text-xs text-[#5e6f82]">{job.job_number} · {job.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#5f7d9c]/20 text-[#5f7d9c]">Open</span></div>
+                  <div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline" /> {job.scheduled_date===todayStr?'Today':formatDateShort(job.scheduled_date)} · <Clock className="w-3 h-3 inline" /> {job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
+                  <div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline" /> {job.site_address?.slice(0,35)}</div>
+                  <button onClick={() => handleSelectJob(job.id)} className={btnPrimaryClasses + " w-full text-sm"}><Hand className="w-4 h-4 inline mr-1" /> Select Job</button>
+                </div>
+              )) : <div className={cardInsetClasses + " text-center"}><p className="text-[#5e6f82]">No open jobs</p></div>}
+            </div>
+          )}
+          {activeTab === 'mine' && (
+            <div className="space-y-2 max-h-[350px] overflow-y-auto">
+              {loadingAllJobs ? <p className="text-center py-4">Loading...</p> : fm.length > 0 ? fm.map(job => (
+                <div key={job.id} className={cardInsetClasses + " border-l-4 border-l-[#c99f4b]"}>
+                  <div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{job.title}</p><p className="text-xs text-[#5e6f82]">{job.job_number} · {job.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#c99f4b]/20 text-[#c99f4b]">Active</span></div>
+                  <div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline" /> {job.scheduled_date===todayStr?'Today':formatDateShort(job.scheduled_date)} · <Clock className="w-3 h-3 inline" /> {job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
+                  <div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline" /> {job.site_address?.slice(0,35)}</div>
+                  <div className="flex gap-2 mb-2">
+                    <button onClick={() => handleStartJob(job.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#5f7d9c] text-white"><Play className="w-3 h-3 inline mr-1" />Start</button>
+                    <button onClick={() => handleCompleteJob(job.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#4b9b6b] text-white"><CheckCircle2 className="w-3 h-3 inline mr-1" />Complete</button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button onClick={() => navigate('/mobile/photos')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] shadow-[inset_2px_2px_4px_#bcc3cf] text-[#5f7d9c]"><Camera className="w-3 h-3 inline mr-0.5" />Photos</button>
+                    <button onClick={() => navigate('/mobile/supplies')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] shadow-[inset_2px_2px_4px_#bcc3cf] text-[#c99f4b]"><Package className="w-3 h-3 inline mr-0.5" />Supplies</button>
+                    <button onClick={() => navigate('/mobile/incident')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] shadow-[inset_2px_2px_4px_#bcc3cf] text-[#c15b5b]"><AlertCircle className="w-3 h-3 inline mr-0.5" />Incident</button>
+                  </div>
+                </div>
+              )) : <div className={cardInsetClasses + " text-center"}><p className="text-[#5e6f82]">No active jobs</p></div>}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
-  // RENDER SCREEN
+  // GPS / CLOCK IN SCREEN
+  const renderGPS = () => (
+    <div className="space-y-4">
+      <button onClick={goBack} className={`${btnClasses} text-sm inline-flex items-center gap-2`}>← Back</button>
+      <div className={cardClasses + " text-center"}>
+        <div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center shadow-[inset_4px_4px_8px_#bcc3cf,inset_-4px_-4px_8px_#ffffff] ${isClockedIn ? 'bg-green-100' : 'bg-[#e9edf2]'}`}>
+          {isClockedIn ? <LogOutIcon className="w-10 h-10 text-red-500" /> : <Map className="w-10 h-10 text-[#4b9b6b]" />}
+        </div>
+        <h3 className="font-bold text-[#2e3b4e] text-lg mb-2">{isClockedIn ? 'Clock Out' : 'Clock In'}</h3>
+        <p className="text-[#5e6f82] text-sm mb-4">{isClockedIn ? 'Tap to clock out and end your shift' : 'Tap to record your GPS location and start your shift'}</p>
+        <button onClick={handleClockToggle} disabled={clockingInOut}
+          className={`rounded-[40px] py-4 w-full font-bold text-lg shadow-[6px_6px_14px_#bcc3cf,-4px_-4px_12px_#ffffff] active:scale-[0.97] transition-all ${isClockedIn ? 'bg-gradient-to-br from-red-400 to-red-600 text-white' : 'bg-gradient-to-br from-[#4b9b6b] to-[#3d8b5f] text-white'}`}>
+          {clockingInOut ? <RefreshCw className="w-5 h-5 animate-spin inline mr-2" /> : isClockedIn ? <LogOutIcon className="w-5 h-5 inline mr-2" /> : <Map className="w-5 h-5 inline mr-2" />}
+          {isClockedIn ? 'Clock Out' : 'Clock In with GPS'}
+        </button>
+        <div className={cardInsetClasses + " mt-4 text-left"}>
+          <p className="text-sm text-[#2e3b4e]"><strong>Status:</strong> {isClockedIn ? '🟢 Currently Clocked In' : '⚪ Not Clocked In'}</p>
+          {clockInTime && <p className="text-xs text-[#5e6f82] mt-1">Clocked in at: {new Date(clockInTime).toLocaleTimeString()}</p>}
+        </div>
+      </div>
+    </div>
+  )
+
+  // PHOTOS SCREEN
+  const renderPhotos = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses+" text-center"}><Camera className="w-16 h-16 mx-auto text-[#7a94ae] mb-4"/><h3 className="font-bold text-lg mb-2">Job Photos</h3><button onClick={()=>navigate('/mobile/photos')} className={btnPrimaryClasses+" w-full"}>Open Camera</button></div></div>
+  )
+
+  // SUPPLIES SCREEN
+  const renderSupplies = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><Package className="w-5 h-5 inline mr-2 text-[#c99f4b]"/>Request Supplies</h3><div className="space-y-3"><input type="text" value={supplyForm.item} onChange={e=>setSupplyForm({...supplyForm,item:e.target.value})} placeholder="Item name" className={inputClasses}/><div className="flex gap-2"><input type="number" value={supplyForm.quantity} onChange={e=>setSupplyForm({...supplyForm,quantity:parseInt(e.target.value)||1})} className={inputClasses+" flex-1"}/><select className={inputClasses+" flex-1"}><option>Each</option></select></div><textarea value={supplyForm.notes} onChange={e=>setSupplyForm({...supplyForm,notes:e.target.value})} placeholder="Notes" rows={2} className={inputClasses+" rounded-[24px]"}/><button onClick={handleSubmitSupply} disabled={submittingSupply} className={btnPrimaryClasses+" w-full"}>{submittingSupply?'Submitting...':'Submit Request'}</button></div></div></div>
+  )
+
+  // INCIDENT SCREEN
+  const renderIncident = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><AlertCircle className="w-5 h-5 inline mr-2 text-[#c15b5b]"/>Report Incident</h3><div className="space-y-3"><div className="flex gap-2 flex-wrap">{['damage','injury','complaint','security','other'].map(t=>(<button key={t} onClick={()=>setIncidentForm({...incidentForm,type:t})} className={`px-3 py-1.5 rounded-full text-xs ${incidentForm.type===t?'bg-[#c15b5b] text-white':'bg-[#e9edf2]'}`}>{t}</button>))}</div><div className="flex gap-2">{['low','medium','high','critical'].map(s=>(<button key={s} onClick={()=>setIncidentForm({...incidentForm,severity:s})} className={`flex-1 py-1.5 rounded-full text-xs ${incidentForm.severity===s?'bg-[#c15b5b] text-white':'bg-[#e9edf2]'}`}>{s}</button>))}</div><textarea value={incidentForm.description} onChange={e=>setIncidentForm({...incidentForm,description:e.target.value})} placeholder="Describe what happened..." rows={4} className={inputClasses+" rounded-[24px]"}/><label className="block text-center p-4 border-2 border-dashed border-[#bcc3cf] rounded-[20px] cursor-pointer"><Camera className="w-6 h-6 mx-auto text-[#5f7d9c]"/><span className="text-xs">{incidentPhoto?incidentPhoto.name:'Add photo'}</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>setIncidentPhoto(e.target.files[0])}/></label><button onClick={handleSubmitIncident} disabled={submittingIncident} className="bg-[#c15b5b] text-white rounded-[40px] py-3.5 w-full font-semibold shadow-[6px_6px_14px_#bcc3cf] active:scale-[0.97]">{submittingIncident?'Submitting...':'Submit Incident Report'}</button></div></div></div>
+  )
+
+  // SCHEDULE SCREEN
+  const renderSchedule = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><Calendar className="w-5 h-5 inline mr-2 text-[#7a94ae]"/>My Schedule</h3>{loadingSchedule?<p className="text-center py-4">Loading...</p>:schedules.length>0?<div className="space-y-2 max-h-[400px] overflow-y-auto">{schedules.map((s,i)=>(<div key={i} className={cardInsetClasses}><div className="flex justify-between mb-1"><p className="font-semibold text-sm">{s.shift_types?.name||'Shift'}</p><span className="text-xs">{formatDateShort(s.shift_date)}</span></div><p className="text-xs">{s.shift_types?.start_time?.slice(0,5)}-{s.shift_types?.end_time?.slice(0,5)}</p>{s.jobs?.title&&<p className="text-xs mt-1">{s.jobs.title}·{s.jobs.site_address?.slice(0,25)}</p>}</div>))}</div>:<div className={cardInsetClasses+" text-center"}><p>No schedules</p></div>}</div></div>
+  )
+
+  // MESSAGES SCREEN
+  const renderMessages = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><MessageCircle className="w-5 h-5 inline mr-2 text-[#4b9b6b]"/>Messages</h3><div className="space-y-2 max-h-[300px] overflow-y-auto mb-3">{messages.length>0?messages.map((m,i)=>(<div key={i} className={cardInsetClasses}><p className="font-semibold text-sm">{m.from}</p><p className="text-xs">{m.text}</p><span className="text-[10px]">{m.time}</span></div>)):<div className={cardInsetClasses+" text-center"}><p>No messages</p></div>}</div><div className="flex gap-2"><input type="text" value={newMessage} onChange={e=>setNewMessage(e.target.value)} placeholder="Type..." className={inputClasses+" flex-1"}/><button onClick={()=>{if(newMessage.trim()){setMessages([...messages,{from:'You',text:newMessage,time:new Date().toLocaleTimeString()}]);setNewMessage('');toast.success('Sent!')}}} className="bg-[#4b9b6b] text-white rounded-full p-3 shadow-[4px_4px_8px_#bcc3cf] active:scale-[0.97]"><Send className="w-5 h-5"/></button></div></div></div>
+  )
+
+  // LEAVE SCREEN
+  const renderLeave = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><Umbrella className="w-5 h-5 inline mr-2 text-[#5f7d9c]"/>Leave</h3><div className="space-y-3"><select value={leaveForm.type} onChange={e=>setLeaveForm({...leaveForm,type:e.target.value})} className={inputClasses}><option value="annual">Annual</option><option value="sick">Sick</option><option value="family">Family</option></select><div className="flex gap-2"><input type="date" value={leaveForm.from} onChange={e=>setLeaveForm({...leaveForm,from:e.target.value})} className={inputClasses+" flex-1"}/><input type="date" value={leaveForm.to} onChange={e=>setLeaveForm({...leaveForm,to:e.target.value})} className={inputClasses+" flex-1"}/></div><textarea value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})} placeholder="Reason" rows={2} className={inputClasses+" rounded-[24px]"}/><button onClick={handleSubmitLeave} disabled={submittingLeave} className={btnPrimaryClasses+" w-full"}>{submittingLeave?'Submitting...':'Submit'}</button></div>{leaveRequests.length>0&&<div className="mt-4"><h4 className="font-semibold text-sm mb-2">Recent</h4><div className="space-y-2">{leaveRequests.map(l=>(<div key={l.id} className={cardInsetClasses+" flex justify-between"}><div><p className="font-semibold text-xs">{l.leave_types?.name}</p><p className="text-[10px]">{l.start_date}→{l.end_date}({l.total_days}d)</p></div><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${l.status==='approved'?'bg-green-100 text-green-700':l.status==='rejected'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{l.status}</span></div>))}</div></div>}</div></div>
+  )
+
+  // PERFORMANCE SCREEN
+  const renderPerformance = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses}><h3 className="font-bold text-lg mb-3"><BarChart3 className="w-5 h-5 inline mr-2 text-[#c99f4b]"/>Stats</h3><div className="grid grid-cols-3 gap-3">{[{label:'Completed',value:performance.completedToday,icon:CheckCircle2,color:'#4b9b6b'},{label:'Hours',value:performance.totalHours+'h',icon:Clock,color:'#5f7d9c'},{label:'Rating',value:performance.rating+'/5',icon:Star,color:'#c99f4b'}].map(s=>(<div key={s.label} className={cardInsetClasses+" text-center"}><s.icon className="w-6 h-6 mx-auto mb-1" style={{color:s.color}}/><p className="text-lg font-bold">{s.value}</p><p className="text-[10px]">{s.label}</p></div>))}</div></div></div>
+  )
+
+  // PROFILE SCREEN
+  const renderProfile = () => (
+    <div className="space-y-4"><button onClick={goBack} className={`${btnClasses} text-sm`}>← Back</button><div className={cardClasses+" text-center"}><div className="w-20 h-20 rounded-full bg-[#e9edf2] shadow-[inset_4px_4px_8px_#bcc3cf] flex items-center justify-center mx-auto mb-3"><User className="w-10 h-10 text-[#5f7d9c]"/></div><h3 className="font-bold text-lg">{myProfile?.first_name} {myProfile?.last_name}</h3><p className="text-sm">{myProfile?.employee_code||'N/A'}</p><div className={cardInsetClasses+" mt-3 text-left space-y-2"}><p className="text-sm"><strong>Email:</strong> {user?.email}</p><p className="text-sm"><strong>Dept:</strong> {myProfile?.department||'Cleaning'}</p><p className="text-sm"><strong>Status:</strong> {myProfile?.employment_status||'Active'}</p></div><button onClick={()=>{signOut();navigate('/login')}} className="bg-[#c15b5b] text-white rounded-[40px] py-3 w-full mt-3 font-semibold shadow-[6px_6px_14px_#bcc3cf] active:scale-[0.97]"><LogOut className="w-4 h-4 inline mr-2"/>Sign Out</button></div></div>
+  )
+
+  // RENDER SCREEN - FIXED: All cases now have render functions
   const renderScreen = () => {
     switch (currentScreen) {
       case 'dashboard': return renderDashboard()
-      // ... other cases remain the same
+      case 'jobs': return renderJobs()
+      case 'gps': return renderGPS()
+      case 'photos': return renderPhotos()
+      case 'supplies': return renderSupplies()
+      case 'incident': return renderIncident()
+      case 'schedule': return renderSchedule()
+      case 'messages': return renderMessages()
+      case 'leave': return renderLeave()
+      case 'performance': return renderPerformance()
+      case 'profile': return renderProfile()
       default: return renderDashboard()
     }
   }
@@ -525,7 +646,7 @@ export default function MobileHome() {
         <div className="flex justify-around items-center max-w-lg mx-auto">
           {[{id:'dashboard',icon:Home,label:'Home'},{id:'jobs',icon:Briefcase,label:'Jobs'},{id:'schedule',icon:Calendar,label:'Schedule'},{id:'messages',icon:MessageCircle,label:'Messages'},{id:'profile',icon:User,label:'Profile'}].map(item=>(
             <button key={item.id} onClick={()=>switchScreen(item.id)} className="flex flex-col items-center gap-1">
-              <div className={`p-2 rounded-[18px] shadow-[3px_3px_6px_#bcc3cf,-3px_-3px_6px_#ffffff] transition-all ${currentScreen===item.id?'bg-[#5f7d9c] text-white shadow-[inset_2px_2px_5px_#3e5268]':'bg-[#eef1f6] text-[#5e6f82]'}`}><item.icon className="w-5 h-5" /></div>
+              <div className={`p-2 rounded-[18px] shadow-[3px_3px_6px_#bcc3cf,-3px_-3px_6px_#ffffff] transition-all ${currentScreen===item.id?'bg-[#5f7d9c] text-white shadow-[inset_2px_2px_5px_#3e5268]':'bg-[#eef1f6] text-[#5e6f82]'}`}><item.icon className="w-5 h-5"/></div>
               <span className="text-[10px] font-medium text-[#5e6f82]">{item.label}</span>
             </button>
           ))}
