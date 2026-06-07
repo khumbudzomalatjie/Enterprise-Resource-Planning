@@ -4,7 +4,7 @@ import useAuthStore from '../../../store/authStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { ArrowLeft, Send, User, CheckCheck } from 'lucide-react'
+import { ArrowLeft, Send, User, CheckCheck, ChevronRight, MessageCircle } from 'lucide-react'
 
 export default function MessagesPage() {
   const { user, profile } = useAuthStore()
@@ -17,12 +17,31 @@ export default function MessagesPage() {
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('contacts') // 'contacts' or 'chat'
+  const [view, setView] = useState('contacts')
 
   useEffect(() => {
     loadContacts()
-    subscribeToMessages()
-  }, [])
+    
+    // Subscribe to real-time messages
+    const channel = supabase
+      .channel('messages-realtime')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const newMsg = payload.new
+          // Add message if it's between current user and selected contact
+          if (selectedContact && 
+             ((newMsg.sender_id === user?.id && newMsg.receiver_id === selectedContact.id) ||
+              (newMsg.sender_id === selectedContact.id && newMsg.receiver_id === user?.id))) {
+            setMessages(prev => [...prev, newMsg])
+            scrollToBottom()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [selectedContact])
 
   useEffect(() => {
     if (selectedContact) {
@@ -35,97 +54,89 @@ export default function MessagesPage() {
   }, [messages])
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
   }
 
   const loadContacts = async () => {
-    // Get all employees and their profiles
-    const { data: employees } = await supabase
-      .from('employees')
-      .select('*, profiles:user_id(full_name)')
-      .eq('employment_status', 'active')
-      .order('first_name')
+    setLoading(true)
+    try {
+      // Get all employees
+      const { data: employees } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('employment_status', 'active')
+        .order('first_name')
 
-    // Get all profiles (admins/managers)
-    const { data: allProfiles } = await supabase
-      .from('profiles')
-      .select('*')
-      .neq('id', user?.id)
+      // Get all profiles (admins/managers)
+      const { data: allProfiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('id', user?.id)
 
-    // Combine contacts (deduplicate)
-    const contactMap = new Map()
-    
-    employees?.forEach(emp => {
-      if (emp.user_id !== user?.id) {
-        contactMap.set(emp.user_id, {
-          id: emp.user_id,
-          name: emp.first_name + ' ' + emp.last_name,
-          role: 'Cleaner',
-          email: emp.email
-        })
-      }
-    })
+      // Build contacts list (deduplicate)
+      const contactMap = new Map()
+      
+      employees?.forEach(emp => {
+        if (emp.user_id && emp.user_id !== user?.id) {
+          contactMap.set(emp.user_id, {
+            id: emp.user_id,
+            name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Unknown',
+            role: emp.position || 'Cleaner',
+            email: emp.email,
+            type: 'employee'
+          })
+        }
+      })
 
-    allProfiles?.forEach(prof => {
-      if (!contactMap.has(prof.id)) {
-        contactMap.set(prof.id, {
-          id: prof.id,
-          name: prof.full_name || prof.email?.split('@')[0] || 'User',
-          role: prof.role?.replace('_', ' ') || 'Staff',
-          email: prof.email
-        })
-      }
-    })
+      allProfiles?.forEach(prof => {
+        if (prof.id !== user?.id && !contactMap.has(prof.id)) {
+          contactMap.set(prof.id, {
+            id: prof.id,
+            name: prof.full_name || prof.email?.split('@')[0] || 'User',
+            role: (prof.role || 'staff').replace(/_/g, ' '),
+            email: prof.email,
+            type: 'staff'
+          })
+        }
+      })
 
-    setContacts(Array.from(contactMap.values()))
-    setLoading(false)
+      setContacts(Array.from(contactMap.values()))
+    } catch (error) {
+      console.error('Error loading contacts:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadMessages = async () => {
     if (!selectedContact) return
 
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`)
-      .or(`sender_id.eq.${selectedContact.id},receiver_id.eq.${selectedContact.id}`)
-      .order('created_at', { ascending: true })
-      .limit(50)
+    try {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user?.id},receiver_id.eq.${selectedContact.id}),and(sender_id.eq.${selectedContact.id},receiver_id.eq.${user?.id})`)
+        .order('created_at', { ascending: true })
+        .limit(50)
 
-    // Filter to only show messages between these two users
-    const filtered = data?.filter(msg => 
-      (msg.sender_id === user?.id && msg.receiver_id === selectedContact.id) ||
-      (msg.sender_id === selectedContact.id && msg.receiver_id === user?.id)
-    ) || []
+      setMessages(data || [])
 
-    setMessages(filtered)
-    
-    // Mark as read
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('sender_id', selectedContact.id)
-      .eq('receiver_id', user?.id)
-      .eq('is_read', false)
-  }
+      // Mark messages as read
+      const unreadIds = data
+        ?.filter(msg => msg.sender_id === selectedContact.id && !msg.is_read)
+        .map(msg => msg.id) || []
 
-  const subscribeToMessages = () => {
-    const channel = supabase
-      .channel('messages')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        (payload) => {
-          const newMsg = payload.new
-          if (selectedContact && 
-             ((newMsg.sender_id === user?.id && newMsg.receiver_id === selectedContact.id) ||
-              (newMsg.sender_id === selectedContact.id && newMsg.receiver_id === user?.id))) {
-            setMessages(prev => [...prev, newMsg])
-          }
-        }
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+      if (unreadIds.length > 0) {
+        await supabase
+          .from('messages')
+          .update({ is_read: true })
+          .in('id', unreadIds)
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error)
+    }
   }
 
   const handleSend = async () => {
@@ -142,7 +153,9 @@ export default function MessagesPage() {
 
       if (error) throw error
       setNewMessage('')
+      scrollToBottom()
     } catch (error) {
+      console.error('Send error:', error)
       toast.error('Failed to send message')
     } finally {
       setSending(false)
@@ -150,6 +163,7 @@ export default function MessagesPage() {
   }
 
   const formatTime = (dateStr) => {
+    if (!dateStr) return ''
     const date = new Date(dateStr)
     const today = new Date()
     if (date.toDateString() === today.toDateString()) {
@@ -161,24 +175,30 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-['Inter'] pb-20">
-      {/* Header */}
-      {view === 'contacts' ? (
+      {/* Header - Contacts View */}
+      {view === 'contacts' && (
         <div className="bg-gradient-to-b from-blue-500 to-blue-600 px-4 pt-8 pb-6 text-white">
           <button onClick={() => navigate('/mobile')} className="p-1 rounded-lg hover:bg-white/20 mb-4">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-2xl font-bold">Messages</h1>
-          <p className="text-blue-100 text-sm">{contacts.length} contacts</p>
+          <p className="text-blue-100 text-sm">{contacts.length} contacts available</p>
         </div>
-      ) : (
+      )}
+
+      {/* Header - Chat View */}
+      {view === 'chat' && selectedContact && (
         <div className="bg-gradient-to-b from-blue-500 to-blue-600 px-4 pt-8 pb-4 text-white">
           <div className="flex items-center gap-3 mb-2">
-            <button onClick={() => { setView('contacts'); setSelectedContact(null) }} className="p-1 rounded-lg hover:bg-white/20">
+            <button onClick={() => { setView('contacts'); setSelectedContact(null); setMessages([]) }} className="p-1 rounded-lg hover:bg-white/20">
               <ArrowLeft className="w-5 h-5" />
             </button>
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <User className="w-5 h-5" />
+            </div>
             <div>
               <h1 className="text-lg font-bold">{selectedContact?.name}</h1>
-              <p className="text-blue-100 text-xs">{selectedContact?.role}</p>
+              <p className="text-blue-100 text-xs capitalize">{selectedContact?.role}</p>
             </div>
           </div>
         </div>
@@ -188,10 +208,11 @@ export default function MessagesPage() {
       {view === 'contacts' && (
         <div className="px-4 -mt-4">
           {loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
+              <p className="text-slate-500 text-sm">Loading contacts...</p>
             </div>
-          ) : (
+          ) : contacts.length > 0 ? (
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-slate-100">
               {contacts.map(contact => (
                 <button
@@ -206,17 +227,15 @@ export default function MessagesPage() {
                     <p className="font-semibold text-slate-800">{contact.name}</p>
                     <p className="text-xs text-slate-500 capitalize">{contact.role}</p>
                   </div>
-                  <div className="text-xs text-slate-400">
-                    <ChevronRight className="w-4 h-4" />
-                  </div>
+                  <MessageCircle className="w-5 h-5 text-blue-400" />
                 </button>
               ))}
-              {contacts.length === 0 && (
-                <div className="text-center py-8">
-                  <User className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500 text-sm">No contacts available</p>
-                </div>
-              )}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-2xl shadow-sm">
+              <User className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">No contacts available</p>
+              <p className="text-slate-400 text-sm mt-1">Contacts will appear here when added</p>
             </div>
           )}
         </div>
@@ -224,9 +243,16 @@ export default function MessagesPage() {
 
       {/* Chat View */}
       {view === 'chat' && selectedContact && (
-        <div className="flex flex-col h-[calc(100vh-180px)]">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+          {/* Messages List */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50">
+            {messages.length === 0 && (
+              <div className="text-center py-12">
+                <MessageCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">No messages yet</p>
+                <p className="text-slate-400 text-xs mt-1">Send a message to start the conversation</p>
+              </div>
+            )}
             {messages.map(msg => {
               const isMine = msg.sender_id === user?.id
               return (
@@ -242,7 +268,7 @@ export default function MessagesPage() {
                         {formatTime(msg.created_at)}
                       </span>
                       {isMine && (
-                        <CheckCheck className={`w-3 h-3 ${msg.is_read ? 'text-blue-200' : 'text-blue-300'}`} />
+                        <CheckCheck className={`w-3 h-3 ${msg.is_read ? 'text-white' : 'text-blue-200'}`} />
                       )}
                     </div>
                   </div>
@@ -252,23 +278,33 @@ export default function MessagesPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="px-4 py-3 bg-white border-t border-slate-200">
+          {/* Message Input */}
+          <div className="px-4 py-3 bg-white border-t border-slate-200 safe-area-bottom">
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
                 placeholder="Type a message..."
-                className="flex-1 px-4 py-3 rounded-full bg-slate-100 border border-slate-200 text-sm focus:outline-none focus:border-blue-400"
+                className="flex-1 px-4 py-3 rounded-full bg-slate-100 border border-slate-200 text-sm focus:outline-none focus:border-blue-400 focus:bg-white"
+                autoFocus
               />
               <button
                 onClick={handleSend}
                 disabled={!newMessage.trim() || sending}
-                className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                className="w-11 h-11 rounded-full bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 flex-shrink-0"
               >
-                <Send className="w-5 h-5" />
+                {sending ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
               </button>
             </div>
           </div>
@@ -279,6 +315,3 @@ export default function MessagesPage() {
     </div>
   )
 }
-
-// Missing import
-import { ChevronRight } from 'lucide-react'
