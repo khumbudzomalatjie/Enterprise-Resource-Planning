@@ -17,7 +17,6 @@ export default function ClockInOut() {
   const [employeeId, setEmployeeId] = useState(null)
   const [clockInTime, setClockInTime] = useState(null)
   const [clockOutTime, setClockOutTime] = useState(null)
-  const [todayRecordId, setTodayRecordId] = useState(null)
 
   useEffect(() => {
     setupAndCheck()
@@ -28,10 +27,11 @@ export default function ClockInOut() {
   const setupAndCheck = async () => {
     setLoading(true)
     
-    // Step 1: Find or create employee
+    // Step 1: Find or create employee for current user
     const empId = await findOrCreateEmployee()
     if (!empId) {
       setLoading(false)
+      toast.error('Could not set up employee profile')
       return
     }
     setEmployeeId(empId)
@@ -43,14 +43,19 @@ export default function ClockInOut() {
 
   const findOrCreateEmployee = async () => {
     try {
-      // Try by user_id
+      console.log('🔍 Finding employee for:', user?.email)
+      
+      // Try by user_id first
       let { data: emp } = await supabase
         .from('employees')
         .select('id')
         .eq('user_id', user?.id)
         .single()
 
-      if (emp) return emp.id
+      if (emp) {
+        console.log('✅ Found by user_id:', emp.id)
+        return emp.id
+      }
 
       // Try by email
       const { data: empByEmail } = await supabase
@@ -60,17 +65,18 @@ export default function ClockInOut() {
         .single()
 
       if (empByEmail) {
-        // Link user_id
+        console.log('✅ Found by email:', empByEmail.id)
+        // Link user_id for future lookups
         await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
         return empByEmail.id
       }
 
-      // Create new
-      const { data: newEmp } = await supabase
+      // Create new employee record
+      const { data: newEmp, error: createError } = await supabase
         .from('employees')
         .insert([{
           user_id: user?.id,
-          first_name: profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Cleaner',
+          first_name: profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Employee',
           last_name: profile?.full_name?.split(' ').slice(1).join(' ') || '',
           email: user?.email,
           employment_status: 'active',
@@ -79,9 +85,16 @@ export default function ClockInOut() {
         .select('id')
         .single()
 
-      return newEmp?.id || null
+      if (newEmp) {
+        console.log('✅ Created new employee:', newEmp.id)
+        toast.success('Employee profile created!')
+        return newEmp.id
+      }
+
+      console.error('❌ Failed to create employee:', createError)
+      return null
     } catch (error) {
-      console.error('Employee setup error:', error)
+      console.error('❌ Employee setup error:', error.message)
       return null
     }
   }
@@ -89,6 +102,7 @@ export default function ClockInOut() {
   const checkTodayAttendance = async (empId) => {
     try {
       const today = new Date().toISOString().split('T')[0]
+      console.log('🔍 Checking attendance for:', empId, 'on', today)
       
       const { data, error } = await supabase
         .from('attendance_records')
@@ -99,13 +113,13 @@ export default function ClockInOut() {
         .limit(1)
 
       if (error) {
-        console.error('Check error:', error)
+        console.error('❌ Check error:', error.message)
         return
       }
 
       if (data && data.length > 0) {
         const record = data[0]
-        setTodayRecordId(record.id)
+        console.log('📋 Today record:', record)
         
         if (record.clock_in_time) {
           setClockInTime(record.clock_in_time)
@@ -114,24 +128,30 @@ export default function ClockInOut() {
         if (record.clock_out_time) {
           setClockOutTime(record.clock_out_time)
           setIsClockedIn(false)
+          console.log('✅ Already clocked out')
         } else if (record.clock_in_time && !record.clock_out_time) {
-          // Clocked in but not out = currently working
           setIsClockedIn(true)
+          console.log('✅ Currently clocked in')
         }
       } else {
-        // No record for today
+        console.log('✅ No record for today')
         setIsClockedIn(false)
         setClockInTime(null)
         setClockOutTime(null)
       }
     } catch (error) {
-      console.error('Check error:', error)
+      console.error('❌ Check error:', error.message)
     }
   }
 
   const handleClockIn = async () => {
     if (!employeeId) {
-      toast.error('Profile not found. Contact admin.')
+      toast.error('Employee profile not found. Contact admin.')
+      return
+    }
+
+    if (isClockedIn) {
+      toast.error('Already clocked in!')
       return
     }
 
@@ -150,12 +170,15 @@ export default function ClockInOut() {
           })
           lat = pos.coords.latitude
           lng = pos.coords.longitude
+          console.log('📍 GPS:', lat, lng)
         } catch (e) {
-          console.log('GPS not available')
+          console.log('📍 GPS not available')
         }
       }
 
-      // Insert or update attendance record
+      console.log('🟢 Clocking IN for employee:', employeeId)
+
+      // UPSERT - insert or update
       const { data, error } = await supabase
         .from('attendance_records')
         .upsert({
@@ -173,8 +196,8 @@ export default function ClockInOut() {
         .single()
 
       if (error) {
-        console.error('Clock in error:', error)
-        toast.error('Failed: ' + error.message)
+        console.error('❌ Clock in error:', error.message)
+        toast.error('Failed to clock in: ' + error.message)
         setProcessing(false)
         return
       }
@@ -183,11 +206,10 @@ export default function ClockInOut() {
       setIsClockedIn(true)
       setClockInTime(now)
       setClockOutTime(null)
-      setTodayRecordId(data.id)
       toast.success('Clocked in! 🟢')
       
     } catch (error) {
-      console.error('Exception:', error)
+      console.error('❌ Exception:', error.message)
       toast.error('Failed to clock in')
     } finally {
       setProcessing(false)
@@ -196,7 +218,12 @@ export default function ClockInOut() {
 
   const handleClockOut = async () => {
     if (!employeeId) {
-      toast.error('Profile not found')
+      toast.error('Employee profile not found')
+      return
+    }
+
+    if (!isClockedIn) {
+      toast.error('Not clocked in!')
       return
     }
 
@@ -206,7 +233,9 @@ export default function ClockInOut() {
       const today = new Date().toISOString().split('T')[0]
       const now = new Date().toISOString()
 
-      // Update the record
+      console.log('🔴 Clocking OUT for employee:', employeeId)
+
+      // Update the existing record
       const { data, error } = await supabase
         .from('attendance_records')
         .update({
@@ -221,15 +250,15 @@ export default function ClockInOut() {
         .single()
 
       if (error) {
-        console.error('Clock out error:', error)
-        toast.error('Failed: ' + error.message)
+        console.error('❌ Clock out error:', error.message)
+        toast.error('Failed to clock out: ' + error.message)
         setProcessing(false)
         return
       }
 
       if (!data) {
-        // No active clock-in found
-        toast.error('No active clock-in found')
+        console.error('❌ No active clock-in found')
+        toast.error('No active clock-in found for today')
         setIsClockedIn(false)
         setProcessing(false)
         return
@@ -238,10 +267,10 @@ export default function ClockInOut() {
       console.log('✅ Clocked out:', data)
       setIsClockedIn(false)
       setClockOutTime(now)
-      toast.success('Clocked out! 👋')
+      toast.success('Clocked out! See you tomorrow 👋')
       
     } catch (error) {
-      console.error('Exception:', error)
+      console.error('❌ Exception:', error.message)
       toast.error('Failed to clock out')
     } finally {
       setProcessing(false)
@@ -273,15 +302,15 @@ export default function ClockInOut() {
           <p className="text-5xl font-bold text-slate-800 font-mono">{formatTime(currentTime)}</p>
         </div>
 
-        {/* Loading */}
+        {/* Loading State */}
         {loading && (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-600 mx-auto"></div>
-            <p className="text-slate-500 text-sm mt-2">Loading...</p>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-600 mx-auto mb-3"></div>
+            <p className="text-slate-500 text-sm">Setting up your profile...</p>
           </div>
         )}
 
-        {/* Clock Buttons - Only show when loaded */}
+        {/* Clock Buttons */}
         {!loading && (
           <>
             <div className="grid grid-cols-2 gap-4 mb-6">
@@ -345,6 +374,12 @@ export default function ClockInOut() {
                   Clock Out: <span className="font-mono font-bold">{formatTimeStr(clockOutTime)}</span>
                 </p>
               )}
+            </div>
+
+            {/* User Info */}
+            <div className="text-center text-xs text-slate-400 mb-4">
+              <p>Logged in as: {user?.email}</p>
+              <p>Employee ID: {employeeId ? employeeId.slice(0, 8) + '...' : 'Setting up...'}</p>
             </div>
           </>
         )}
