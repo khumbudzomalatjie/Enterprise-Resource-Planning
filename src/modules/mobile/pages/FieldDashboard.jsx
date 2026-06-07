@@ -12,7 +12,7 @@ import {
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
   Activity, Eye, Navigation, Wifi, Play,
   Search, Filter, X, ChevronDown, Pause,
-  User
+  User, MessageCircle
 } from 'lucide-react'
 
 export default function FieldDashboard() {
@@ -165,7 +165,6 @@ export default function FieldDashboard() {
     { icon: Package, label: 'Supply Requests', value: stats.pendingSupplies || 0, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
   ]
 
-  // Helper function to get severity badge class
   const getSeverityBadge = (severity) => {
     if (severity === 'critical') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
     if (severity === 'high') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
@@ -173,7 +172,6 @@ export default function FieldDashboard() {
     return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
   }
 
-  // Helper function to get status badge class
   const getStatusBadge = (status) => {
     if (status === 'resolved' || status === 'approved') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
     if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
@@ -206,7 +204,7 @@ export default function FieldDashboard() {
               <Users className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Field Operations Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, live jobs, photos, incidents & supplies in real-time</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, live jobs, photos, incidents, supplies & messages in real-time</p>
           </div>
           <button onClick={loadAllData} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
             <Activity className="w-4 h-4" /> Refresh Live
@@ -214,13 +212,14 @@ export default function FieldDashboard() {
         </motion.div>
 
         {/* Quick Nav */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {[
             { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600', count: stats.activeNow },
             { label: 'Live Jobs', icon: Play, path: '/mobile/field/live-jobs', color: 'bg-amber-600', count: stats.liveJobs },
             { label: 'Job Photos', icon: Camera, path: '/mobile/field/photos', color: 'bg-indigo-600', count: stats.photosToday },
             { label: 'Incidents', icon: AlertCircle, path: '/mobile/field/incidents', color: 'bg-red-600', count: stats.openIncidents },
             { label: 'Supplies', icon: Package, path: '/mobile/field/supplies', color: 'bg-orange-600', count: stats.pendingSupplies },
+            { label: 'Messages', icon: MessageCircle, path: '/mobile/field/messages', color: 'bg-blue-600', count: 0 },
           ].map(item => (
             <button key={item.label} onClick={() => navigate(item.path)}
               className={`${item.color} text-white rounded-2xl p-3 flex flex-col items-center gap-1 hover:scale-105 transition-transform text-sm font-medium shadow-lg relative`}>
@@ -318,6 +317,11 @@ export default function FieldDashboard() {
                       </div>
                     )}
                   </div>
+                  {cleaner.employees?.phone && (
+                    <a href={`tel:${cleaner.employees.phone}`} className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline">
+                      <Phone className="w-3 h-3" /> Call
+                    </a>
+                  )}
                 </div>
               ))}
             </div>
