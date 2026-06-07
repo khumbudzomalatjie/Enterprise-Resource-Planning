@@ -112,16 +112,27 @@ export default function EmployeeDetail() {
     setRefreshingTab(null)
   }
 
-  // 1. Time Clock History - Synced with Mobile App
+  // 1. Time Clock History - Synced with Mobile App (FIXED)
   const loadAttendanceRecords = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('employee_id', id)
-      .order('attendance_date', { ascending: false })
-      .limit(50)
-    setAttendanceRecords(data || [])
+    try {
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', id)
+        .order('attendance_date', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error('Attendance query error:', error.message)
+      } else {
+        console.log('📊 Attendance records loaded:', data?.length || 0)
+        setAttendanceRecords(data || [])
+      }
+    } catch (e) {
+      console.error('Attendance load error:', e)
+      setAttendanceRecords([])
+    }
   }
 
   // 2. Payroll History
@@ -144,8 +155,8 @@ export default function EmployeeDetail() {
       .select('*')
       .eq('employee_id', id)
       .eq('is_active', true)
-      .single()
-    setPayrollDetails(data)
+      .maybeSingle()
+    setPayrollDetails(data || null)
   }
 
   // 4. Schedules
@@ -197,46 +208,73 @@ export default function EmployeeDetail() {
     setAttachments(data || [])
   }
 
-  // Stats
+  // Stats - FIXED with error handling for missing tables
   const loadStats = async () => {
     if (!id) return
     try {
       const weekStart = new Date()
       weekStart.setDate(weekStart.getDate() - weekStart.getDay())
+      const weekStartStr = weekStart.toISOString().split('T')[0]
       
-      const { data: weekAttendance } = await supabase
-        .from('attendance_records')
-        .select('total_hours')
-        .eq('employee_id', id)
-        .gte('attendance_date', weekStart.toISOString().split('T')[0])
-        .not('total_hours', 'is', null)
+      // Get this week's hours
+      let totalHours = 0
+      try {
+        const { data: weekAttendance } = await supabase
+          .from('attendance_records')
+          .select('total_hours')
+          .eq('employee_id', id)
+          .gte('attendance_date', weekStartStr)
+          .not('total_hours', 'is', null)
+        totalHours = weekAttendance?.reduce((s, a) => s + (a.total_hours || 0), 0) || 0
+      } catch (e) {
+        console.log('Week attendance query issue:', e.message)
+      }
 
-      const totalHours = weekAttendance?.reduce((s, a) => s + (a.total_hours || 0), 0) || 0
+      // Get leave balance - handle if table doesn't exist
+      let leaveBal = 0
+      try {
+        const { data: leaveData, error: leaveError } = await supabase
+          .from('leave_balances')
+          .select('remaining_days')
+          .eq('employee_id', id)
+          .maybeSingle()
+        
+        if (!leaveError && leaveData) {
+          leaveBal = leaveData.remaining_days || 0
+        }
+      } catch (e) {
+        console.log('Leave balance query (table may not exist):', e.message)
+      }
 
-      const { data: leaveBal } = await supabase
-        .from('leave_balances')
-        .select('remaining_days')
-        .eq('employee_id', id)
-        .single()
+      // Get active jobs
+      let activeJobsCount = 0
+      try {
+        const { count } = await supabase
+          .from('job_assignments')
+          .select('*', { count: 'exact', head: true })
+          .eq('employee_id', id)
+          .eq('status', 'assigned')
+        activeJobsCount = count || 0
+      } catch (e) {
+        console.log('Job assignments query issue:', e.message)
+      }
 
-      const { data: activeJobs } = await supabase
-        .from('job_assignments')
-        .select('*')
-        .eq('employee_id', id)
-        .eq('status', 'assigned')
+      const presentCount = attendanceRecords?.filter(a => a.status === 'present').length || 0
+      const totalRecords = attendanceRecords?.length || 0
+      const attendanceRate = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0
 
       setStats({
         totalHoursThisWeek: totalHours,
         totalHoursThisMonth: totalHours * 4,
         overtimeHours: Math.max(0, totalHours - 40),
-        leaveBalance: leaveBal?.remaining_days || 0,
+        leaveBalance: leaveBal,
         upcomingLeave: leaveRecords.filter(l => l.status === 'approved' && l.start_date > new Date().toISOString().split('T')[0]).length,
-        completedJobs: attendanceRecords?.filter(a => a.status === 'present').length || 0,
-        activeJobs: activeJobs?.length || 0,
-        attendanceRate: attendanceRecords?.length > 0 ? Math.round((attendanceRecords.filter(a => a.status === 'present').length / attendanceRecords.length) * 100) : 0,
+        completedJobs: presentCount,
+        activeJobs: activeJobsCount,
+        attendanceRate: attendanceRate,
       })
     } catch (e) {
-      console.error('Stats error:', e)
+      console.error('Stats error:', e.message)
     }
   }
 
