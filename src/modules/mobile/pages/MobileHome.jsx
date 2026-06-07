@@ -14,7 +14,7 @@ import {
   Hand, Home, MessageCircle, Umbrella,
   BarChart3, Map, Phone, Send, Star,
   Download, FileText, DollarSign,
-  Sun, Moon, Sparkles
+  Sun, Moon, Sparkles, LogIn, LogOutIcon
 } from 'lucide-react'
 
 export default function MobileHome() {
@@ -39,6 +39,11 @@ export default function MobileHome() {
   const [themeVariant, setThemeVariant] = useState('light')
   const [currentScreen, setCurrentScreen] = useState('dashboard')
   const [screenHistory, setScreenHistory] = useState(['dashboard'])
+
+  // Clock In/Out State
+  const [isClockedIn, setIsClockedIn] = useState(false)
+  const [clockInTime, setClockInTime] = useState(null)
+  const [clockingInOut, setClockingInOut] = useState(false)
 
   // Schedule data
   const [schedules, setSchedules] = useState([])
@@ -72,7 +77,10 @@ export default function MobileHome() {
   }, [])
 
   useEffect(() => {
-    if (myEmployeeId) loadAllJobs()
+    if (myEmployeeId) {
+      loadAllJobs()
+      checkClockStatus()
+    }
   }, [myEmployeeId])
 
   useEffect(() => {
@@ -103,6 +111,31 @@ export default function MobileHome() {
       }]).select('id').single()
       if (newEmp) setMyEmployeeId(newEmp.id)
     } catch (e) { console.error('Setup error:', e) }
+  }
+
+  // Check if user is currently clocked in
+  const checkClockStatus = async () => {
+    if (!myEmployeeId) return
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { data } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', myEmployeeId)
+        .eq('attendance_date', today)
+        .single()
+
+      if (data && data.clock_in_time && !data.clock_out_time) {
+        setIsClockedIn(true)
+        setClockInTime(data.clock_in_time)
+      } else {
+        setIsClockedIn(false)
+        setClockInTime(null)
+      }
+    } catch (e) {
+      // No record yet - not clocked in
+      setIsClockedIn(false)
+    }
   }
 
   const loadAllJobs = async () => {
@@ -155,7 +188,7 @@ export default function MobileHome() {
     } catch (e) { console.error(e) }
   }
 
-  const handleRefresh = async () => { setRefreshing(true); await initData(); await loadAllJobs(); setTimeout(() => setRefreshing(false), 500) }
+  const handleRefresh = async () => { setRefreshing(true); await initData(); await loadAllJobs(); await checkClockStatus(); setTimeout(() => setRefreshing(false), 500) }
 
   const switchScreen = (screenId) => {
     setCurrentScreen(screenId)
@@ -163,6 +196,7 @@ export default function MobileHome() {
     if (screenId === 'schedule') loadSchedules()
     if (screenId === 'leave') loadLeaveRequests()
     if (screenId === 'performance') loadPerformance()
+    if (screenId === 'gps') checkClockStatus()
   }
 
   const goBack = () => {
@@ -197,20 +231,62 @@ export default function MobileHome() {
     try { await supabase.from('jobs').update({ status: 'completed', actual_end_time: new Date().toISOString() }).eq('id', jobId); toast.success('Completed! ✅'); loadAllJobs() } catch { toast.error('Failed') } finally { setUpdatingJob(null) }
   }
 
-  // CLOCK IN
-  const handleClockIn = () => {
+  // CLOCK IN / OUT - Toggle functionality
+  const handleClockToggle = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(async (position) => {
+        setClockingInOut(true)
         try {
-          await supabase.from('attendance_records').upsert([{
-            employee_id: myEmployeeId, attendance_date: new Date().toISOString().split('T')[0],
-            clock_in_time: new Date().toISOString(), check_in_method: 'gps',
-            check_in_latitude: position.coords.latitude, check_in_longitude: position.coords.longitude, status: 'present'
-          }], { onConflict: 'employee_id,attendance_date' })
-          toast.success(`✅ Clocked in at ${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`)
-        } catch { toast.error('Clock in failed') }
-      }, () => toast.error('Location access needed for clock in'))
-    } else { toast.error('Geolocation not available') }
+          const today = new Date().toISOString().split('T')[0]
+          const now = new Date().toISOString()
+
+          if (isClockedIn) {
+            // CLOCK OUT
+            const { error } = await supabase
+              .from('attendance_records')
+              .update({ 
+                clock_out_time: now,
+                check_out_method: 'gps',
+                check_out_latitude: position.coords.latitude,
+                check_out_longitude: position.coords.longitude,
+                updated_at: now
+              })
+              .eq('employee_id', myEmployeeId)
+              .eq('attendance_date', today)
+              .is('clock_out_time', null)
+
+            if (error) throw error
+            setIsClockedIn(false)
+            toast.success('✅ Clocked out! Have a great day! 👋')
+          } else {
+            // CLOCK IN
+            const { error } = await supabase
+              .from('attendance_records')
+              .upsert([{
+                employee_id: myEmployeeId,
+                attendance_date: today,
+                clock_in_time: now,
+                check_in_method: 'gps',
+                check_in_latitude: position.coords.latitude,
+                check_in_longitude: position.coords.longitude,
+                status: 'present'
+              }], { onConflict: 'employee_id,attendance_date' })
+
+            if (error) throw error
+            setIsClockedIn(true)
+            setClockInTime(now)
+            toast.success(`✅ Clocked in! 📍 Location recorded`)
+          }
+        } catch (error) {
+          console.error('Clock error:', error)
+          toast.error('Failed to record attendance')
+        } finally {
+          setClockingInOut(false)
+        }
+      }, () => toast.error('Location access needed'))
+    } else {
+      toast.error('Geolocation not available')
+    }
   }
 
   // INCIDENT
@@ -284,9 +360,38 @@ export default function MobileHome() {
         <p className="text-4xl font-bold text-center my-2 font-mono text-[#2e3b4e]">{formatTime(currentTime)}</p>
       </div>
 
+      {/* Clock In/Out - Toggle Button */}
       <div className={`${cardClasses} flex items-center justify-between`}>
-        <span className="flex items-center gap-2 text-[#2e3b4e]"><Clock className="w-4 h-4" /> Shift Status</span>
-        <button onClick={handleClockIn} className={btnPrimaryClasses + " text-sm"}><Map className="w-4 h-4 inline mr-1" /> Clock In</button>
+        <div>
+          <span className="flex items-center gap-2 text-[#2e3b4e] font-semibold">
+            {isClockedIn ? (
+              <><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Clocked In</>
+            ) : (
+              <><span className="w-2 h-2 rounded-full bg-slate-400"></span> Not Clocked In</>
+            )}
+          </span>
+          {clockInTime && (
+            <p className="text-xs text-[#5e6f82] mt-1">Since: {new Date(clockInTime).toLocaleTimeString()}</p>
+          )}
+        </div>
+        <button 
+          onClick={handleClockToggle} 
+          disabled={clockingInOut}
+          className={`rounded-[40px] py-3 px-6 font-semibold shadow-[6px_6px_14px_#bcc3cf,-4px_-4px_12px_#ffffff] active:scale-[0.97] transition-all text-sm ${
+            isClockedIn 
+              ? 'bg-gradient-to-br from-red-400 to-red-600 text-white' 
+              : 'bg-gradient-to-br from-[#4b9b6b] to-[#3d8b5f] text-white'
+          }`}
+        >
+          {clockingInOut ? (
+            <RefreshCw className="w-4 h-4 animate-spin inline mr-1" />
+          ) : isClockedIn ? (
+            <LogOutIcon className="w-4 h-4 inline mr-1" />
+          ) : (
+            <LogIn className="w-4 h-4 inline mr-1" />
+          )}
+          {isClockedIn ? 'Clock Out' : 'Clock In'}
+        </button>
       </div>
 
       <div className={cardClasses}>
@@ -381,15 +486,38 @@ export default function MobileHome() {
     <div className="space-y-4">
       <button onClick={goBack} className={`${btnClasses} text-sm inline-flex items-center gap-2`}>← Back</button>
       <div className={cardClasses + " text-center"}>
-        <Map className="w-16 h-16 mx-auto text-[#4b9b6b] mb-4" />
-        <h3 className="font-bold text-[#2e3b4e] text-lg mb-2">GPS Clock In</h3>
-        <p className="text-[#5e6f82] text-sm mb-4">Tap to record your location and clock in</p>
-        <button onClick={handleClockIn} className={btnPrimaryClasses + " w-full"}>
-          <Map className="w-5 h-5 inline mr-2" /> Clock In with GPS
+        <div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center shadow-[inset_4px_4px_8px_#bcc3cf,inset_-4px_-4px_8px_#ffffff] ${isClockedIn ? 'bg-green-100' : 'bg-[#e9edf2]'}`}>
+          {isClockedIn ? <LogOutIcon className="w-10 h-10 text-red-500" /> : <Map className="w-10 h-10 text-[#4b9b6b]" />}
+        </div>
+        <h3 className="font-bold text-[#2e3b4e] text-lg mb-2">{isClockedIn ? 'Clock Out' : 'Clock In'}</h3>
+        <p className="text-[#5e6f82] text-sm mb-4">
+          {isClockedIn ? 'Tap to clock out and end your shift' : 'Tap to record your GPS location and start your shift'}
+        </p>
+        <button 
+          onClick={handleClockToggle} 
+          disabled={clockingInOut}
+          className={`rounded-[40px] py-4 w-full font-bold text-lg shadow-[6px_6px_14px_#bcc3cf,-4px_-4px_12px_#ffffff] active:scale-[0.97] transition-all ${
+            isClockedIn ? 'bg-gradient-to-br from-red-400 to-red-600 text-white' : 'bg-gradient-to-br from-[#4b9b6b] to-[#3d8b5f] text-white'
+          }`}
+        >
+          {clockingInOut ? (
+            <RefreshCw className="w-5 h-5 animate-spin inline mr-2" />
+          ) : isClockedIn ? (
+            <LogOutIcon className="w-5 h-5 inline mr-2" />
+          ) : (
+            <Map className="w-5 h-5 inline mr-2" />
+          )}
+          {isClockedIn ? 'Clock Out' : 'Clock In with GPS'}
         </button>
         <div className={cardInsetClasses + " mt-4 text-left"}>
-          <p className="text-xs text-[#5e6f82]"><strong>Status:</strong> {stats.isClockedIn ? '🟢 Clocked In' : '⚪ Not Clocked In'}</p>
-          {stats.clockInTime && <p className="text-xs text-[#5e6f82] mt-1">Clocked in at: {new Date(stats.clockInTime).toLocaleTimeString()}</p>}
+          <p className="text-sm text-[#2e3b4e]">
+            <strong>Status:</strong> {isClockedIn ? '🟢 Currently Clocked In' : '⚪ Not Clocked In'}
+          </p>
+          {clockInTime && (
+            <p className="text-xs text-[#5e6f82] mt-1">
+              Clocked in at: {new Date(clockInTime).toLocaleTimeString()}
+            </p>
+          )}
         </div>
       </div>
     </div>
