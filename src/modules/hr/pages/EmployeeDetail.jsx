@@ -11,7 +11,7 @@ import {
   Mail, Phone, MapPin, Calendar, Briefcase, Shield, Users,
   Clock, CreditCard, FileText, Eye, Download, Trash2,
   CheckCircle2, XCircle, AlertCircle, BarChart3,
-  Building2, BookOpen, Star
+  Building2, BookOpen, Star, RefreshCw
 } from 'lucide-react'
 
 export default function EmployeeDetail() {
@@ -36,6 +36,7 @@ export default function EmployeeDetail() {
   const [events, setEvents] = useState([])
   const [attachments, setAttachments] = useState([])
   const [tabLoading, setTabLoading] = useState(false)
+  const [refreshingTab, setRefreshingTab] = useState(null)
 
   // Dashboard stats
   const [stats, setStats] = useState({
@@ -51,6 +52,17 @@ export default function EmployeeDetail() {
     nextSchedule: null
   })
 
+  // Allowed fields for employee table
+  const allowedFields = [
+    'first_name', 'last_name', 'email', 'phone', 'alternative_phone',
+    'address_line1', 'address_line2', 'city', 'state', 'postal_code',
+    'department', 'position', 'employment_type', 'employment_status',
+    'date_of_hire', 'date_of_birth', 'gender', 'marital_status',
+    'id_number', 'tax_number', 'bank_name', 'bank_account_number',
+    'bank_branch_code', 'emergency_contact_name', 'emergency_contact_phone',
+    'emergency_contact_relation', 'notes', 'profile_photo_url'
+  ]
+
   useEffect(() => {
     if (id && id !== 'new') {
       fetchEmployee(id)
@@ -60,15 +72,13 @@ export default function EmployeeDetail() {
 
   useEffect(() => {
     if (selectedEmployee) {
-      // Destructure to remove joined/related data before setting editData
-      const { 
-        contracts, 
-        leave_requests, 
-        training_records, 
-        disciplinary_records,
-        ...employeeOnly 
-      } = selectedEmployee
-      setEditData({ ...employeeOnly })
+      const cleanEmployee = {}
+      allowedFields.forEach(field => {
+        if (selectedEmployee[field] !== undefined) {
+          cleanEmployee[field] = selectedEmployee[field]
+        }
+      })
+      setEditData(cleanEmployee)
     }
   }, [selectedEmployee])
 
@@ -87,7 +97,22 @@ export default function EmployeeDetail() {
     setTabLoading(false)
   }
 
-  // 1. Time Clock History
+  // Refresh specific tab
+  const refreshTab = async (tabName) => {
+    setRefreshingTab(tabName)
+    switch(tabName) {
+      case 'attendance': await loadAttendanceRecords(); break
+      case 'payroll': await loadPayrollHistory(); break
+      case 'details': await loadPayrollDetails(); break
+      case 'schedule': await loadSchedules(); break
+      case 'leave': await loadLeaveRecords(); break
+      case 'events': await loadEvents(); break
+    }
+    await loadStats()
+    setRefreshingTab(null)
+  }
+
+  // 1. Time Clock History - Synced with Mobile App
   const loadAttendanceRecords = async () => {
     if (!id) return
     const { data } = await supabase
@@ -209,31 +234,18 @@ export default function EmployeeDetail() {
         completedJobs: attendanceRecords?.filter(a => a.status === 'present').length || 0,
         activeJobs: activeJobs?.length || 0,
         attendanceRate: attendanceRecords?.length > 0 ? Math.round((attendanceRecords.filter(a => a.status === 'present').length / attendanceRecords.length) * 100) : 0,
-        lastPayroll: payrollHistory?.[0] || null,
-        nextSchedule: schedules?.[0] || null
       })
     } catch (e) {
       console.error('Stats error:', e)
     }
   }
 
-  // Save Employee - FIXED: Filter out joined data
+  // Save Employee
   const handleSave = async () => {
     if (!editData.first_name || !editData.last_name || !editData.email) {
       toast.error('Name and email are required')
       return
     }
-
-    // Filter out any joined/related fields before sending to API
-    const allowedFields = [
-      'first_name', 'last_name', 'email', 'phone', 'alternative_phone',
-      'address_line1', 'address_line2', 'city', 'state', 'postal_code',
-      'department', 'position', 'employment_type', 'employment_status',
-      'date_of_hire', 'date_of_birth', 'gender', 'marital_status',
-      'id_number', 'tax_number', 'bank_name', 'bank_account_number',
-      'bank_branch_code', 'emergency_contact_name', 'emergency_contact_phone',
-      'emergency_contact_relation', 'notes', 'profile_photo_url'
-    ]
 
     const safeEditData = {}
     allowedFields.forEach(field => {
@@ -242,8 +254,6 @@ export default function EmployeeDetail() {
       }
     })
 
-    console.log('Saving employee with safe data:', safeEditData)
-
     const result = await updateEmployee(id, safeEditData)
     if (result.success) {
       toast.success('Employee updated!')
@@ -251,6 +261,19 @@ export default function EmployeeDetail() {
       fetchEmployee(id)
     } else {
       toast.error(result.error || 'Failed to update')
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    if (selectedEmployee) {
+      const cleanEmployee = {}
+      allowedFields.forEach(field => {
+        if (selectedEmployee[field] !== undefined) {
+          cleanEmployee[field] = selectedEmployee[field]
+        }
+      })
+      setEditData(cleanEmployee)
     }
   }
 
@@ -320,9 +343,10 @@ export default function EmployeeDetail() {
     { id: 'events', label: 'Events', icon: '📢' },
   ]
 
+  // Loading state
   if (loading || !selectedEmployee) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-[#d8d8d8] dark:bg-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2c5f9b]"></div>
       </div>
     )
@@ -366,7 +390,7 @@ export default function EmployeeDetail() {
           {isEditing ? (
             <>
               <button onClick={handleSave} className="neo-btn h-8 px-4 rounded-md bg-gradient-to-b from-[#4f8fd0] to-[#2d5f98] text-white font-bold text-sm">💾 Save</button>
-              <button onClick={() => { setIsEditing(false); setEditData({...employee}) }} className="neo-btn h-8 px-4 rounded-md bg-gradient-to-b from-gray-400 to-gray-600 text-white font-bold text-sm">Cancel</button>
+              <button onClick={handleCancelEdit} className="neo-btn h-8 px-4 rounded-md bg-gradient-to-b from-gray-400 to-gray-600 text-white font-bold text-sm">Cancel</button>
             </>
           ) : (
             <>
@@ -459,7 +483,6 @@ export default function EmployeeDetail() {
                   </div>
                 </div>
               </div>
-              {/* Photo Panel */}
               <div className="border border-[#2f77bb] bg-[#dce8f5] dark:bg-slate-700 flex flex-col items-center justify-center p-2.5">
                 <div className="w-[150px] h-[170px] border-[3px] border-[#3569a3] bg-[#edf3f9] dark:bg-slate-600 flex items-center justify-center overflow-hidden">
                   {employee.profile_photo_url ? <img src={employee.profile_photo_url} alt="" className="w-full h-full object-cover" />
@@ -471,12 +494,18 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* TIME CLOCK HISTORY TAB */}
+          {/* TIME CLOCK HISTORY TAB - Synced with Mobile App */}
           {activeTab === 'attendance' && (
             <div>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">⏰ Time Clock History</h3>
-                <span className="text-xs text-slate-500">{attendanceRecords.length} records</span>
+                <h3 className="font-bold text-slate-700 dark:text-slate-300">⏰ Time Clock History (Synced with Mobile App)</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{attendanceRecords.length} records</span>
+                  <button onClick={() => refreshTab('attendance')} disabled={refreshingTab === 'attendance'}
+                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
+                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'attendance' ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
@@ -488,7 +517,7 @@ export default function EmployeeDetail() {
                       <th className="p-2 text-left border border-[#1a5fa0]">Hours</th>
                       <th className="p-2 text-left border border-[#1a5fa0]">Method</th>
                       <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Location</th>
+                      <th className="p-2 text-left border border-[#1a5fa0]">GPS Location</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,13 +534,24 @@ export default function EmployeeDetail() {
                           </span>
                         </td>
                         <td className="p-2 border border-[#b8ccdc] text-xs">
-                          {record.check_in_latitude ? `${record.check_in_latitude.toFixed(4)}, ${record.check_in_longitude.toFixed(4)}` : '-'}
+                          {record.check_in_latitude ? (
+                            <a href={`https://www.google.com/maps?q=${record.check_in_latitude},${record.check_in_longitude}`} target="_blank" rel="noopener noreferrer" 
+                              className="text-blue-600 hover:underline">
+                              {record.check_in_latitude.toFixed(4)}, {record.check_in_longitude.toFixed(4)}
+                            </a>
+                          ) : '-'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {attendanceRecords.length === 0 && <p className="text-center text-slate-400 py-8">No attendance records found</p>}
+                {attendanceRecords.length === 0 && (
+                  <div className="text-center py-8">
+                    <Clock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                    <p className="text-slate-500">No attendance records found</p>
+                    <p className="text-slate-400 text-xs mt-1">Records will appear when employee clocks in/out from the mobile app</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -521,7 +561,13 @@ export default function EmployeeDetail() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">💰 Payroll History</h3>
-                <span className="text-xs text-slate-500">{payrollHistory.length} payslips</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{payrollHistory.length} payslips</span>
+                  <button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'}
+                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'payroll' ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
@@ -560,7 +606,13 @@ export default function EmployeeDetail() {
           {/* PAYROLL DETAILS TAB */}
           {activeTab === 'details' && (
             <div>
-              <h3 className="font-bold text-slate-700 dark:text-slate-300 mb-3">💳 Payroll Details</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-slate-700 dark:text-slate-300">💳 Payroll Details</h3>
+                <button onClick={() => refreshTab('details')} disabled={refreshingTab === 'details'}
+                  className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                  <RefreshCw className={`w-4 h-4 ${refreshingTab === 'details' ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               {payrollDetails ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
@@ -597,37 +649,44 @@ export default function EmployeeDetail() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">📅 Upcoming Schedule</h3>
-                <span className="text-xs text-slate-500">{schedules.length} shifts</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{schedules.length} shifts</span>
+                  <button onClick={() => refreshTab('schedule')} disabled={refreshingTab === 'schedule'}
+                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'schedule' ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-[#2e75b6] text-white">
-                      <th className="p-2 text-left border border-[#1a5fa0]">Date</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Shift</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Time</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Job/Client</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Location</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {schedules.map(shift => (
-                      <tr key={shift.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                        <td className="p-2 border border-[#b8ccdc]">{formatDate(shift.shift_date)}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.name || 'Standard'}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.start_time?.slice(0,5)} - {shift.shift_types?.end_time?.slice(0,5)}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{shift.jobs?.title || shift.jobs?.clients?.company_name || 'N/A'}</td>
-                        <td className="p-2 border border-[#b8ccdc] text-xs">{shift.jobs?.site_address?.slice(0, 30) || 'N/A'}</td>
-                        <td className="p-2 border border-[#b8ccdc]">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${shift.status === 'checked_in' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{shift.status}</span>
-                        </td>
+              {schedules.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#2e75b6] text-white">
+                        <th className="p-2 text-left border border-[#1a5fa0]">Date</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Shift</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Time</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Job/Client</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Location</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {schedules.length === 0 && <p className="text-center text-slate-400 py-8">No upcoming schedules</p>}
-              </div>
+                    </thead>
+                    <tbody>
+                      {schedules.map(shift => (
+                        <tr key={shift.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
+                          <td className="p-2 border border-[#b8ccdc]">{formatDate(shift.shift_date)}</td>
+                          <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.name || 'Standard'}</td>
+                          <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.start_time?.slice(0,5)} - {shift.shift_types?.end_time?.slice(0,5)}</td>
+                          <td className="p-2 border border-[#b8ccdc]">{shift.jobs?.title || shift.jobs?.clients?.company_name || 'N/A'}</td>
+                          <td className="p-2 border border-[#b8ccdc] text-xs">{shift.jobs?.site_address?.slice(0, 30) || 'N/A'}</td>
+                          <td className="p-2 border border-[#b8ccdc]">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${shift.status === 'checked_in' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{shift.status}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="text-center text-slate-400 py-8">No upcoming schedules</p>}
             </div>
           )}
 
@@ -636,37 +695,44 @@ export default function EmployeeDetail() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records</h3>
-                <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days</span>
+                  <button onClick={() => refreshTab('leave')} disabled={refreshingTab === 'leave'}
+                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'leave' ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-[#2e75b6] text-white">
-                      <th className="p-2 text-left border border-[#1a5fa0]">Type</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Start</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">End</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Days</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaveRecords.map(leave => (
-                      <tr key={leave.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                        <td className="p-2 border border-[#b8ccdc]">{leave.leave_types?.name || 'N/A'}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.start_date)}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.end_date)}</td>
-                        <td className="p-2 border border-[#b8ccdc] font-bold">{leave.total_days}</td>
-                        <td className="p-2 border border-[#b8ccdc]">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{leave.status}</span>
-                        </td>
-                        <td className="p-2 border border-[#b8ccdc] text-xs">{leave.reason?.slice(0, 40) || '-'}</td>
+              {leaveRecords.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#2e75b6] text-white">
+                        <th className="p-2 text-left border border-[#1a5fa0]">Type</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Start</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">End</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Days</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
+                        <th className="p-2 text-left border border-[#1a5fa0]">Reason</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {leaveRecords.length === 0 && <p className="text-center text-slate-400 py-8">No leave records</p>}
-              </div>
+                    </thead>
+                    <tbody>
+                      {leaveRecords.map(leave => (
+                        <tr key={leave.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
+                          <td className="p-2 border border-[#b8ccdc]">{leave.leave_types?.name || 'N/A'}</td>
+                          <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.start_date)}</td>
+                          <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.end_date)}</td>
+                          <td className="p-2 border border-[#b8ccdc] font-bold">{leave.total_days}</td>
+                          <td className="p-2 border border-[#b8ccdc]">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{leave.status}</span>
+                          </td>
+                          <td className="p-2 border border-[#b8ccdc] text-xs">{leave.reason?.slice(0, 40) || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="text-center text-slate-400 py-8">No leave records</p>}
             </div>
           )}
 
@@ -675,35 +741,42 @@ export default function EmployeeDetail() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">📢 Upcoming Events / Jobs</h3>
-                <span className="text-xs text-slate-500">{events.length} events</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{events.length} events</span>
+                  <button onClick={() => refreshTab('events')} disabled={refreshingTab === 'events'}
+                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'events' ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-[#2e75b6] text-white">
-                      <th className="p-2 text-left border border-[#1a5fa0]">Event</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Date</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Time</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Location</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {events.map(event => (
-                      <tr key={event.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                        <td className="p-2 border border-[#b8ccdc] font-medium">{event.title}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{formatDate(event.scheduled_date)}</td>
-                        <td className="p-2 border border-[#b8ccdc]">{event.scheduled_start_time?.slice(0,5)} - {event.scheduled_end_time?.slice(0,5)}</td>
-                        <td className="p-2 border border-[#b8ccdc] text-xs">{event.site_address?.slice(0, 30) || 'N/A'}</td>
-                        <td className="p-2 border border-[#b8ccdc]">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${event.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{event.status}</span>
-                        </td>
+              {events.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-[#2e75b6] text-white">
+                        <th className="p-2 text-left border">Event</th>
+                        <th className="p-2 text-left border">Date</th>
+                        <th className="p-2 text-left border">Time</th>
+                        <th className="p-2 text-left border">Location</th>
+                        <th className="p-2 text-left border">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {events.length === 0 && <p className="text-center text-slate-400 py-8">No upcoming events</p>}
-              </div>
+                    </thead>
+                    <tbody>
+                      {events.map(event => (
+                        <tr key={event.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
+                          <td className="p-2 border font-medium">{event.title}</td>
+                          <td className="p-2 border">{formatDate(event.scheduled_date)}</td>
+                          <td className="p-2 border">{event.scheduled_start_time?.slice(0,5)} - {event.scheduled_end_time?.slice(0,5)}</td>
+                          <td className="p-2 border text-xs">{event.site_address?.slice(0, 30) || 'N/A'}</td>
+                          <td className="p-2 border">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${event.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{event.status}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="text-center text-slate-400 py-8">No upcoming events</p>}
             </div>
           )}
         </div>
