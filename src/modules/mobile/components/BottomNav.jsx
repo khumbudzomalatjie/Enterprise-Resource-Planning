@@ -1,44 +1,43 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Home, Briefcase, Clock, Camera, User } from 'lucide-react'
+import { Home, Briefcase, Calendar, MessageCircle, User } from 'lucide-react'
 
-export default function BottomNav({ active }) {
+export default function BottomNav({ active, onNavigate }) {
   const navigate = useNavigate()
   const location = useLocation()
 
   const navItems = [
-    { id: 'home', icon: Home, label: 'Home', path: '/mobile' },
+    { id: 'dashboard', icon: Home, label: 'Home', path: '/mobile' },
     { id: 'jobs', icon: Briefcase, label: 'Jobs', path: '/mobile/jobs' },
-    { id: 'clock', icon: Clock, label: 'Clock', path: '/mobile/clock' },
-    { id: 'photos', icon: Camera, label: 'Photos', path: '/mobile/photos' },
+    { id: 'schedule', icon: Calendar, label: 'Schedule', path: '/mobile/schedule' },
+    { id: 'messages', icon: MessageCircle, label: 'Messages', path: '/mobile/messages' },
     { id: 'profile', icon: User, label: 'Profile', path: '/mobile/profile' },
   ]
 
   const currentPath = location.pathname
   const getActiveTab = () => {
     if (active) return active
-    if (currentPath === '/mobile' || currentPath === '/mobile/') return 'home'
+    if (currentPath === '/mobile' || currentPath === '/mobile/') return 'dashboard'
     if (currentPath.includes('/mobile/jobs')) return 'jobs'
-    if (currentPath.includes('/mobile/clock')) return 'clock'
-    if (currentPath.includes('/mobile/photos')) return 'photos'
+    if (currentPath.includes('/mobile/schedule')) return 'schedule'
+    if (currentPath.includes('/mobile/messages')) return 'messages'
     if (currentPath.includes('/mobile/profile')) return 'profile'
-    return 'home'
+    return 'dashboard'
   }
 
   const currentActive = getActiveTab()
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
+    <div className="fixed bottom-0 left-0 right-0 bg-[#e9edf2] px-3 pb-3 pt-2 rounded-t-[36px] shadow-[0_-8px_18px_rgba(0,0,0,0.05),0_-4px_8px_#bcc3cf] z-50">
+      <div className="flex justify-around items-center max-w-lg mx-auto">
         {navItems.map(item => (
-          <button
-            key={item.id}
-            onClick={() => navigate(item.path)}
-            className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[60px] ${
-              currentActive === item.id ? 'text-emerald-600 scale-110' : 'text-slate-400 hover:text-slate-600 active:scale-95'
-            }`}
-          >
-            <item.icon className={`w-6 h-6 ${currentActive === item.id ? 'fill-emerald-100' : ''}`} />
-            <span className="text-[10px] font-medium">{item.label}</span>
+          <button key={item.id} onClick={() => onNavigate ? onNavigate(item.id) : navigate(item.path)}
+            className="flex flex-col items-center gap-1">
+            <div className={`p-2 rounded-[18px] shadow-[3px_3px_6px_#bcc3cf,-3px_-3px_6px_#ffffff] transition-all ${
+              currentActive === item.id ? 'bg-[#5f7d9c] text-white shadow-[inset_2px_2px_5px_#3e5268,inset_-2px_-2px_5px_#7a94ae]' : 'bg-[#eef1f6] text-[#5e6f82]'
+            }`}>
+              <item.icon className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] font-medium text-[#5e6f82]">{item.label}</span>
           </button>
         ))}
       </div>
