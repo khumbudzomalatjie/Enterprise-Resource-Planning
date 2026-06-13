@@ -12,7 +12,7 @@ import {
   Save, Send, Briefcase
 } from 'lucide-react'
 
-// Pre-defined services with prices (moved inside component to avoid global scope issues)
+// Pre-defined services with prices
 const SERVICES = [
   { category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
   { category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
@@ -47,7 +47,9 @@ const COLORS = {
   totalBg: '#eaf1f8',
 }
 
-// A4 Quotation Template - Single Page with Logo
+// ═══════════════════════════════════════════════
+// A4 Quotation Template – COMPACT SINGLE PAGE
+// ═══════════════════════════════════════════════
 function QuotationTemplate({ quotation, items }) {
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
@@ -64,32 +66,34 @@ function QuotationTemplate({ quotation, items }) {
   return (
     <div style={{
       width: '210mm',
-      height: '297mm',
-      padding: '12mm 18mm',
+      height: '297mm',               // fixed A4
+      padding: '10mm 15mm',          // reduced top/bottom padding
       backgroundColor: 'white',
       fontFamily: 'Inter, Arial, sans-serif',
       color: '#1e293b',
       boxSizing: 'border-box',
-      overflow: 'hidden',
-      position: 'relative'
+      overflow: 'hidden',            // clip anything exceeding
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      {/* Header with Logo */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
+      {/* Header with Logo – compact */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6mm', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '4mm' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6mm' }}>
+          <div style={{ width: '14mm', height: '14mm', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
             <img src="/logo.png" alt="Logo" style={{ width: '80%', height: '80%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:16px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
+              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:12px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '15px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '7px', color: '#64748b', margin: '1px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678</p>
+            <h1 style={{ fontSize: '14px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
+            <p style={{ fontSize: '6px', color: '#64748b', margin: '1px 0' }}>Professional Cleaning & Hygiene Services</p>
+            <p style={{ fontSize: '5px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '2px' }}>QUOTATION</h2>
-          <p style={{ fontSize: '13px', color: COLORS.main, margin: '1px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
-          <div style={{ marginTop: '3px', fontSize: '7px', color: '#64748b' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '1px' }}>QUOTATION</h2>
+          <p style={{ fontSize: '12px', color: COLORS.main, margin: '1px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
+          <div style={{ marginTop: '2mm', fontSize: '6px', color: '#64748b' }}>
             <p style={{ margin: '0' }}>Date: {formatDate(quotation?.quotation_date)}</p>
             <p style={{ margin: '0' }}>Valid: {formatDate(quotation?.valid_until)}</p>
           </div>
@@ -97,83 +101,83 @@ function QuotationTemplate({ quotation, items }) {
       </div>
 
       {/* Bill To & Details */}
-      <div style={{ marginBottom: '10px', display: 'flex', gap: '20px' }}>
+      <div style={{ marginBottom: '5mm', display: 'flex', gap: '15mm' }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '7px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Bill To:</h3>
-          <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
-          {quotation?.client_email && <p style={{ fontSize: '7px', color: '#64748b', margin: '0' }}>{quotation.client_email}</p>}
-          <p style={{ fontSize: '7px', color: '#64748b', margin: '0' }}>{quotation?.client_address || ''}</p>
+          <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Bill To:</h3>
+          <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
+          {quotation?.client_email && <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>{quotation.client_email}</p>}
+          <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>{quotation?.client_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '7px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Details:</h3>
-          <p style={{ fontSize: '9px', color: '#1e293b', margin: '0' }}>Prepared: Ndanduleni Group Sales</p>
-          <p style={{ fontSize: '8px', color: '#64748b', margin: '0' }}>Terms: {quotation?.payment_terms || '50% Deposit'}</p>
+          <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Details:</h3>
+          <p style={{ fontSize: '8px', color: '#1e293b', margin: '0' }}>Prepared: Ndanduleni Group Sales</p>
+          <p style={{ fontSize: '7px', color: '#64748b', margin: '0' }}>Terms: {quotation?.payment_terms || '50% Deposit'}</p>
         </div>
       </div>
 
-      {/* Items Table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
+      {/* Items Table – even tighter */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '5mm' }}>
         <thead>
           <tr style={{ backgroundColor: COLORS.tableHeader, color: 'white' }}>
-            <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '7px', fontWeight: 'bold' }}>#</th>
-            <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: '7px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: '7px', fontWeight: 'bold', width: '40px' }}>Qty</th>
-            <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '7px', fontWeight: 'bold', width: '80px' }}>Unit Price</th>
-            <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: '7px', fontWeight: 'bold', width: '80px' }}>Total</th>
+            <th style={{ padding: '2mm 3mm', textAlign: 'left', fontSize: '6px', fontWeight: 'bold' }}>#</th>
+            <th style={{ padding: '2mm 3mm', textAlign: 'left', fontSize: '6px', fontWeight: 'bold' }}>Description</th>
+            <th style={{ padding: '2mm 3mm', textAlign: 'center', fontSize: '6px', fontWeight: 'bold', width: '10mm' }}>Qty</th>
+            <th style={{ padding: '2mm 3mm', textAlign: 'right', fontSize: '6px', fontWeight: 'bold', width: '25mm' }}>Unit Price</th>
+            <th style={{ padding: '2mm 3mm', textAlign: 'right', fontSize: '6px', fontWeight: 'bold', width: '25mm' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           {(items || []).filter(item => item.description).map((item, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '3px 6px', fontSize: '7px', color: '#64748b' }}>{i + 1}</td>
-              <td style={{ padding: '3px 6px', fontSize: '7px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
-              <td style={{ padding: '3px 6px', fontSize: '7px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
-              <td style={{ padding: '3px 6px', fontSize: '7px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
-              <td style={{ padding: '3px 6px', fontSize: '7px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
+              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#64748b' }}>{i + 1}</td>
+              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
+              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
+              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
+              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-        <div style={{ width: '220px', border: '1px solid #e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid #e2e8f0', fontSize: '7px', backgroundColor: '#f8fafc' }}>
+      {/* Totals – compact */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '5mm' }}>
+        <div style={{ width: '200px', border: '1px solid #e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2mm 8px', borderBottom: '1px solid #e2e8f0', fontSize: '6px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>Subtotal (Excl. VAT):</span>
             <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(subtotal)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 10px', borderBottom: '1px solid #e2e8f0', fontSize: '7px', backgroundColor: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2mm 8px', borderBottom: '1px solid #e2e8f0', fontSize: '6px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(vatAmount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', fontSize: '11px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3mm 8px', fontSize: '10px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
             <span style={{ color: COLORS.dark }}>TOTAL (Incl. VAT):</span>
-            <span style={{ color: COLORS.dark, fontSize: '13px' }}>{formatCurrency(totalAmount)}</span>
+            <span style={{ color: COLORS.dark, fontSize: '12px' }}>{formatCurrency(totalAmount)}</span>
           </div>
         </div>
       </div>
 
-      {/* Terms */}
-      <div style={{ marginBottom: '8px' }}>
-        <h3 style={{ fontSize: '7px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Terms & Conditions</h3>
-        <p style={{ fontSize: '6px', color: '#94a3b8', lineHeight: '1.3', margin: '0' }}>
+      {/* Terms – minimal */}
+      <div style={{ marginBottom: '4mm' }}>
+        <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Terms & Conditions</h3>
+        <p style={{ fontSize: '5px', color: '#94a3b8', lineHeight: '1.2', margin: '0' }}>
           1. Valid for 30 days. 2. Payment: {quotation?.payment_terms || '50% Deposit, Balance on Completion'}. 3. Prices include VAT at 15%. 4. Services rendered per agreed schedule. 5. 30 days cancellation notice.
         </p>
       </div>
 
-      {/* Notes */}
+      {/* Notes (if any) */}
       {quotation?.notes && (
-        <div style={{ marginBottom: '8px', padding: '4px 8px', backgroundColor: '#f8fafc', borderRadius: '3px' }}>
-          <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
+        <div style={{ marginBottom: '4mm', padding: '2mm 6mm', backgroundColor: '#f8fafc', borderRadius: '2px' }}>
+          <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{ position: 'absolute', bottom: '12mm', left: '18mm', right: '18mm', borderTop: `2px solid ${COLORS.main}`, paddingTop: '5px', textAlign: 'center' }}>
-        <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>
+      {/* Footer – pinned to bottom */}
+      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '3mm', textAlign: 'center' }}>
+        <p style={{ fontSize: '5px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123 | 123 Main Street, Johannesburg
         </p>
-        <p style={{ fontSize: '9px', color: COLORS.main, margin: '3px 0 0 0', fontWeight: 'bold' }}>
+        <p style={{ fontSize: '8px', color: COLORS.main, margin: '2mm 0 0 0', fontWeight: 'bold' }}>
           Thank you for your business!
         </p>
       </div>
@@ -181,6 +185,9 @@ function QuotationTemplate({ quotation, items }) {
   )
 }
 
+// ═══════════════════════════════════════════════
+// Create Quotation Page (unchanged logic)
+// ═══════════════════════════════════════════════
 export default function CreateQuotation() {
   const createQuotation = useSalesStore((state) => state.createQuotation)
   const clients = useCRMStore((state) => state.clients)
@@ -282,7 +289,6 @@ export default function CreateQuotation() {
       return
     }
 
-    // Prepare clean items for the API
     const cleanItems = items
       .filter((item) => item.description)
       .map((item) => ({
@@ -323,7 +329,7 @@ export default function CreateQuotation() {
       tempDiv.style.position = 'absolute'
       tempDiv.style.left = '-9999px'
       tempDiv.style.top = '0'
-      tempDiv.style.width = '794px'
+      tempDiv.style.width = '794px'   // A4 width in px at 96dpi
       document.body.appendChild(tempDiv)
 
       const ReactDOM = (await import('react-dom/client')).default
@@ -342,13 +348,24 @@ export default function CreateQuotation() {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 1 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794, windowHeight: 1123 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          windowWidth: 794,           // A4 width in pixels
+          windowHeight: 1123          // A4 height in pixels – prevents content from being split across pages
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait'
+        },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        pagesplit: false
+        pagesplit: false               // critical: prevent automatic page breaks
       }
 
       await html2pdf().set(opt).from(tempDiv).toPdf().get('pdf').then((pdf) => {
+        // Force single page – if somehow a second page is created, delete it
         if (pdf.internal.getNumberOfPages() > 1) {
           for (let i = pdf.internal.getNumberOfPages(); i > 1; i--) {
             pdf.deletePage(i)
