@@ -83,22 +83,15 @@ export default function UserManagement() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      // Get all profiles from the database
       const { data: profiles, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Error loading profiles:', error)
-        toast.error('Failed to load users')
-        setLoading(false)
-        return
-      }
-
+      if (error) throw error
       setUsers(profiles || [])
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error loading profiles:', error)
       toast.error('Failed to load users')
     } finally {
       setLoading(false)
@@ -146,7 +139,6 @@ export default function UserManagement() {
         // UPDATE EXISTING USER
         console.log('Updating user:', editingUser.id)
         
-        // Update profile in database
         const updates = {
           email: formData.email.trim(),
           full_name: formData.full_name.trim(),
@@ -167,26 +159,21 @@ export default function UserManagement() {
           const { error: pwError } = await supabase.auth.updateUser({
             password: formData.password
           })
-          if (pwError) {
-            console.log('Password update note:', pwError.message)
-            // Continue anyway - password update might fail but profile is updated
-          }
+          if (pwError) console.log('Password update note:', pwError.message)
         }
 
-        // Log the action
         await supabase.from('user_management_log').insert([{
           action_type: 'user_updated',
           target_user_id: editingUser.id,
           performed_by: user?.id,
           details: { changes: updates }
-        }]).then(() => {}, () => {}) // Ignore log errors
+        }]).then(() => {}, () => {})
 
         toast.success('User updated successfully! ✅')
       } else {
         // CREATE NEW USER
         console.log('Creating new user:', formData.email)
         
-        // Use Supabase Auth signUp
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email.trim(),
           password: formData.password,
@@ -200,49 +187,47 @@ export default function UserManagement() {
 
         if (authError) {
           console.error('Auth error:', authError)
-          
-          // If user already exists, try to update their profile
           if (authError.message?.includes('already') || authError.message?.includes('exists')) {
             toast.error('A user with this email already exists')
-            setSaving(false)
-            return
           }
-          
           throw authError
         }
 
         if (authData?.user) {
-          // Update the profile with role and permissions
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({
-              role: formData.role,
-              full_name: formData.full_name.trim(),
-              module_permissions: formData.module_permissions,
-              is_active: true
-            })
-            .eq('id', authData.user.id)
-
-          if (updateError) {
-            console.error('Profile update error:', updateError)
-            // Profile might not exist yet, try insert
-            const { error: insertError } = await supabase
+          // ── FIX: Ensure profile exists ──
+          const ensureProfile = async () => {
+            const { error: updateError } = await supabase
               .from('profiles')
-              .upsert({
-                id: authData.user.id,
-                email: formData.email.trim(),
-                full_name: formData.full_name.trim(),
+              .update({
                 role: formData.role,
+                full_name: formData.full_name.trim(),
                 module_permissions: formData.module_permissions,
                 is_active: true
               })
-            
-            if (insertError) {
-              console.error('Profile insert error:', insertError)
+              .eq('id', authData.user.id)
+
+            if (updateError) {
+              // profile may not exist – upsert
+              const { error: insertError } = await supabase
+                .from('profiles')
+                .upsert({
+                  id: authData.user.id,
+                  email: formData.email.trim(),
+                  full_name: formData.full_name.trim(),
+                  role: formData.role,
+                  module_permissions: formData.module_permissions,
+                  is_active: true
+                })
+              if (insertError) {
+                console.error('Profile upsert error:', insertError)
+                toast.error('User created but profile setup failed')
+              }
             }
           }
 
-          // Log
+          await ensureProfile()
+
+          // Log the action
           await supabase.from('user_management_log').insert([{
             action_type: 'user_created',
             target_user_id: authData.user.id,
@@ -266,7 +251,6 @@ export default function UserManagement() {
 
   const handleDeleteUser = async (userId) => {
     try {
-      // Soft delete - deactivate the user
       const { error } = await supabase
         .from('profiles')
         .update({ 
@@ -278,7 +262,6 @@ export default function UserManagement() {
 
       if (error) throw error
 
-      // Log
       await supabase.from('user_management_log').insert([{
         action_type: 'user_deactivated',
         target_user_id: userId,
@@ -361,12 +344,10 @@ export default function UserManagement() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <Link to="/dashboard" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -387,7 +368,6 @@ export default function UserManagement() {
           </div>
         </motion.div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
             { icon: Users, label: 'Total Users', value: users.length, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
@@ -403,7 +383,6 @@ export default function UserManagement() {
           ))}
         </div>
 
-        {/* Filters */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
@@ -417,7 +396,6 @@ export default function UserManagement() {
           </div>
         </motion.div>
 
-        {/* Users Grid */}
         {loading ? (
           <div className="text-center py-16">
             <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-emerald-600 mx-auto mb-4"></div>
@@ -498,7 +476,6 @@ export default function UserManagement() {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
               className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               
-              {/* Modal Header */}
               <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10 rounded-t-2xl">
                 <div>
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white">{editingUser ? 'Edit User' : 'Add New User'}</h3>
@@ -509,7 +486,6 @@ export default function UserManagement() {
                 </button>
               </div>
 
-              {/* Modal Body */}
               <div className="p-5 space-y-4">
                 <div>
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Email Address *</label>
@@ -555,7 +531,6 @@ export default function UserManagement() {
                   </div>
                 </div>
 
-                {/* Module Permissions */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Module Permissions</label>
@@ -585,7 +560,6 @@ export default function UserManagement() {
                 </div>
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700">
                 <button onClick={() => setShowModal(false)} 
                   className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
