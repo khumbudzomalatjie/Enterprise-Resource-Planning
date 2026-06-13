@@ -6,8 +6,8 @@ import useHRStore from '../store/hrStore'
 import useThemeStore from '../../../store/themeStore'
 import toast from 'react-hot-toast'
 import { 
-  Search, Filter, Plus, Users, UserPlus, ChevronRight,
-  ArrowLeft, Mail, Phone, MapPin, Briefcase, Sun, Moon, Sparkles,
+  Search, Plus, Users, UserPlus, ChevronRight,
+  Mail, Phone, MapPin, Briefcase, Sun, Moon, Sparkles,
   Pencil, Eye, Trash2
 } from 'lucide-react'
 
@@ -27,6 +27,7 @@ export default function EmployeeList() {
     const filters = {}
     if (search) filters.search = search
     if (department !== 'all') filters.department = department
+    // We'll fetch all and filter terminated client‑side to ensure they never appear
     if (status !== 'all') filters.status = status
     await fetchEmployees(filters)
   }
@@ -35,6 +36,9 @@ export default function EmployeeList() {
     e.preventDefault()
     loadEmployees()
   }
+
+  // Filter out terminated employees ALWAYS, regardless of status filter
+  const activeEmployees = (employees || []).filter(emp => emp.employment_status !== 'terminated')
 
   const handleEdit = (e, employeeId) => {
     e.stopPropagation()
@@ -47,13 +51,13 @@ export default function EmployeeList() {
 
   const handleDelete = async (e, employeeId, employeeName) => {
     e.stopPropagation()
-    if (window.confirm(`Are you sure you want to terminate ${employeeName}?`)) {
+    if (window.confirm(`Are you sure you want to permanently remove ${employeeName}?`)) {
       const result = await deleteEmployee(employeeId)
       if (result.success) {
-        toast.success(`${employeeName} has been terminated`)
-        loadEmployees()
+        toast.success(`${employeeName} has been removed`)
+        // The store already removes it from state; no need to reload but we can
       } else {
-        toast.error('Failed to terminate employee')
+        toast.error('Failed to remove employee')
       }
     }
   }
@@ -96,7 +100,7 @@ export default function EmployeeList() {
               <Users className="w-8 h-8 text-emerald-600" />
               Employees
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">{(employees || []).length} employee records</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">{activeEmployees.length} active employee records</p>
           </div>
           
           <button
@@ -146,12 +150,12 @@ export default function EmployeeList() {
               onChange={(e) => setStatus(e.target.value)}
               className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
             >
-              <option value="all">All Status</option>
+              <option value="all">All Active Status</option>
               <option value="active">Active</option>
               <option value="on_leave">On Leave</option>
               <option value="inactive">Inactive</option>
-              <option value="terminated">Terminated</option>
               <option value="suspended">Suspended</option>
+              {/* Terminated removed – they are permanently hidden */}
             </select>
 
             <button
@@ -163,15 +167,15 @@ export default function EmployeeList() {
           </form>
         </motion.div>
 
-        {/* Employee Grid */}
+        {/* Employee Grid – only non‑terminated */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
             <p className="text-slate-500 dark:text-slate-400">Loading employees...</p>
           </div>
-        ) : (employees || []).length > 0 ? (
+        ) : activeEmployees.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {employees.map((emp, index) => (
+            {activeEmployees.map((emp, index) => (
               <motion.div
                 key={emp.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -204,7 +208,6 @@ export default function EmployeeList() {
                   
                   {/* Action Buttons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {/* View Button - Eye Icon */}
                     <button
                       onClick={() => handleView(emp.id)}
                       className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors"
@@ -213,7 +216,6 @@ export default function EmployeeList() {
                       <Eye className="w-4 h-4" />
                     </button>
                     
-                    {/* Edit Button - Pencil Icon */}
                     <button
                       onClick={(e) => handleEdit(e, emp.id)}
                       className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
@@ -222,16 +224,14 @@ export default function EmployeeList() {
                       <Pencil className="w-4 h-4" />
                     </button>
 
-                    {/* Delete/Terminate Button */}
-                    {emp.employment_status !== 'terminated' && (
-                      <button
-                        onClick={(e) => handleDelete(e, emp.id, `${emp.first_name} ${emp.last_name}`)}
-                        className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                        title="Terminate Employee"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    {/* Delete Button – always visible for non‑terminated */}
+                    <button
+                      onClick={(e) => handleDelete(e, emp.id, `${emp.first_name} ${emp.last_name}`)}
+                      className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                      title="Remove Employee Permanently"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -244,8 +244,6 @@ export default function EmployeeList() {
                       ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                       : emp.employment_status === 'suspended'
                       ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                      : emp.employment_status === 'terminated'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                       : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
                   }`}>
                     {emp.employment_status?.replace('_', ' ') || 'Unknown'}
@@ -277,10 +275,7 @@ export default function EmployeeList() {
               </motion.div>
             ))}
           </div>
-        ) : null}
-
-        {/* Empty State */}
-        {!loading && (employees || []).length === 0 && (
+        ) : (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }}
@@ -305,8 +300,8 @@ export default function EmployeeList() {
           </motion.div>
         )}
 
-        {/* Stats Summary */}
-        {!loading && (employees || []).length > 0 && (
+        {/* Stats Summary – only for non‑terminated */}
+        {!loading && activeEmployees.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }} 
@@ -314,20 +309,20 @@ export default function EmployeeList() {
             className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4"
           >
             <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Total Employees</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">{employees.length}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total Active</p>
+              <p className="text-2xl font-bold text-slate-800 dark:text-white">{activeEmployees.length}</p>
             </div>
             <div className="neu-raised rounded-2xl p-4 text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400">Active</p>
-              <p className="text-2xl font-bold text-emerald-600">{employees.filter(e => e.employment_status === 'active').length}</p>
+              <p className="text-2xl font-bold text-emerald-600">{activeEmployees.filter(e => e.employment_status === 'active').length}</p>
             </div>
             <div className="neu-raised rounded-2xl p-4 text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400">On Leave</p>
-              <p className="text-2xl font-bold text-amber-600">{employees.filter(e => e.employment_status === 'on_leave').length}</p>
+              <p className="text-2xl font-bold text-amber-600">{activeEmployees.filter(e => e.employment_status === 'on_leave').length}</p>
             </div>
             <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Terminated</p>
-              <p className="text-2xl font-bold text-red-600">{employees.filter(e => e.employment_status === 'terminated').length}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Inactive/Suspended</p>
+              <p className="text-2xl font-bold text-red-600">{activeEmployees.filter(e => e.employment_status === 'inactive' || e.employment_status === 'suspended').length}</p>
             </div>
           </motion.div>
         )}
