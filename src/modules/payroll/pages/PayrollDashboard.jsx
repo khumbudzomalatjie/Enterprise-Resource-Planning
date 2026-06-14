@@ -11,7 +11,7 @@ import {
   TrendingUp, TrendingDown, Calculator, Calendar,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
   CheckCircle2, AlertCircle, BarChart3, Activity,
-  Download, Printer, PieChart
+  Download, Printer, PieChart, Layout
 } from 'lucide-react'
 
 export default function PayrollDashboard() {
@@ -76,6 +76,7 @@ export default function PayrollDashboard() {
 
   const quickActions = [
     { label: 'Run Payroll', icon: Calculator, path: '/payroll/run', color: 'bg-emerald-600' },
+    { label: 'Classic View', icon: Layout, path: '/payroll/classic', color: 'bg-teal-600' },
     { label: 'View Payslips', icon: FileText, path: '/payroll/payslips', color: 'bg-blue-600' },
     { label: 'Employees', icon: Users, path: '/payroll/employees', color: 'bg-purple-600' },
     { label: 'Reports', icon: BarChart3, path: '/payroll/reports', color: 'bg-amber-600' },
@@ -112,7 +113,7 @@ export default function PayrollDashboard() {
 
         {/* Quick Actions */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8">
+          className="grid grid-cols-3 md:grid-cols-7 gap-3 mb-8">
           {quickActions.map(action => (
             <button key={action.label} onClick={() => navigate(action.path)}
               className={`${action.color} text-white rounded-2xl p-3 flex flex-col items-center gap-1 hover:scale-105 transition-transform text-sm font-medium shadow-lg`}>
