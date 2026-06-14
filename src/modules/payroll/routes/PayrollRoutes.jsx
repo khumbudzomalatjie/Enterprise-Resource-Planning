@@ -10,6 +10,7 @@ import PayrollRun from '../pages/PayrollRun'
 import PayrollReports from '../pages/PayrollReports'
 import PayrollSettings from '../pages/PayrollSettings'
 import PayrollAudit from '../pages/PayrollAudit'
+import PayrollClassic from '../pages/PayrollClassic'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function PayrollRoutes() {
@@ -18,6 +19,7 @@ export default function PayrollRoutes() {
   return (
     <Routes>
       <Route path="/" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollDashboard /></RoleBasedRoute></ProtectedRoute>} />
+      <Route path="/classic" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollClassic /></RoleBasedRoute></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><EmployeePayrollList /></RoleBasedRoute></ProtectedRoute>} />
       <Route path="/employees/:id" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><EmployeePayrollDetail /></RoleBasedRoute></ProtectedRoute>} />
       <Route path="/payslips" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayslipList /></RoleBasedRoute></ProtectedRoute>} />
