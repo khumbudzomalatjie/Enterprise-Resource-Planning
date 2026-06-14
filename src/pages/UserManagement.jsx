@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../components/Navbar'
@@ -30,6 +30,18 @@ const ALL_MODULES = [
   { id: 'assets', label: 'Assets Management', icon: '🏗️' },
   { id: 'mobile', label: 'Field Operations', icon: '📱' },
 ]
+
+// Default module permissions for each role
+const DEFAULT_ROLE_PERMISSIONS = {
+  super_admin: ['hr', 'payroll', 'attendance', 'crm', 'sales', 'operations', 'inventory', 'procurement', 'finance', 'fleet', 'reports', 'workflow', 'documents', 'assets', 'mobile'],
+  operations_manager: ['hr', 'attendance', 'crm', 'sales', 'operations', 'inventory', 'procurement', 'finance', 'fleet', 'reports', 'workflow', 'documents', 'assets', 'mobile'],
+  hr_manager: ['hr', 'payroll', 'attendance', 'documents', 'reports'],
+  finance_officer: ['payroll', 'sales', 'procurement', 'finance', 'assets', 'reports', 'workflow'],
+  supervisor: ['attendance', 'operations', 'inventory', 'fleet', 'mobile'],
+  sales_agent: ['crm', 'sales', 'documents'],
+  cleaner: ['mobile'],
+  customer: ['crm'],
+}
 
 const ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
@@ -68,7 +80,9 @@ export default function UserManagement() {
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Check if current user is super admin
+  // Track if user manually changed permissions (to avoid overwriting)
+  const [permissionsManuallyChanged, setPermissionsManuallyChanged] = useState(false)
+
   const isSuperAdmin = profile?.role === 'super_admin'
 
   useEffect(() => {
@@ -100,22 +114,38 @@ export default function UserManagement() {
 
   const handleAddUser = () => {
     setEditingUser(null)
-    setFormData({ email: '', password: '', full_name: '', role: 'cleaner', module_permissions: [] })
+    setPermissionsManuallyChanged(false)
+    // Auto-set default permissions for the initial role
+    const defaultPerms = DEFAULT_ROLE_PERMISSIONS['cleaner'] || []
+    setFormData({ email: '', password: '', full_name: '', role: 'cleaner', module_permissions: defaultPerms })
     setShowPassword(false)
     setShowModal(true)
   }
 
   const handleEditUser = (userData) => {
     setEditingUser(userData)
+    setPermissionsManuallyChanged(true) // Don't auto-change when editing
     setFormData({
       email: userData.email || '',
       password: '',
       full_name: userData.full_name || '',
       role: userData.role || 'cleaner',
-      module_permissions: userData.module_permissions || []
+      module_permissions: userData.module_permissions || DEFAULT_ROLE_PERMISSIONS[userData.role] || []
     })
     setShowPassword(false)
     setShowModal(true)
+  }
+
+  // AUTO-SET PERMISSIONS WHEN ROLE CHANGES
+  const handleRoleChange = (newRole) => {
+    setFormData({ 
+      ...formData, 
+      role: newRole,
+      // Only auto-set permissions if user hasn't manually changed them
+      module_permissions: permissionsManuallyChanged 
+        ? formData.module_permissions 
+        : (DEFAULT_ROLE_PERMISSIONS[newRole] || [])
+    })
   }
 
   const handleSaveUser = async () => {
@@ -136,7 +166,6 @@ export default function UserManagement() {
 
     try {
       if (editingUser) {
-        // UPDATE EXISTING USER
         console.log('Updating user:', editingUser.id)
         
         const updates = {
@@ -154,7 +183,6 @@ export default function UserManagement() {
 
         if (profileError) throw profileError
 
-        // Update password if provided
         if (formData.password) {
           const { error: pwError } = await supabase.auth.updateUser({
             password: formData.password
@@ -171,7 +199,6 @@ export default function UserManagement() {
 
         toast.success('User updated successfully! ✅')
       } else {
-        // CREATE NEW USER
         console.log('Creating new user:', formData.email)
         
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -194,7 +221,6 @@ export default function UserManagement() {
         }
 
         if (authData?.user) {
-          // ── FIX: Ensure profile exists ──
           const ensureProfile = async () => {
             const { error: updateError } = await supabase
               .from('profiles')
@@ -207,7 +233,6 @@ export default function UserManagement() {
               .eq('id', authData.user.id)
 
             if (updateError) {
-              // profile may not exist – upsert
               const { error: insertError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -227,7 +252,6 @@ export default function UserManagement() {
 
           await ensureProfile()
 
-          // Log the action
           await supabase.from('user_management_log').insert([{
             action_type: 'user_created',
             target_user_id: authData.user.id,
@@ -279,6 +303,7 @@ export default function UserManagement() {
   }
 
   const toggleModulePermission = (moduleId) => {
+    setPermissionsManuallyChanged(true) // User is manually changing permissions
     const current = formData.module_permissions || []
     if (current.includes(moduleId)) {
       setFormData({ ...formData, module_permissions: current.filter(m => m !== moduleId) })
@@ -288,10 +313,12 @@ export default function UserManagement() {
   }
 
   const selectAllModules = () => {
+    setPermissionsManuallyChanged(true)
     setFormData({ ...formData, module_permissions: ALL_MODULES.map(m => m.id) })
   }
 
   const clearAllModules = () => {
+    setPermissionsManuallyChanged(true)
     setFormData({ ...formData, module_permissions: [] })
   }
 
@@ -397,54 +424,30 @@ export default function UserManagement() {
         </motion.div>
 
         {loading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-500 dark:text-slate-400 text-lg">Loading users...</p>
-          </div>
+          <div className="text-center py-16"><div className="animate-spin rounded-full h-14 w-14 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500 dark:text-slate-400 text-lg">Loading users...</p></div>
         ) : filteredUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUsers.map((u, i) => (
-              <motion.div key={u.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                className="neu-raised rounded-2xl p-5 stat-card hover:scale-[1.02] transition-transform">
+              <motion.div key={u.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="neu-raised rounded-2xl p-5 stat-card hover:scale-[1.02] transition-transform">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-800 dark:text-white">{u.full_name || 'No Name'}</h3>
-                      <p className="text-xs text-slate-500">{u.email}</p>
-                    </div>
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"><Shield className="w-6 h-6 text-emerald-600" /></div>
+                    <div><h3 className="font-semibold text-slate-800 dark:text-white">{u.full_name || 'No Name'}</h3><p className="text-xs text-slate-500">{u.email}</p></div>
                   </div>
                   <div className="flex gap-1">
-                    <button onClick={() => handleEditUser(u)} className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 hover:bg-blue-200" title="Edit User">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    {u.id !== user?.id && (
-                      <button onClick={() => setDeleteConfirm(u)} className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 hover:bg-red-200" title="Deactivate User">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button onClick={() => handleEditUser(u)} className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 hover:bg-blue-200" title="Edit User"><Edit className="w-4 h-4" /></button>
+                    {u.id !== user?.id && (<button onClick={() => setDeleteConfirm(u)} className="p-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 hover:bg-red-200" title="Deactivate User"><Trash2 className="w-4 h-4" /></button>)}
                   </div>
                 </div>
-                
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadge(u.role)}`}>{getRoleLabel(u.role)}</span>
-                    <span className={`flex items-center gap-1 text-xs ${u.is_active !== false ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {u.is_active !== false ? <><CheckCircle2 className="w-3 h-3" /> Active</> : <><AlertCircle className="w-3 h-3" /> Inactive</>}
-                    </span>
+                    <span className={`flex items-center gap-1 text-xs ${u.is_active !== false ? 'text-emerald-600' : 'text-red-600'}`}>{u.is_active !== false ? <><CheckCircle2 className="w-3 h-3" /> Active</> : <><AlertCircle className="w-3 h-3" /> Inactive</>}</span>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    <span className="font-medium">Modules:</span> {(u.module_permissions?.length || 0)} of {ALL_MODULES.length}
-                  </p>
+                  <p className="text-xs text-slate-500"><span className="font-medium">Modules:</span> {(u.module_permissions?.length || 0)} of {ALL_MODULES.length}</p>
                   {u.module_permissions?.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {u.module_permissions.slice(0, 4).map(m => (
-                        <span key={m} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                          {ALL_MODULES.find(mod => mod.id === m)?.label?.split(' ')[0] || m}
-                        </span>
-                      ))}
+                      {u.module_permissions.slice(0, 4).map(m => (<span key={m} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">{ALL_MODULES.find(mod => mod.id === m)?.label?.split(' ')[0] || m}</span>))}
                       {u.module_permissions.length > 4 && <span className="text-[10px] text-slate-400">+{u.module_permissions.length - 4} more</span>}
                     </div>
                   )}
@@ -453,126 +456,42 @@ export default function UserManagement() {
             ))}
           </div>
         ) : (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16 neu-raised rounded-3xl">
-            <Users className="w-20 h-20 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-500 dark:text-slate-400 text-lg mb-2">No users found</p>
-            <p className="text-slate-400 dark:text-slate-500 text-sm mb-4">
-              {search || roleFilter !== 'all' ? 'Try adjusting your search or filters' : 'Start by adding your first user'}
-            </p>
-            {!search && roleFilter === 'all' && (
-              <button onClick={handleAddUser} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white inline-flex items-center gap-2">
-                <Plus className="w-5 h-5" /><span>Add First User</span>
-              </button>
-            )}
-          </motion.div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16 neu-raised rounded-3xl"><Users className="w-20 h-20 text-slate-300 mx-auto mb-4" /><p className="text-slate-500 text-lg mb-2">No users found</p></motion.div>
         )}
       </main>
 
       {/* Add/Edit User Modal */}
       <AnimatePresence>
         {showModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-              
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10 rounded-t-2xl">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">{editingUser ? 'Edit User' : 'Add New User'}</h3>
-                  {editingUser && <p className="text-xs text-slate-500">{editingUser.email}</p>}
-                </div>
-                <button onClick={() => setShowModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700">
-                  <X className="w-5 h-5 text-slate-500" />
-                </button>
+                <div><h3 className="text-lg font-bold text-slate-800 dark:text-white">{editingUser ? 'Edit User' : 'Add New User'}</h3>{editingUser && <p className="text-xs text-slate-500">{editingUser.email}</p>}</div>
+                <button onClick={() => setShowModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5 text-slate-500" /></button>
               </div>
-
               <div className="p-5 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Email Address *</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-800 dark:text-white" placeholder="user@example.com" />
-                  </div>
-                </div>
+                <div><label className="text-xs font-semibold text-slate-500 mb-1 block">Email *</label><div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder="user@example.com" /></div></div>
+                <div><label className="text-xs font-semibold text-slate-500 mb-1 block">Full Name</label><div className="relative"><Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder="John Doe" /></div></div>
+                <div><label className="text-xs font-semibold text-slate-500 mb-1 block">{editingUser ? 'New Password (leave blank)' : 'Password *'}</label><div className="relative"><Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" placeholder={editingUser ? '••••••••' : 'Min 6 characters'} /><button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><EyeOff className="w-4 h-4" /></button></div></div>
                 
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Full Name</label>
-                  <div className="relative">
-                    <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-800 dark:text-white" placeholder="John Doe" />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">
-                    {editingUser ? 'New Password (leave blank to keep current)' : 'Password *'}
-                  </label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})}
-                      className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-800 dark:text-white" placeholder={editingUser ? '••••••••' : 'Min 6 characters'} />
-                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Role</label>
-                  <div className="relative">
-                    <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-800 dark:text-white appearance-none">
-                      {ROLES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  </div>
-                </div>
+                {/* Role - triggers auto-permission */}
+                <div><label className="text-xs font-semibold text-slate-500 mb-1 block">Role</label><div className="relative"><Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><select value={formData.role} onChange={e => handleRoleChange(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm appearance-none">{ROLES.map(r => (<option key={r.value} value={r.value}>{r.label}</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Module Permissions</label>
-                    <div className="flex gap-2">
-                      <button onClick={selectAllModules} className="text-xs text-blue-600 hover:underline">Select All</button>
-                      <button onClick={clearAllModules} className="text-xs text-red-600 hover:underline">Clear</button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto p-2 border border-slate-200 dark:border-slate-600 rounded-xl">
+                  <div className="flex justify-between items-center mb-2"><label className="text-xs font-semibold text-slate-500">Module Permissions</label><div className="flex gap-2"><button onClick={selectAllModules} className="text-xs text-blue-600 hover:underline">Select All</button><button onClick={clearAllModules} className="text-xs text-red-600 hover:underline">Clear</button></div></div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto p-2 border border-slate-200 rounded-xl">
                     {ALL_MODULES.map(mod => (
-                      <label key={mod.id} 
-                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
-                          (formData.module_permissions || []).includes(mod.id) 
-                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800' 
-                            : 'bg-slate-50 dark:bg-slate-700/50 border border-transparent hover:bg-slate-100 dark:hover:bg-slate-600'
-                        }`}>
-                        <input 
-                          type="checkbox" 
-                          checked={(formData.module_permissions || []).includes(mod.id)} 
-                          onChange={() => toggleModulePermission(mod.id)} 
-                          className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500" 
-                        />
-                        <span className="text-xs text-slate-700 dark:text-slate-300">{mod.icon} {mod.label}</span>
+                      <label key={mod.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${(formData.module_permissions || []).includes(mod.id) ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-transparent hover:bg-slate-100'}`}>
+                        <input type="checkbox" checked={(formData.module_permissions || []).includes(mod.id)} onChange={() => toggleModulePermission(mod.id)} className="w-4 h-4 text-emerald-600 rounded" />
+                        <span className="text-xs text-slate-700">{mod.icon} {mod.label}</span>
                       </label>
                     ))}
                   </div>
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700">
-                <button onClick={() => setShowModal(false)} 
-                  className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleSaveUser} disabled={saving} 
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-colors">
-                  {saving ? (
-                    <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Saving...</>
-                  ) : (
-                    <><Save className="w-4 h-4" /> {editingUser ? 'Update User' : 'Create User'}</>
-                  )}
-                </button>
+              <div className="flex justify-end gap-3 p-5 border-t border-slate-200">
+                <button onClick={() => setShowModal(false)} className="px-5 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-sm">Cancel</button>
+                <button onClick={handleSaveUser} disabled={saving} className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold disabled:opacity-50 flex items-center gap-2">{saving ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> Saving...</> : <><Save className="w-4 h-4" /> {editingUser ? 'Update User' : 'Create User'}</>}</button>
               </div>
             </motion.div>
           </motion.div>
@@ -582,26 +501,13 @@ export default function UserManagement() {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {deleteConfirm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-7 h-7 text-red-500" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Deactivate User?</h3>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-1 font-medium">{deleteConfirm.email}</p>
-              <p className="text-slate-500 dark:text-slate-500 text-xs mb-6">The user will no longer be able to log in. This action can be reversed by an admin.</p>
-              <div className="flex gap-3 justify-center">
-                <button onClick={() => setDeleteConfirm(null)} 
-                  className="px-6 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
-                  Cancel
-                </button>
-                <button onClick={() => handleDeleteUser(deleteConfirm.id)} 
-                  className="px-6 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors">
-                  Deactivate
-                </button>
-              </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><Trash2 className="w-7 h-7 text-red-500" /></div>
+              <h3 className="text-lg font-bold mb-2">Deactivate User?</h3>
+              <p className="text-sm mb-1">{deleteConfirm.email}</p>
+              <p className="text-xs text-slate-500 mb-6">The user will no longer be able to log in.</p>
+              <div className="flex gap-3 justify-center"><button onClick={() => setDeleteConfirm(null)} className="px-6 py-2.5 rounded-xl bg-slate-200 text-sm">Cancel</button><button onClick={() => handleDeleteUser(deleteConfirm.id)} className="px-6 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold">Deactivate</button></div>
             </motion.div>
           </motion.div>
         )}
