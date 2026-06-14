@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 
 export default function PayrollRun() {
-  const { stats, fetchPayrollStats, loading } = usePayrollStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
@@ -36,7 +35,6 @@ export default function PayrollRun() {
 
   const loadEmployees = async () => {
     try {
-      // Get all active employees from HR module
       const { data: empData, error: empError } = await supabase
         .from('employees')
         .select('*')
@@ -54,15 +52,12 @@ export default function PayrollRun() {
         return
       }
 
-      // Get payroll profiles for those employees
       const employeeIds = empData.map(e => e.id)
-      
       const { data: profileData } = await supabase
         .from('payroll_profiles')
         .select('*')
         .in('employee_id', employeeIds)
 
-      // Merge profiles with employees
       const merged = empData.map(emp => ({
         ...emp,
         payroll_profiles: profileData?.filter(p => p.employee_id === emp.id) || []
@@ -152,7 +147,8 @@ export default function PayrollRun() {
           total_gross: preview.totalGross,
           total_deductions: preview.totalDeductions,
           total_net: preview.totalNet,
-          status: 'processing',
+          status: 'completed',
+          processed_at: new Date().toISOString(),
           notes: runData.notes
         }])
         .select()
@@ -160,7 +156,7 @@ export default function PayrollRun() {
 
       if (runError) throw runError
 
-      // Generate payslips for each employee
+      // Generate payslips
       for (const emp of preview.employees) {
         const basicSalary = emp.payroll_profiles?.[0]?.basic_salary || 0
         const paye = basicSalary * 0.18
@@ -179,7 +175,6 @@ export default function PayrollRun() {
             payslip_number: payslipNumber,
             basic_salary: basicSalary,
             total_earnings: basicSalary,
-            total_taxable: basicSalary,
             paye_tax: paye,
             uif_contribution: uif,
             total_deductions: totalDeductions,
@@ -193,24 +188,15 @@ export default function PayrollRun() {
           .single()
 
         if (payslip) {
-          // Add earning line items
           await supabase.from('payslip_earnings').insert([
             { payslip_id: payslip.id, description: 'Basic Salary', amount: basicSalary, is_taxable: true, display_order: 1 }
           ])
-
-          // Add deduction line items
           await supabase.from('payslip_deductions').insert([
             { payslip_id: payslip.id, description: 'PAYE Tax', amount: paye, display_order: 1 },
             { payslip_id: payslip.id, description: 'UIF Contribution', amount: uif, display_order: 2 }
           ])
         }
       }
-
-      // Update run status
-      await supabase.from('payroll_runs').update({ 
-        status: 'completed', 
-        processed_at: new Date().toISOString() 
-      }).eq('id', run.id)
 
       toast.success(`Payroll processed! ${preview.employeeCount} payslips generated. ✅`)
       setStep(5)
@@ -222,7 +208,7 @@ export default function PayrollRun() {
     }
   }
 
-  const handleDownloadReport = async () => {
+  const handleDownloadReport = () => {
     const csvContent = [
       'Employee,Employee Code,Basic Salary,PAYE,UIF,Net Salary',
       ...preview.employees.map(emp => {
@@ -240,13 +226,12 @@ export default function PayrollRun() {
     toast.success('Report downloaded! 📥')
   }
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = () => {
     const data = preview.employees.map(emp => {
       const basic = emp.payroll_profiles?.[0]?.basic_salary || 0
       return {
         'Employee': `${emp.first_name} ${emp.last_name}`,
         'Employee Code': emp.employee_code,
-        'Department': emp.department || 'N/A',
         'Basic Salary': basic,
         'PAYE': (basic * 0.18).toFixed(2),
         'UIF': Math.min(basic * 0.01, 177.12).toFixed(2),
@@ -337,15 +322,11 @@ export default function PayrollRun() {
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm text-slate-500">Notes</label>
-                <textarea value={runData.notes} onChange={e => setRunData({...runData, notes: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl mt-1" placeholder="Optional notes..." />
+                <textarea value={runData.notes} onChange={e => setRunData({...runData, notes: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl mt-1" />
               </div>
             </div>
             <div className="flex justify-end mt-6">
-              <button 
-                onClick={() => { 
-                  if (runData.period_start && runData.period_end && runData.payment_date) setStep(2)
-                  else toast.error('Please fill in all required date fields') 
-                }}
+              <button onClick={() => { if (runData.period_start && runData.period_end && runData.payment_date) setStep(2); else toast.error('Please fill in all date fields') }}
                 className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center gap-2">
                 Next: Select Employees <ChevronRight className="w-4 h-4" />
               </button>
@@ -376,12 +357,9 @@ export default function PayrollRun() {
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {employees.map(emp => (
-                  <div key={emp.id} 
-                    onClick={() => handleToggleEmployee(emp.id)}
+                  <div key={emp.id} onClick={() => handleToggleEmployee(emp.id)}
                     className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors border ${
-                      selectedEmployees.includes(emp.id) 
-                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300' 
-                        : 'bg-slate-50 dark:bg-slate-700/30 border-transparent hover:bg-slate-100 dark:hover:bg-slate-600/30'
+                      selectedEmployees.includes(emp.id) ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300' : 'bg-slate-50 dark:bg-slate-700/30 border-transparent hover:bg-slate-100'
                     }`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
@@ -391,24 +369,18 @@ export default function PayrollRun() {
                       </div>
                       <div>
                         <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
-                        <p className="text-xs text-slate-500">{emp.employee_code} · {emp.position || 'No position'} · {emp.department || 'No dept'}</p>
+                        <p className="text-xs text-slate-500">{emp.employee_code} · {emp.position || 'No position'}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      {formatCurrency(emp.payroll_profiles?.[0]?.basic_salary || 0)}
-                    </span>
+                    <span className="text-sm font-semibold">{formatCurrency(emp.payroll_profiles?.[0]?.basic_salary || 0)}</span>
                   </div>
                 ))}
               </div>
             )}
 
             <div className="flex justify-between mt-6">
-              <button onClick={() => setStep(1)} className="px-6 py-3 bg-slate-200 dark:bg-slate-600 rounded-xl font-medium">
-                Back
-              </button>
-              <button 
-                onClick={handleGeneratePreview} 
-                disabled={selectedEmployees.length === 0 || processing}
+              <button onClick={() => setStep(1)} className="px-6 py-3 bg-slate-200 dark:bg-slate-600 rounded-xl font-medium">Back</button>
+              <button onClick={handleGeneratePreview} disabled={selectedEmployees.length === 0 || processing}
                 className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
                 {processing ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <Calculator className="w-4 h-4" />}
                 Generate Preview
@@ -422,14 +394,14 @@ export default function PayrollRun() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { icon: Users, label: 'Employees', value: preview.employeeCount, color: 'text-blue-600' },
-                { icon: TrendingUp, label: 'Total Gross', value: formatCurrency(preview.totalGross), color: 'text-emerald-600' },
-                { icon: TrendingDown, label: 'Total Deductions', value: formatCurrency(preview.totalDeductions), color: 'text-red-600' },
-                { icon: DollarSign, label: 'Total Net', value: formatCurrency(preview.totalNet), color: 'text-purple-600' },
+                { icon: Users, label: 'Employees', value: preview.employeeCount },
+                { icon: TrendingUp, label: 'Total Gross', value: formatCurrency(preview.totalGross) },
+                { icon: TrendingDown, label: 'Total Deductions', value: formatCurrency(preview.totalDeductions) },
+                { icon: DollarSign, label: 'Total Net', value: formatCurrency(preview.totalNet) },
               ].map(s => (
                 <div key={s.label} className="neu-raised rounded-2xl p-4 text-center">
-                  <s.icon className={`w-6 h-6 ${s.color} mx-auto mb-2`} />
-                  <p className="text-lg font-bold text-slate-800 dark:text-white">{s.value}</p>
+                  <s.icon className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
+                  <p className="text-lg font-bold">{s.value}</p>
                   <p className="text-xs text-slate-500">{s.label}</p>
                 </div>
               ))}
@@ -440,22 +412,20 @@ export default function PayrollRun() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-slate-50 dark:bg-slate-700/30">
+                    <tr className="border-b bg-slate-50">
                       <th className="text-left py-2 px-3">Employee</th>
-                      <th className="text-left py-2 px-3">Code</th>
-                      <th className="text-right py-2 px-3">Basic Salary</th>
+                      <th className="text-right py-2 px-3">Basic</th>
                       <th className="text-right py-2 px-3">PAYE</th>
                       <th className="text-right py-2 px-3">UIF</th>
-                      <th className="text-right py-2 px-3">Net Pay</th>
+                      <th className="text-right py-2 px-3">Net</th>
                     </tr>
                   </thead>
                   <tbody>
                     {preview.employees.map(emp => {
                       const basic = emp.payroll_profiles?.[0]?.basic_salary || 0
                       return (
-                        <tr key={emp.id} className="border-b hover:bg-slate-50">
-                          <td className="py-2 px-3 font-medium">{emp.first_name} {emp.last_name}</td>
-                          <td className="py-2 px-3 text-xs text-slate-500">{emp.employee_code}</td>
+                        <tr key={emp.id} className="border-b">
+                          <td className="py-2 px-3">{emp.first_name} {emp.last_name}</td>
                           <td className="py-2 px-3 text-right">{formatCurrency(basic)}</td>
                           <td className="py-2 px-3 text-right text-red-600">-{formatCurrency(basic * 0.18)}</td>
                           <td className="py-2 px-3 text-right text-red-600">-{formatCurrency(Math.min(basic * 0.01, 177.12))}</td>
@@ -464,20 +434,12 @@ export default function PayrollRun() {
                       )
                     })}
                   </tbody>
-                  <tfoot>
-                    <tr className="font-bold bg-slate-50 dark:bg-slate-700/30">
-                      <td className="py-2 px-3" colSpan={3}>Totals</td>
-                      <td className="py-2 px-3 text-right text-red-600">-{formatCurrency(preview.totalDeductions)}</td>
-                      <td className="py-2 px-3"></td>
-                      <td className="py-2 px-3 text-right text-emerald-600 text-lg">{formatCurrency(preview.totalNet)}</td>
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
             </div>
 
             <div className="flex justify-between">
-              <button onClick={() => setStep(2)} className="px-6 py-3 bg-slate-200 dark:bg-slate-600 rounded-xl font-medium">Back</button>
+              <button onClick={() => setStep(2)} className="px-6 py-3 bg-slate-200 rounded-xl font-medium">Back</button>
               <button onClick={handleProcessPayroll} disabled={processing}
                 className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
                 {processing ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <Play className="w-5 h-5" />}
@@ -491,21 +453,17 @@ export default function PayrollRun() {
         {step === 5 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-8 text-center">
             <CheckCircle2 className="w-20 h-20 text-emerald-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Payroll Processed Successfully! 🎉</h2>
-            <p className="text-slate-500 mb-2">{preview?.employeeCount || 0} payslips generated</p>
-            <p className="text-sm text-slate-400 mb-6">Period: {runData.period_start} to {runData.period_end}</p>
+            <h2 className="text-2xl font-bold mb-2">Payroll Processed! 🎉</h2>
+            <p className="text-slate-500 mb-6">{preview?.employeeCount || 0} payslips generated</p>
             <div className="flex justify-center gap-4 flex-wrap">
-              <button onClick={handleDownloadReport} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-blue-700">
+              <button onClick={handleDownloadReport} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2">
                 <Download className="w-5 h-5" /> Download CSV
               </button>
-              <button onClick={handleExportExcel} className="px-6 py-3 bg-green-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-green-700">
+              <button onClick={handleExportExcel} className="px-6 py-3 bg-green-600 text-white rounded-xl font-medium flex items-center gap-2">
                 <FileText className="w-5 h-5" /> Export Excel
               </button>
-              <button onClick={() => navigate('/payroll/payslips')} className="px-6 py-3 bg-purple-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-purple-700">
+              <button onClick={() => navigate('/payroll/payslips')} className="px-6 py-3 bg-purple-600 text-white rounded-xl font-medium flex items-center gap-2">
                 <FileText className="w-5 h-5" /> View Payslips
-              </button>
-              <button onClick={() => { setStep(1); setSelectedEmployees([]); setPreview(null) }} className="px-6 py-3 bg-slate-600 text-white rounded-xl font-medium hover:bg-slate-700">
-                Run Another
               </button>
             </div>
           </motion.div>
