@@ -4,6 +4,8 @@ import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import usePayrollStore from '../store/payrollStore'
 import useThemeStore from '../../../store/themeStore'
+import { supabase } from '../../../lib/supabaseClient'
+import toast from 'react-hot-toast'
 import { 
   CreditCard, DollarSign, FileText, Clock, Users,
   TrendingUp, TrendingDown, Calculator, Calendar,
@@ -16,7 +18,8 @@ export default function PayrollDashboard() {
   const { stats, fetchPayrollStats, fetchPayrollPeriods, fetchPayslips, loading } = usePayrollStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const [monthlyData, setMonthlyData] = useState([])
+  const [recentRuns, setRecentRuns] = useState([])
+  const [recentPayslips, setRecentPayslips] = useState([])
 
   useEffect(() => {
     loadData()
@@ -26,6 +29,34 @@ export default function PayrollDashboard() {
     await fetchPayrollStats()
     await fetchPayrollPeriods()
     await fetchPayslips()
+    await loadRecentRuns()
+    await loadRecentPayslips()
+  }
+
+  const loadRecentRuns = async () => {
+    try {
+      const { data } = await supabase
+        .from('payroll_runs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      setRecentRuns(data || [])
+    } catch (error) {
+      console.error('Error loading runs:', error)
+    }
+  }
+
+  const loadRecentPayslips = async () => {
+    try {
+      const { data } = await supabase
+        .from('payslips')
+        .select('*, employees(first_name, last_name, employee_code)')
+        .order('created_at', { ascending: false })
+        .limit(5)
+      setRecentPayslips(data || [])
+    } catch (error) {
+      console.error('Error loading payslips:', error)
+    }
   }
 
   const formatCurrency = (amount) => {
@@ -71,7 +102,6 @@ export default function PayrollDashboard() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Main Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <CreditCard className="w-8 h-8 text-emerald-600" />
@@ -106,54 +136,72 @@ export default function PayrollDashboard() {
           ))}
         </div>
 
-        {/* Current Period & Recent Activity */}
+        {/* Recent Runs & Recent Payslips */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Current Period */}
+          {/* Recent Payroll Runs */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
             className="neu-raised rounded-3xl p-6">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-emerald-600" />Current Payroll Period
-            </h2>
-            {stats.currentPeriod ? (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />Recent Payroll Runs
+              </h2>
+              <Link to="/payroll/run" className="text-sm text-emerald-600 hover:underline">Run Payroll</Link>
+            </div>
+            {recentRuns.length > 0 ? (
               <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
-                  <span className="text-sm text-slate-500">Period</span>
-                  <span className="font-semibold">{stats.currentPeriod.period_name}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
-                  <span className="text-sm text-slate-500">Status</span>
-                  <span className={`px-2 py-1 rounded-full text-xs ${stats.currentPeriod.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {stats.currentPeriod.status}
-                  </span>
-                </div>
-                <button onClick={() => navigate('/payroll/run')} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700">
-                  Process Payroll
-                </button>
+                {recentRuns.map(run => (
+                  <div key={run.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
+                    <div>
+                      <p className="font-medium text-sm text-slate-800 dark:text-white">{run.run_number}</p>
+                      <p className="text-xs text-slate-500">{run.period_start} to {run.period_end} · {run.total_employees} employees</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-emerald-600 text-sm">{formatCurrency(run.total_net)}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        run.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      }`}>{run.status}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No active payroll period</p>
-                <button onClick={() => navigate('/payroll/run/new')} className="mt-3 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm">Create Period</button>
+              <div className="text-center py-8">
+                <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-slate-500">No payroll runs yet</p>
               </div>
             )}
           </motion.div>
 
-          {/* Recent Activity */}
+          {/* Recent Payslips */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
             className="neu-raised rounded-3xl p-6">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-600" />Recent Activity
-            </h2>
-            <div className="space-y-2">
-              {[1,2,3,4,5].map(i => (
-                <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/30 text-sm">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                  <span className="text-slate-600 dark:text-slate-400">Payroll processed for March 2025</span>
-                  <span className="text-xs text-slate-400 ml-auto">2 days ago</span>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600" />Recent Payslips
+              </h2>
+              <Link to="/payroll/payslips" className="text-sm text-emerald-600 hover:underline">View All</Link>
             </div>
+            {recentPayslips.length > 0 ? (
+              <div className="space-y-3">
+                {recentPayslips.map(ps => (
+                  <div key={ps.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
+                    <div>
+                      <p className="font-medium text-sm">{ps.employees?.first_name} {ps.employees?.last_name}</p>
+                      <p className="text-xs text-slate-500">{ps.payslip_number}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-emerald-600 text-sm">{formatCurrency(ps.net_salary)}</p>
+                      <span className="text-xs text-slate-400">{ps.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-slate-500">No payslips generated yet</p>
+              </div>
+            )}
           </motion.div>
         </div>
       </main>
