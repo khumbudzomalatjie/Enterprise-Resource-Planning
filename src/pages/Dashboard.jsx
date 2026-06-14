@@ -30,7 +30,8 @@ export default function Dashboard() {
     { id: 'hr', label: 'Human Resources', icon: '👥' },
   ]
 
-  const modules = [
+  // ALL modules defined
+  const allModules = [
     { icon: Users, label: 'Human Resources', description: 'Staff lifecycle, recruitment', path: '/hr', roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER] },
     { icon: CreditCard, label: 'Payroll', description: 'Salary, taxes, compliance', path: '/payroll', roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER] },
     { icon: TrendingUp, label: 'CRM & Clients', description: 'Client management, pipeline', path: '/crm', roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SALES_AGENT] },
@@ -47,21 +48,18 @@ export default function Dashboard() {
     { icon: Smartphone, label: 'Field Operations', description: 'Monitor cleaners, photos, incidents, supplies', path: '/mobile/field', roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR] },
   ]
 
+  // FILTER: Only show modules the user has access to
+  const modules = allModules.filter(module => {
+    if (userRole === USER_ROLES.SUPER_ADMIN) return true
+    return module.roles.includes(userRole)
+  })
+
   const isModuleBuilt = (module) => {
     const builtModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field']
     return builtModules.includes(module.path)
   }
 
-  const isModuleAccessible = (module) => {
-    return module.roles.includes(userRole) || userRole === USER_ROLES.SUPER_ADMIN
-  }
-
   const handleModuleClick = (module) => {
-    const hasAccess = isModuleAccessible(module)
-    if (!hasAccess) {
-      toast.error(`You don't have access to ${module.label}`)
-      return
-    }
     const availableModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field', '/dashboard', '/users']
     if (availableModules.includes(module.path)) {
       navigate(module.path)
@@ -113,27 +111,27 @@ export default function Dashboard() {
         <div className="mb-12">
           <div className="flex items-center gap-2 mb-5">
             <BarChart3 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-xl font-semibold tracking-tight text-slate-700 dark:text-slate-100">Core & Extended Modules</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-700 dark:text-slate-100">
+              Your Modules ({modules.length})
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {modules.map((module, index) => {
-              const accessible = isModuleAccessible(module)
               const built = isModuleBuilt(module)
               return (
                 <motion.div key={module.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
                   onClick={() => handleModuleClick(module)}
-                  className={`neu-raised rounded-2xl p-5 transition-all flex items-start gap-3 ${accessible && built ? 'cursor-pointer hover:scale-[1.02] hover:shadow-lg' : accessible && !built ? 'cursor-pointer hover:scale-[1.02] opacity-75' : 'opacity-40 cursor-not-allowed'}`}
-                  title={!accessible ? 'You do not have access to this module' : !built ? 'Coming soon!' : `Go to ${module.label}`}>
-                  <module.icon className={`w-8 h-8 flex-shrink-0 ${accessible ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+                  className={`neu-raised rounded-2xl p-5 transition-all flex items-start gap-3 cursor-pointer hover:scale-[1.02] hover:shadow-lg ${!built ? 'opacity-75' : ''}`}
+                  title={!built ? 'Coming soon!' : `Go to ${module.label}`}>
+                  <module.icon className="w-8 h-8 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className={`font-bold text-lg ${accessible ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{module.label}</h3>
-                      {built && accessible && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Available"></span>}
-                      {!accessible && <Shield className="w-4 h-4 text-slate-400" title="Restricted access" />}
+                      <h3 className="font-bold text-lg text-slate-800 dark:text-white">{module.label}</h3>
+                      {built && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Available"></span>}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{module.description}</p>
-                    {!built && accessible && <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Coming Soon</span>}
+                    {!built && <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Coming Soon</span>}
                   </div>
                 </motion.div>
               )
