@@ -146,36 +146,25 @@ export default function PayslipList() {
             <button onClick={loadPayslips} className="px-4 py-2 bg-slate-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-slate-700">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
-            <button onClick={handleExportAllCSV} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
-              Export CSV
-            </button>
-            <button onClick={handleExportAllExcel} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700">
-              Export Excel
-            </button>
+            <button onClick={handleExportAllCSV} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">Export CSV</button>
+            <button onClick={handleExportAllExcel} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700">Export Excel</button>
           </div>
         </motion.div>
 
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by payslip number, employee name or code..."
-              className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search payslips..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
           </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-500">Loading payslips...</p>
-          </div>
+          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
         ) : filteredPayslips.length === 0 ? (
           <div className="neu-raised rounded-3xl p-12 text-center">
             <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 text-lg mb-2">No payslips found</p>
-            <p className="text-slate-400 text-sm mb-4">Run payroll to generate payslips</p>
-            <button onClick={() => navigate('/payroll/run')} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium">
-              Run Payroll
-            </button>
+            <button onClick={() => navigate('/payroll/run')} className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium">Run Payroll</button>
           </div>
         ) : (
           <div className="neu-raised rounded-3xl overflow-hidden">
@@ -196,33 +185,25 @@ export default function PayslipList() {
                 </thead>
                 <tbody>
                   {filteredPayslips.map(p => (
-                    <tr key={p.id} className="border-b hover:bg-slate-50 dark:hover:bg-slate-700/20">
+                    <tr key={p.id} className="border-b hover:bg-slate-50">
                       <td className="py-3 px-4 font-mono text-xs">{p.payslip_number}</td>
                       <td className="py-3 px-4 font-medium">{p.employees?.first_name} {p.employees?.last_name}</td>
                       <td className="py-3 px-4 text-xs text-slate-500">{p.employees?.employee_code || 'N/A'}</td>
-                      <td className="py-3 px-4 text-xs">
-                        {p.payroll_runs?.period_start ? `${p.payroll_runs.period_start} - ${p.payroll_runs.period_end}` : 'N/A'}
-                      </td>
+                      <td className="py-3 px-4 text-xs">{p.payroll_runs?.period_start ? `${p.payroll_runs.period_start} - ${p.payroll_runs.period_end}` : 'N/A'}</td>
                       <td className="py-3 px-4 text-right">{formatCurrency(p.total_earnings)}</td>
                       <td className="py-3 px-4 text-right text-red-600">-{formatCurrency(p.total_deductions)}</td>
                       <td className="py-3 px-4 text-right font-bold text-emerald-600">{formatCurrency(p.net_salary)}</td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-xs ${p.status === 'paid' || p.status === 'finalized' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {p.status || 'draft'}
-                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs ${p.status === 'paid' || p.status === 'finalized' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{p.status || 'draft'}</span>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex justify-center gap-1">
-                          <button onClick={() => navigate(`/payroll/payslips/${p.id}`)} className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
-                            <Eye className="w-4 h-4" />
-                          </button>
+                          <button onClick={() => navigate(`/payroll/payslips/${p.id}`)} className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View"><Eye className="w-4 h-4" /></button>
                           <button onClick={() => handleDownloadSingle(p)} disabled={downloadingId === p.id}
                             className="p-1.5 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Download PDF">
                             {downloadingId === p.id ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div> : <Download className="w-4 h-4" />}
                           </button>
-                          <button onClick={() => window.print()} className="p-1.5 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Print">
-                            <Printer className="w-4 h-4" />
-                          </button>
+                          <button onClick={() => window.print()} className="p-1.5 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Print"><Printer className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
@@ -234,28 +215,24 @@ export default function PayslipList() {
         )}
       </main>
 
-      {/* Hidden mini payslips for PDF download */}
+      {/* Hidden payslips for PDF */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
         {payslips.map(p => (
           <div key={p.id} id={`payslip-mini-${p.id}`} className="bg-white p-6" style={{ width: '210mm', minHeight: '150mm' }}>
             <div className="border-b-2 border-blue-600 pb-3 mb-4">
               <h2 className="text-xl font-bold text-blue-800">NDANDULENI GROUP</h2>
-              <p className="text-sm font-bold">PAYSLIP</p>
-              <p className="text-xs">#{p.payslip_number}</p>
+              <p className="text-sm font-bold">PAYSLIP #{p.payslip_number}</p>
             </div>
-            <div className="mb-4">
-              <p className="font-bold">{p.employees?.first_name} {p.employees?.last_name}</p>
-              <p className="text-xs">Employee Code: {p.employees?.employee_code}</p>
-              <p className="text-xs">Period: {p.payroll_runs?.period_start} to {p.payroll_runs?.period_end}</p>
-            </div>
-            <table className="w-full text-sm mb-4">
+            <p className="font-bold">{p.employees?.first_name} {p.employees?.last_name}</p>
+            <p className="text-xs">Code: {p.employees?.employee_code}</p>
+            <table className="w-full text-sm mb-4 mt-3">
               <thead><tr className="bg-gray-100"><th className="text-left p-1">Description</th><th className="text-right p-1">Amount</th></tr></thead>
               <tbody>
                 <tr><td className="p-1">Basic Salary</td><td className="text-right p-1">{formatCurrency(p.basic_salary)}</td></tr>
-                <tr className="font-bold bg-green-50"><td className="p-1">Total Earnings</td><td className="text-right p-1">{formatCurrency(p.total_earnings)}</td></tr>
-                <tr><td className="p-1 text-red-600">PAYE Tax</td><td className="text-right p-1 text-red-600">-{formatCurrency(p.paye_tax)}</td></tr>
+                <tr className="font-bold bg-green-50"><td className="p-1">Gross</td><td className="text-right p-1">{formatCurrency(p.total_earnings)}</td></tr>
+                <tr><td className="p-1 text-red-600">PAYE</td><td className="text-right p-1 text-red-600">-{formatCurrency(p.paye_tax)}</td></tr>
                 <tr><td className="p-1 text-red-600">UIF</td><td className="text-right p-1 text-red-600">-{formatCurrency(p.uif_contribution)}</td></tr>
-                <tr className="font-bold bg-red-50"><td className="p-1">Total Deductions</td><td className="text-right p-1 text-red-600">-{formatCurrency(p.total_deductions)}</td></tr>
+                <tr className="font-bold bg-red-50"><td className="p-1">Deductions</td><td className="text-right p-1 text-red-600">-{formatCurrency(p.total_deductions)}</td></tr>
               </tbody>
             </table>
             <div className="bg-blue-600 text-white p-3 rounded flex justify-between font-bold text-lg">
