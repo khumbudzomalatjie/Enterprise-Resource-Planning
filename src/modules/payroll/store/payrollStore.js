@@ -3,152 +3,195 @@ import { payrollApi } from '../api/payrollApi'
 
 const usePayrollStore = create((set, get) => ({
   // State
+  employees: [],
+  selectedEmployee: null,
+  payrollProfiles: [],
   salaryStructures: [],
   payslips: [],
   selectedPayslip: null,
+  payrollRuns: [],
+  currentRun: null,
   overtimeRecords: [],
   payrollPeriods: [],
   currentPeriod: null,
   taxBrackets: [],
+  earningTypes: [],
   deductionTypes: [],
+  employeeEarnings: [],
   employeeDeductions: [],
+  leaveBalances: [],
+  attendanceRecords: [],
   bonusRecords: [],
+  auditLogs: [],
+  notifications: [],
   stats: {},
   loading: false,
   error: null,
 
-  // Salary Structure Actions
-  fetchSalaryStructures: async (filters = {}) => {
-    const { data, error } = await payrollApi.getSalaryStructures(filters)
-    if (error) return { success: false, error: error.message }
-    set({ salaryStructures: data })
+  // Employee Actions
+  fetchEmployees: async (filters = {}) => {
+    set({ loading: true })
+    const { data, error } = await payrollApi.getEmployees(filters)
+    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    set({ employees: data || [], loading: false })
     return { success: true, data }
   },
 
-  createSalaryStructure: async (salaryData) => {
-    const { data, error } = await payrollApi.createSalaryStructure(salaryData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ salaryStructures: [data, ...state.salaryStructures] }))
+  fetchEmployee: async (id) => {
+    const { data, error } = await payrollApi.getEmployee(id)
+    if (error) return { success: false }
+    set({ selectedEmployee: data })
     return { success: true, data }
   },
 
-  updateSalaryStructure: async (id, updates) => {
-    const { data, error } = await payrollApi.updateSalaryStructure(id, updates)
-    if (error) return { success: false, error: error.message }
-    set(state => ({
-      salaryStructures: state.salaryStructures.map(s => s.id === id ? data : s)
-    }))
+  // Payroll Profile Actions
+  fetchPayrollProfile: async (employeeId) => {
+    const { data, error } = await payrollApi.getPayrollProfile(employeeId)
+    if (error) return { success: false }
+    set(state => ({ payrollProfiles: [...state.payrollProfiles.filter(p => p.employee_id !== employeeId), data] }))
     return { success: true, data }
+  },
+
+  createPayrollProfile: async (profileData) => {
+    const { data, error } = await payrollApi.createPayrollProfile(profileData)
+    if (error) return { success: false, error: error.message }
+    set(state => ({ payrollProfiles: [data, ...state.payrollProfiles] }))
+    return { success: true, data }
+  },
+
+  updatePayrollProfile: async (id, updates) => {
+    const { data, error } = await payrollApi.updatePayrollProfile(id, updates)
+    if (error) return { success: false }
+    set(state => ({ payrollProfiles: state.payrollProfiles.map(p => p.id === id ? data : p) }))
+    return { success: true }
+  },
+
+  // Earning Type Actions
+  fetchEarningTypes: async () => {
+    const { data } = await payrollApi.getEarningTypes()
+    set({ earningTypes: data || [] })
+    return data
+  },
+
+  createEarningType: async (earningData) => {
+    const { data, error } = await payrollApi.createEarningType(earningData)
+    if (error) return { success: false }
+    set(state => ({ earningTypes: [data, ...state.earningTypes] }))
+    return { success: true, data }
+  },
+
+  // Deduction Type Actions
+  fetchDeductionTypes: async () => {
+    const { data } = await payrollApi.getDeductionTypes()
+    set({ deductionTypes: data || [] })
+    return data
+  },
+
+  createDeductionType: async (deductionData) => {
+    const { data, error } = await payrollApi.createDeductionType(deductionData)
+    if (error) return { success: false }
+    set(state => ({ deductionTypes: [data, ...state.deductionTypes] }))
+    return { success: true, data }
+  },
+
+  // Employee Earnings
+  fetchEmployeeEarnings: async (profileId) => {
+    const { data } = await payrollApi.getEmployeeEarnings(profileId)
+    set({ employeeEarnings: data || [] })
+    return data
+  },
+
+  addEmployeeEarning: async (earningData) => {
+    const { data, error } = await payrollApi.addEmployeeEarning(earningData)
+    if (error) return { success: false }
+    set(state => ({ employeeEarnings: [data, ...state.employeeEarnings] }))
+    return { success: true, data }
+  },
+
+  // Employee Deductions
+  fetchEmployeeDeductions: async (profileId) => {
+    const { data } = await payrollApi.getEmployeeDeductions(profileId)
+    set({ employeeDeductions: data || [] })
+    return data
+  },
+
+  addEmployeeDeduction: async (deductionData) => {
+    const { data, error } = await payrollApi.addEmployeeDeduction(deductionData)
+    if (error) return { success: false }
+    set(state => ({ employeeDeductions: [data, ...state.employeeDeductions] }))
+    return { success: true, data }
+  },
+
+  // Payroll Run Actions
+  fetchPayrollRuns: async () => {
+    const { data } = await payrollApi.getPayrollRuns()
+    set({ payrollRuns: data || [] })
+    return data
+  },
+
+  createPayrollRun: async (runData) => {
+    const { data, error } = await payrollApi.createPayrollRun(runData)
+    if (error) return { success: false, error: error.message }
+    set(state => ({ payrollRuns: [data, ...state.payrollRuns], currentRun: data }))
+    return { success: true, data }
+  },
+
+  processPayroll: async (runId) => {
+    set({ loading: true })
+    const { data, error } = await payrollApi.processPayroll(runId)
+    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    set({ currentRun: data, loading: false })
+    return { success: true, data }
+  },
+
+  approvePayroll: async (runId) => {
+    const { data, error } = await payrollApi.approvePayroll(runId)
+    if (error) return { success: false }
+    set(state => ({ payrollRuns: state.payrollRuns.map(r => r.id === runId ? data : r) }))
+    return { success: true }
   },
 
   // Payslip Actions
   fetchPayslips: async (filters = {}) => {
     set({ loading: true })
     const { data, error } = await payrollApi.getPayslips(filters)
-    if (error) {
-      set({ error: error.message, loading: false })
-      return { success: false, error: error.message }
-    }
-    set({ payslips: data, loading: false })
+    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    set({ payslips: data || [], loading: false })
     return { success: true, data }
   },
 
   fetchPayslip: async (id) => {
     const { data, error } = await payrollApi.getPayslip(id)
-    if (error) return { success: false, error: error.message }
+    if (error) return { success: false }
     set({ selectedPayslip: data })
     return { success: true, data }
   },
 
-  createPayslip: async (payslipData) => {
-    const { data, error } = await payrollApi.createPayslip(payslipData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ payslips: [data, ...state.payslips] }))
+  generatePayslip: async (runId, employeeId) => {
+    const { data, error } = await payrollApi.generatePayslip(runId, employeeId)
+    if (error) return { success: false }
     return { success: true, data }
   },
 
-  // Overtime Actions
-  fetchOvertimeRecords: async (filters = {}) => {
-    const { data, error } = await payrollApi.getOvertimeRecords(filters)
-    if (error) return { success: false, error: error.message }
-    set({ overtimeRecords: data })
-    return { success: true, data }
+  // Leave Balance Actions
+  fetchLeaveBalances: async (employeeId) => {
+    const { data } = await payrollApi.getLeaveBalances(employeeId)
+    set({ leaveBalances: data || [] })
+    return data
   },
 
-  createOvertimeRecord: async (overtimeData) => {
-    const { data, error } = await payrollApi.createOvertimeRecord(overtimeData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ overtimeRecords: [data, ...state.overtimeRecords] }))
-    return { success: true, data }
+  // Attendance Actions
+  fetchAttendanceRecords: async (employeeId, dateFrom, dateTo) => {
+    const { data } = await payrollApi.getAttendanceRecords(employeeId, dateFrom, dateTo)
+    set({ attendanceRecords: data || [] })
+    return data
   },
 
-  updateOvertimeRecord: async (id, updates) => {
-    const { data, error } = await payrollApi.updateOvertimeRecord(id, updates)
-    if (error) return { success: false, error: error.message }
-    set(state => ({
-      overtimeRecords: state.overtimeRecords.map(o => o.id === id ? data : o)
-    }))
-    return { success: true, data }
-  },
-
-  // Payroll Period Actions
-  fetchPayrollPeriods: async () => {
-    const { data, error } = await payrollApi.getPayrollPeriods()
-    if (error) return { success: false, error: error.message }
-    set({ payrollPeriods: data, currentPeriod: data?.[0] || null })
-    return { success: true, data }
-  },
-
-  createPayrollPeriod: async (periodData) => {
-    const { data, error } = await payrollApi.createPayrollPeriod(periodData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ payrollPeriods: [data, ...state.payrollPeriods] }))
-    return { success: true, data }
-  },
-
-  // Tax Actions
-  fetchTaxBrackets: async (taxYear) => {
-    const { data, error } = await payrollApi.getTaxBrackets(taxYear)
-    if (error) return { success: false, error: error.message }
-    set({ taxBrackets: data })
-    return { success: true, data }
-  },
-
-  // Deduction Actions
-  fetchDeductionTypes: async () => {
-    const { data, error } = await payrollApi.getDeductionTypes()
-    if (error) return { success: false, error: error.message }
-    set({ deductionTypes: data })
-    return { success: true, data }
-  },
-
-  fetchEmployeeDeductions: async (employeeId) => {
-    const { data, error } = await payrollApi.getEmployeeDeductions(employeeId)
-    if (error) return { success: false, error: error.message }
-    set({ employeeDeductions: data })
-    return { success: true, data }
-  },
-
-  createEmployeeDeduction: async (deductionData) => {
-    const { data, error } = await payrollApi.createEmployeeDeduction(deductionData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ employeeDeductions: [data, ...state.employeeDeductions] }))
-    return { success: true, data }
-  },
-
-  // Bonus Actions
-  fetchBonusRecords: async (filters = {}) => {
-    const { data, error } = await payrollApi.getBonusRecords(filters)
-    if (error) return { success: false, error: error.message }
-    set({ bonusRecords: data })
-    return { success: true, data }
-  },
-
-  createBonusRecord: async (bonusData) => {
-    const { data, error } = await payrollApi.createBonusRecord(bonusData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ bonusRecords: [data, ...state.bonusRecords] }))
-    return { success: true, data }
+  // Audit Actions
+  fetchAuditLogs: async (filters = {}) => {
+    const { data } = await payrollApi.getAuditLogs(filters)
+    set({ auditLogs: data || [] })
+    return data
   },
 
   // Stats
