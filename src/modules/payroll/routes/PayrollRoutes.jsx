@@ -4,6 +4,8 @@ import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import PayrollDashboard from '../pages/PayrollDashboard'
 import EmployeePayrollList from '../pages/EmployeePayrollList'
 import PayslipList from '../pages/PayslipList'
+import PayslipView from '../pages/PayslipView'
+import PayrollRun from '../pages/PayrollRun'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function PayrollRoutes() {
@@ -20,11 +22,11 @@ export default function PayrollRoutes() {
       
       {/* Payslips */}
       <Route path="/payslips" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayslipList /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/payslips/:id" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollDashboard /></RoleBasedRoute></ProtectedRoute>} />
+      <Route path="/payslips/:id" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayslipView /></RoleBasedRoute></ProtectedRoute>} />
       
       {/* Payroll Run */}
-      <Route path="/run" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollDashboard /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/run/new" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollDashboard /></RoleBasedRoute></ProtectedRoute>} />
+      <Route path="/run" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollRun /></RoleBasedRoute></ProtectedRoute>} />
+      <Route path="/run/new" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollRun /></RoleBasedRoute></ProtectedRoute>} />
       
       {/* Reports */}
       <Route path="/reports" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allowedRoles}><PayrollDashboard /></RoleBasedRoute></ProtectedRoute>} />
