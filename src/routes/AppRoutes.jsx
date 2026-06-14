@@ -51,11 +51,6 @@ export default function AppRoutes() {
       />
       
       {/* ============================================ */}
-      {/* MODULE 0 - AUTHENTICATION & ACCESS CONTROL   */}
-      {/* (Handled by Supabase Auth + ProtectedRoute)  */}
-      {/* ============================================ */}
-      
-      {/* ============================================ */}
       {/* MODULE 1 - HR MANAGEMENT                     */}
       {/* Access: Super Admin, HR Manager, Ops Manager */}
       {/* ============================================ */}
@@ -63,7 +58,13 @@ export default function AppRoutes() {
         path="/hr/*" 
         element={
           <ProtectedRoute>
-            <HRRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.HR_MANAGER, 
+              USER_ROLES.OPERATIONS_MANAGER
+            ]}>
+              <HRRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -76,7 +77,13 @@ export default function AppRoutes() {
         path="/payroll/*" 
         element={
           <ProtectedRoute>
-            <PayrollRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.FINANCE_OFFICER, 
+              USER_ROLES.HR_MANAGER
+            ]}>
+              <PayrollRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -94,7 +101,13 @@ export default function AppRoutes() {
         path="/crm/*" 
         element={
           <ProtectedRoute>
-            <CRMRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SALES_AGENT
+            ]}>
+              <CRMRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -107,7 +120,14 @@ export default function AppRoutes() {
         path="/sales/*" 
         element={
           <ProtectedRoute>
-            <SalesRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SALES_AGENT,
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <SalesRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -120,7 +140,13 @@ export default function AppRoutes() {
         path="/operations/*" 
         element={
           <ProtectedRoute>
-            <OperationsRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SUPERVISOR
+            ]}>
+              <OperationsRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -133,7 +159,13 @@ export default function AppRoutes() {
         path="/inventory/*" 
         element={
           <ProtectedRoute>
-            <InventoryRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SUPERVISOR
+            ]}>
+              <InventoryRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -146,7 +178,13 @@ export default function AppRoutes() {
         path="/procurement/*" 
         element={
           <ProtectedRoute>
-            <ProcurementRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <ProcurementRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -159,7 +197,13 @@ export default function AppRoutes() {
         path="/finance/*" 
         element={
           <ProtectedRoute>
-            <FinanceRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.FINANCE_OFFICER, 
+              USER_ROLES.OPERATIONS_MANAGER
+            ]}>
+              <FinanceRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -172,7 +216,13 @@ export default function AppRoutes() {
         path="/fleet/*" 
         element={
           <ProtectedRoute>
-            <FleetRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SUPERVISOR
+            ]}>
+              <FleetRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -185,7 +235,14 @@ export default function AppRoutes() {
         path="/reports/*" 
         element={
           <ProtectedRoute>
-            <ReportsRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.FINANCE_OFFICER,
+              USER_ROLES.HR_MANAGER
+            ]}>
+              <ReportsRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -198,20 +255,32 @@ export default function AppRoutes() {
         path="/workflow/*" 
         element={
           <ProtectedRoute>
-            <WorkflowRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <WorkflowRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
       {/* MODULE 17 - DOCUMENT MANAGEMENT              */}
-      {/* Access: All authenticated users              */}
+      {/* Access: Super Admin, Ops Manager, HR Manager */}
       {/* ============================================ */}
       <Route 
         path="/documents/*" 
         element={
           <ProtectedRoute>
-            <DocumentsRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.HR_MANAGER
+            ]}>
+              <DocumentsRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
@@ -224,20 +293,33 @@ export default function AppRoutes() {
         path="/assets/*" 
         element={
           <ProtectedRoute>
-            <AssetsRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <AssetsRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
       {/* MODULE 14 - MOBILE WORKFORCE                 */}
-      {/* Access: All authenticated (Cleaner focused)  */}
+      {/* Access: Super Admin, Ops Mgr, Supervisor, Cleaner */}
       {/* ============================================ */}
       <Route 
         path="/mobile/*" 
         element={
           <ProtectedRoute>
-            <MobileRoutes />
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SUPERVISOR,
+              USER_ROLES.CLEANER
+            ]}>
+              <MobileRoutes />
+            </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
