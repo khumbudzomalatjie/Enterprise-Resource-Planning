@@ -22,58 +22,29 @@ export const ROLE_HIERARCHY = {
 
 export const ROLE_PERMISSIONS = {
   [USER_ROLES.SUPER_ADMIN]: [
-    'view_dashboard',
-    'manage_users',
-    'manage_roles',
-    'view_audit_logs',
-    'manage_settings',
-    'view_all_data',
-    'export_data',
-    'manage_permissions'
+    'view_dashboard', 'manage_users', 'manage_roles', 'view_audit_logs',
+    'manage_settings', 'view_all_data', 'export_data', 'manage_permissions'
   ],
   [USER_ROLES.OPERATIONS_MANAGER]: [
-    'view_dashboard',
-    'manage_operations',
-    'view_reports',
-    'manage_scheduling',
-    'view_employees'
+    'view_dashboard', 'manage_operations', 'view_reports', 'manage_scheduling', 'view_employees'
   ],
   [USER_ROLES.HR_MANAGER]: [
-    'view_dashboard',
-    'manage_employees',
-    'view_reports',
-    'manage_leave',
-    'manage_training'
+    'view_dashboard', 'manage_employees', 'view_reports', 'manage_leave', 'manage_training'
   ],
   [USER_ROLES.FINANCE_OFFICER]: [
-    'view_dashboard',
-    'manage_finance',
-    'view_reports',
-    'manage_payroll',
-    'manage_invoices'
+    'view_dashboard', 'manage_finance', 'view_reports', 'manage_payroll', 'manage_invoices'
   ],
   [USER_ROLES.SUPERVISOR]: [
-    'view_dashboard',
-    'view_employees',
-    'manage_attendance',
-    'view_reports'
+    'view_dashboard', 'view_employees', 'manage_attendance', 'view_reports'
   ],
   [USER_ROLES.CLEANER]: [
-    'view_dashboard',
-    'view_own_profile',
-    'clock_in_out',
-    'view_schedule'
+    'view_dashboard', 'view_own_profile', 'clock_in_out', 'view_schedule'
   ],
   [USER_ROLES.SALES_AGENT]: [
-    'view_dashboard',
-    'manage_clients',
-    'view_reports',
-    'create_quotations'
+    'view_dashboard', 'manage_clients', 'view_reports', 'create_quotations'
   ],
   [USER_ROLES.CUSTOMER]: [
-    'view_portal',
-    'view_own_services',
-    'submit_feedback'
+    'view_portal', 'view_own_services', 'submit_feedback'
   ],
 }
 
