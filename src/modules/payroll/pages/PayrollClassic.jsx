@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
-import usePayrollStore from '../store/payrollStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  ArrowLeft, Save, Plus, Calculator, Users, DollarSign,
-  Sun, Moon, Sparkles, Download, FileText
+  ArrowLeft, Save, Plus, FileText, Sun, Moon, Sparkles
 } from 'lucide-react'
 
 export default function PayrollClassic() {
@@ -26,9 +23,7 @@ export default function PayrollClassic() {
   })
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    loadEmployees()
-  }, [])
+  useEffect(() => { loadEmployees() }, [])
 
   const loadEmployees = async () => {
     const { data } = await supabase
@@ -44,30 +39,35 @@ export default function PayrollClassic() {
   const addEmployeeToPayroll = (emp) => {
     if (!selectedEmployees.find(e => e.id === emp.id)) {
       const basicSalary = emp.payroll_profiles?.[0]?.basic_salary || 0
-      setSelectedEmployees([...selectedEmployees, { ...emp, gross_pay: basicSalary, net_pay: basicSalary * 0.75 }])
-      updateTotals()
+      const updated = [...selectedEmployees, { ...emp, gross_pay: basicSalary, net_pay: basicSalary * 0.75 }]
+      setSelectedEmployees(updated)
+      updateTotalsStatic(updated)
     }
   }
 
   const removeEmployee = (empId) => {
-    setSelectedEmployees(selectedEmployees.filter(e => e.id !== empId))
+    const updated = selectedEmployees.filter(e => e.id !== empId)
+    setSelectedEmployees(updated)
+    updateTotalsStatic(updated)
   }
 
-  const updateTotals = () => {
-    const totalGross = selectedEmployees.reduce((sum, e) => sum + (e.gross_pay || 0), 0)
-    const totalNet = selectedEmployees.reduce((sum, e) => sum + (e.net_pay || 0), 0)
-    setPayrollData({...payrollData, total_gross: totalGross, total_net: totalNet})
+  const updateTotalsStatic = (emps) => {
+    const totalGross = emps.reduce((sum, e) => sum + (e.gross_pay || 0), 0)
+    const totalNet = emps.reduce((sum, e) => sum + (e.net_pay || 0), 0)
+    setPayrollData(prev => ({...prev, total_gross: totalGross, total_net: totalNet}))
+  }
+
+  const updateEmployeePay = (empId, grossPay) => {
+    const updated = selectedEmployees.map(se => 
+      se.id === empId ? {...se, gross_pay: grossPay, net_pay: grossPay * 0.75} : se
+    )
+    setSelectedEmployees(updated)
+    updateTotalsStatic(updated)
   }
 
   const handleProcessPayroll = async () => {
-    if (selectedEmployees.length === 0) {
-      toast.error('Please add employees to payroll')
-      return
-    }
-    if (!payrollData.pay_from_date || !payrollData.pay_to_date) {
-      toast.error('Please set pay period dates')
-      return
-    }
+    if (selectedEmployees.length === 0) { toast.error('Please add employees to payroll'); return }
+    if (!payrollData.pay_from_date || !payrollData.pay_to_date) { toast.error('Please set pay period dates'); return }
 
     setLoading(true)
     try {
@@ -88,7 +88,6 @@ export default function PayrollClassic() {
         processed_at: new Date().toISOString()
       }]).select().single()
 
-      // Generate payslips
       for (const emp of selectedEmployees) {
         const basicSalary = emp.gross_pay || 0
         const paye = basicSalary * 0.18
@@ -116,7 +115,7 @@ export default function PayrollClassic() {
         }])
       }
 
-      toast.success(`Payroll processed! ${selectedEmployees.length} payslips generated. ✅`)
+      toast.success(`Payroll processed! ${selectedEmployees.length} payslips generated.`)
       navigate('/payroll/payslips')
     } catch (error) {
       toast.error('Failed to process payroll: ' + error.message)
@@ -125,32 +124,7 @@ export default function PayrollClassic() {
     }
   }
 
-  // Classic design styles
   const styles = {
-    wrapper: {
-      maxWidth: '1400px',
-      margin: '0 auto',
-      background: 'transparent'
-    },
-    panel: {
-      border: '1px solid #2f73b8',
-      background: '#d7e7f4',
-      borderRadius: '4px',
-      overflow: 'hidden'
-    },
-    panelTitle: {
-      background: '#a9d2f3',
-      textAlign: 'center',
-      padding: '8px',
-      fontWeight: 'bold',
-      letterSpacing: '1px',
-      borderBottom: '1px solid #2f73b8',
-      fontSize: '1rem'
-    },
-    detailsGrid: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr'
-    },
     field: {
       borderRight: '1px solid #2f73b8',
       borderBottom: '1px solid #2f73b8',
@@ -185,20 +159,20 @@ export default function PayrollClassic() {
       
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-emerald-600" />
-          <span className="text-sm font-semibold text-emerald-800 hidden sm:inline">ERP</span>
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
         </div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110">
           {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
         </button>
       </div>
 
-      <main style={styles.wrapper} className="pt-16">
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }} className="pt-16">
         <Link to="/payroll" className="inline-flex items-center text-slate-600 hover:text-emerald-600 mb-4 text-sm">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Payroll
         </Link>
 
-        {/* HEADER */}
+        {/* HEADER with Avatar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div style={{ position: 'absolute', left: 0, width: '70px', height: '70px', borderRadius: '50%', overflow: 'hidden', border: '3px solid #2f6cab', background: '#e9eef3' }}>
             <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
@@ -222,10 +196,12 @@ export default function PayrollClassic() {
 
         {/* MAIN GRID */}
         <div className="grid" style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: '16px', marginBottom: '20px' }}>
-          {/* LEFT: PAYROLL DETAILS */}
-          <div style={styles.panel}>
-            <div style={styles.panelTitle}>📅 PAYROLL DETAILS</div>
-            <div style={styles.detailsGrid}>
+          {/* LEFT PANEL: PAYROLL DETAILS */}
+          <div style={{ border: '1px solid #2f73b8', background: '#d7e7f4', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ background: '#a9d2f3', textAlign: 'center', padding: '8px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #2f73b8', fontSize: '1rem' }}>
+              📅 PAYROLL DETAILS
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
               <div style={styles.field}>
                 <span style={styles.fieldLabel}>Payroll Date:</span>
                 <input type="date" style={styles.emptyInput} value={payrollData.payroll_date} onChange={e => setPayrollData({...payrollData, payroll_date: e.target.value})} />
@@ -233,48 +209,48 @@ export default function PayrollClassic() {
               <div style={styles.field}>
                 <span style={styles.fieldLabel}>Status:</span>
                 <select style={{...styles.emptyInput, width: 'auto', minWidth: '110px'}} value={payrollData.status} onChange={e => setPayrollData({...payrollData, status: e.target.value})}>
-                  <option>Pending</option>
-                  <option>Approved</option>
-                  <option>Paid</option>
+                  <option>Pending</option><option>Approved</option><option>Paid</option>
                 </select>
               </div>
               <div style={styles.field}>
-                <span style={styles.fieldLabel}>Pay From Date:</span>
+                <span style={styles.fieldLabel}>Pay From:</span>
                 <input type="date" style={styles.emptyInput} value={payrollData.pay_from_date} onChange={e => setPayrollData({...payrollData, pay_from_date: e.target.value})} />
               </div>
               <div style={styles.field}>
-                <span style={styles.fieldLabel}>Pay To Date:</span>
+                <span style={styles.fieldLabel}>Pay To:</span>
                 <input type="date" style={styles.emptyInput} value={payrollData.pay_to_date} onChange={e => setPayrollData({...payrollData, pay_to_date: e.target.value})} />
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 12px', fontWeight: 'bold', background: '#deeaf5', gap: '15px', flexWrap: 'wrap' }}>
-              <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                💰 Total Gross: {formatCurrency(payrollData.total_gross)}
-              </span>
-              <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                💵 Total Net: {formatCurrency(payrollData.total_net)}
-              </span>
+              <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e' }}>💰 Total Gross: {formatCurrency(payrollData.total_gross)}</span>
+              <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e' }}>💵 Total Net: {formatCurrency(payrollData.total_net)}</span>
             </div>
           </div>
 
-          {/* RIGHT: EMPLOYEE SELECTION */}
-          <div style={styles.panel}>
-            <div style={styles.panelTitle}>👤 SELECT EMPLOYEES</div>
+          {/* RIGHT PANEL: SELECT EMPLOYEES */}
+          <div style={{ border: '1px solid #2f73b8', background: '#d7e7f4', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ background: '#a9d2f3', textAlign: 'center', padding: '8px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #2f73b8', fontSize: '1rem' }}>
+              👤 SELECT EMPLOYEES ({employees.length} available)
+            </div>
             <div style={{ padding: '10px', maxHeight: '300px', overflowY: 'auto' }}>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {employees.map(emp => (
-                  <div key={emp.id} 
-                    onClick={() => addEmployeeToPayroll(emp)}
-                    className="flex justify-between items-center p-2 rounded-lg cursor-pointer hover:bg-blue-50 border border-blue-100"
+                  <div key={emp.id} onClick={() => addEmployeeToPayroll(emp)}
+                    className="flex justify-between items-center p-2 rounded-lg cursor-pointer hover:bg-blue-100 border border-blue-100"
                     style={{ background: '#eef4fa' }}>
                     <div>
                       <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
-                      <p className="text-xs text-slate-500">{emp.employee_code}</p>
+                      <p className="text-xs text-slate-500">{emp.employee_code} · {emp.position || 'N/A'}</p>
                     </div>
-                    <span className="text-sm font-bold text-emerald-600">{formatCurrency(emp.payroll_profiles?.[0]?.basic_salary || 0)}</span>
-                    <Plus className="w-4 h-4 text-blue-600" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-emerald-600">{formatCurrency(emp.payroll_profiles?.[0]?.basic_salary || 0)}</span>
+                      <Plus className="w-4 h-4 text-blue-600" />
+                    </div>
                   </div>
                 ))}
+                {employees.length === 0 && (
+                  <p className="text-center text-slate-500 py-4">No active employees found</p>
+                )}
               </div>
             </div>
           </div>
@@ -283,15 +259,17 @@ export default function PayrollClassic() {
         {/* TABLES SECTION */}
         <div style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: '16px', marginBottom: '20px' }}>
           {/* SELECTED EMPLOYEES TABLE */}
-          <div style={styles.panel}>
-            <div style={styles.panelTitle}>📋 SELECTED PAY PERIOD EMPLOYEES ({selectedEmployees.length})</div>
+          <div style={{ border: '1px solid #2f73b8', background: '#d7e7f4', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ background: '#a9d2f3', textAlign: 'center', padding: '8px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #2f73b8', fontSize: '1rem' }}>
+              📋 SELECTED EMPLOYEES ({selectedEmployees.length})
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
               <thead>
                 <tr>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Employee Name</th>
+                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Employee</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Gross Pay</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Net Pay</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Action</th>
+                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Del</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,20 +283,15 @@ export default function PayrollClassic() {
                   selectedEmployees.map(emp => (
                     <tr key={emp.id}>
                       <td style={{ border: '1px solid #2f73b8', padding: '10px 5px', background: '#fefefe' }}>{emp.first_name} {emp.last_name}</td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center', background: '#fefefe' }}>
-                        <input type="number" value={emp.gross_pay || 0} onChange={e => {
-                          const updated = selectedEmployees.map(se => se.id === emp.id ? {...se, gross_pay: parseFloat(e.target.value) || 0, net_pay: (parseFloat(e.target.value) || 0) * 0.75} : se)
-                          setSelectedEmployees(updated)
-                          const tg = updated.reduce((s, e) => s + (e.gross_pay || 0), 0)
-                          const tn = updated.reduce((s, e) => s + (e.net_pay || 0), 0)
-                          setPayrollData({...payrollData, total_gross: tg, total_net: tn})
-                        }} style={{ width: '80px', textAlign: 'center', background: '#fffef7', border: '1px solid #b9cfec', borderRadius: '6px', padding: '4px' }} />
+                      <td style={{ border: '1px solid #2f73b8', padding: '6px 5px', textAlign: 'center', background: '#fefefe' }}>
+                        <input type="number" value={emp.gross_pay || 0} onChange={e => updateEmployeePay(emp.id, parseFloat(e.target.value) || 0)}
+                          style={{ width: '80px', textAlign: 'center', background: '#fffef7', border: '1px solid #b9cfec', borderRadius: '6px', padding: '4px' }} />
                       </td>
                       <td style={{ border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center', background: '#fefefe', color: '#059669', fontWeight: 'bold' }}>
                         {formatCurrency(emp.net_pay || 0)}
                       </td>
                       <td style={{ border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center', background: '#fefefe' }}>
-                        <button onClick={() => removeEmployee(emp.id)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+                        <button onClick={() => removeEmployee(emp.id)} className="text-red-500 hover:text-red-700 font-bold text-lg">✕</button>
                       </td>
                     </tr>
                   ))
@@ -327,23 +300,25 @@ export default function PayrollClassic() {
             </table>
           </div>
 
-          {/* TIMESHEET TABLE (Read-only from attendance) */}
-          <div style={styles.panel}>
-            <div style={styles.panelTitle}>⏱️ ATTENDANCE SUMMARY</div>
+          {/* ATTENDANCE SUMMARY TABLE */}
+          <div style={{ border: '1px solid #2f73b8', background: '#d7e7f4', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ background: '#a9d2f3', textAlign: 'center', padding: '8px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #2f73b8', fontSize: '1rem' }}>
+              ⏱️ ATTENDANCE SUMMARY
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
               <thead>
                 <tr>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Employee</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Days Worked</th>
+                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Days</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>Hours</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>OT Hours</th>
+                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center' }}>OT</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedEmployees.length === 0 ? (
                   <tr>
                     <td colSpan={4} style={{ border: '1px solid #2f73b8', padding: '10px 5px', textAlign: 'center', background: '#fcf8e8', color: '#6a6f73', fontStyle: 'italic' }}>
-                      📭 No timesheet entries
+                      📭 No attendance data
                     </td>
                   </tr>
                 ) : (
@@ -360,7 +335,7 @@ export default function PayrollClassic() {
             </table>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
