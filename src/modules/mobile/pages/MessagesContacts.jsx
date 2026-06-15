@@ -8,9 +8,9 @@ import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   MessageCircle, Phone, Mail, Search, ArrowLeft, 
-  Send, User, Users, ChevronRight, Sun, Moon, 
-  Sparkles, MapPin, Briefcase, Clock, CheckCheck,
-  PhoneCall, Video, MoreVertical, X
+  Send, User, Users, Sun, Moon, 
+  Sparkles, MapPin, Briefcase, CheckCheck,
+  X
 } from 'lucide-react'
 
 export default function MessagesContacts() {
@@ -19,7 +19,7 @@ export default function MessagesContacts() {
   const navigate = useNavigate()
   const messagesEndRef = useRef(null)
   
-  const [activeTab, setActiveTab] = useState('messages') // 'messages' or 'contacts'
+  const [activeTab, setActiveTab] = useState('messages')
   const [threads, setThreads] = useState([])
   const [employees, setEmployees] = useState([])
   const [selectedChat, setSelectedChat] = useState(null)
@@ -33,17 +33,14 @@ export default function MessagesContacts() {
   useEffect(() => {
     loadData()
     
-    // Real-time subscription for new messages
     const channel = supabase
       .channel('messages')
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user?.id}` },
-        (payload) => {
-          toast.success(`New message from ${payload.new.sender_id}`, { duration: 3000 })
+        () => {
+          toast.success('New message received!', { duration: 3000 })
           loadThreads()
-          if (selectedChat?.id === payload.new.sender_id || selectedChat?.id === payload.new.receiver_id) {
-            loadMessages(selectedChat.id)
-          }
+          if (selectedChat?.id) loadMessages(selectedChat.id)
         }
       )
       .subscribe()
@@ -76,87 +73,98 @@ export default function MessagesContacts() {
   const loadThreads = async () => {
     if (!user?.id) return
     
-    const { data } = await supabase
-      .from('message_threads')
-      .select('*')
-      .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
-      .order('last_message_at', { ascending: false })
-
-    // Get participant details
-    const threadsWithUsers = await Promise.all((data || []).map(async (thread) => {
-      const otherUserId = thread.participant_1 === user.id ? thread.participant_2 : thread.participant_1
-      const { data: profile } = await supabase
-        .from('profiles')
+    try {
+      const { data } = await supabase
+        .from('message_threads')
         .select('*')
-        .eq('id', otherUserId)
-        .single()
-      
-      // Get employee info if exists
-      const { data: emp } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('user_id', otherUserId)
-        .single()
+        .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
+        .order('last_message_at', { ascending: false })
 
-      // Get unread count
-      const { count } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('sender_id', otherUserId)
-        .eq('receiver_id', user.id)
-        .eq('is_read', false)
+      const threadsWithUsers = await Promise.all((data || []).map(async (thread) => {
+        const otherUserId = thread.participant_1 === user.id ? thread.participant_2 : thread.participant_1
+        
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', otherUserId)
+          .single()
 
-      return { ...thread, otherUser: profile, employee: emp, unreadCount: count || 0 }
-    }))
+        const { data: emp } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('user_id', otherUserId)
+          .single()
 
-    setThreads(threadsWithUsers)
-    
-    const totalUnread = threadsWithUsers.reduce((sum, t) => sum + (t.unreadCount || 0), 0)
-    setUnreadCount(totalUnread)
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('sender_id', otherUserId)
+          .eq('receiver_id', user.id)
+          .eq('is_read', false)
+
+        return { 
+          ...thread, 
+          otherUser: userProfile, 
+          employee: emp, 
+          unreadCount: count || 0 
+        }
+      }))
+
+      setThreads(threadsWithUsers)
+      setUnreadCount(threadsWithUsers.reduce((sum, t) => sum + (t.unreadCount || 0), 0))
+    } catch (error) {
+      console.error('Error loading threads:', error)
+    }
   }
 
   const loadEmployees = async () => {
-    const { data } = await supabase
-      .from('employees')
-      .select('*, profiles(*)')
-      .eq('employment_status', 'active')
-      .order('first_name')
-    setEmployees(data || [])
+    try {
+      const { data } = await supabase
+        .from('employees')
+        .select('*, profiles(*)')
+        .eq('employment_status', 'active')
+        .order('department')
+        .order('first_name')
+      setEmployees(data || [])
+    } catch (error) {
+      console.error('Error loading employees:', error)
+    }
   }
 
   const loadMessages = async (otherUserId) => {
     if (!user?.id) return
     
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
-      .order('created_at', { ascending: true })
-      .limit(100)
+    try {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
+        .order('created_at', { ascending: true })
+        .limit(100)
 
-    setMessages(data || [])
+      setMessages(data || [])
 
-    // Mark messages as read
-    await supabase
-      .from('messages')
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq('sender_id', otherUserId)
-      .eq('receiver_id', user.id)
-      .eq('is_read', false)
+      await supabase
+        .from('messages')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('sender_id', otherUserId)
+        .eq('receiver_id', user.id)
+        .eq('is_read', false)
+    } catch (error) {
+      console.error('Error loading messages:', error)
+    }
   }
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedChat) return
 
     try {
-      // Send message
       await supabase.from('messages').insert([{
         sender_id: user.id,
         receiver_id: selectedChat.id,
         message: newMessage.trim()
       }])
 
-      // Update or create thread
       const { data: existingThread } = await supabase
         .from('message_threads')
         .select('*')
@@ -192,7 +200,11 @@ export default function MessagesContacts() {
 
   const startChat = (employee) => {
     if (employee.profiles?.id) {
-      setSelectedChat({ id: employee.profiles.id, name: `${employee.first_name} ${employee.last_name}`, employee })
+      setSelectedChat({ 
+        id: employee.profiles.id, 
+        name: `${employee.first_name} ${employee.last_name}`, 
+        employee 
+      })
       setActiveTab('messages')
     } else {
       toast.error('This employee is not registered as a user')
@@ -203,7 +215,7 @@ export default function MessagesContacts() {
     if (!date) return ''
     const d = new Date(date)
     const now = new Date()
-    const diff = now - d
+    const diff = now.getTime() - d.getTime()
     if (diff < 86400000) return d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
     if (diff < 604800000) return d.toLocaleDateString('en-ZA', { weekday: 'short' })
     return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
@@ -226,7 +238,6 @@ export default function MessagesContacts() {
            (emp.position || '').toLowerCase().includes(s)
   })
 
-  // Group contacts by department
   const contactsByDept = {}
   filteredContacts.forEach(emp => {
     const dept = emp.department || 'Other'
@@ -252,10 +263,9 @@ export default function MessagesContacts() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Field Operations</span>
         </Link>
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-            <MessageCircle className="w-8 h-8 text-emerald-600" />Messages & Contacts
+            <MessageCircle className="w-8 h-8 text-purple-600" />Messages & Contacts
           </h1>
         </div>
 
@@ -263,17 +273,19 @@ export default function MessagesContacts() {
         <div className="flex gap-2 mb-6">
           <button onClick={() => { setActiveTab('messages'); setSelectedChat(null) }}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-colors ${
-              activeTab === 'messages' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              activeTab === 'messages' ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
             }`}>
             <MessageCircle className="w-5 h-5" />
             Messages
             {unreadCount > 0 && (
-              <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>
+              <span className="bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                {unreadCount}
+              </span>
             )}
           </button>
           <button onClick={() => { setActiveTab('contacts'); setSelectedChat(null) }}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-colors ${
-              activeTab === 'contacts' ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              activeTab === 'contacts' ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
             }`}>
             <Users className="w-5 h-5" />
             Contacts ({employees.length})
@@ -281,7 +293,7 @@ export default function MessagesContacts() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Panel - Threads/Contacts List */}
+          {/* Left Panel */}
           <div className="lg:col-span-1">
             {activeTab === 'messages' ? (
               <div className="neu-raised rounded-2xl overflow-hidden">
@@ -295,17 +307,21 @@ export default function MessagesContacts() {
                 <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
                   {filteredThreads.map(thread => (
                     <div key={thread.id}
-                      onClick={() => setSelectedChat({ id: thread.otherUser?.id, name: thread.otherUser?.full_name || thread.employee?.first_name + ' ' + thread.employee?.last_name, employee: thread.employee })}
+                      onClick={() => setSelectedChat({ 
+                        id: thread.otherUser?.id, 
+                        name: thread.otherUser?.full_name || `${thread.employee?.first_name || ''} ${thread.employee?.last_name || ''}`.trim() || 'Unknown',
+                        employee: thread.employee 
+                      })}
                       className={`p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
-                        selectedChat?.id === thread.otherUser?.id ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''
+                        selectedChat?.id === thread.otherUser?.id ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''
                       }`}>
                       <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                            <User className="w-5 h-5 text-emerald-600" />
+                        <div className="relative flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                            <User className="w-5 h-5 text-purple-600" />
                           </div>
                           {thread.unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center">
+                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center">
                               {thread.unreadCount}
                             </span>
                           )}
@@ -313,21 +329,21 @@ export default function MessagesContacts() {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center">
                             <p className="font-medium text-sm truncate">
-                              {thread.otherUser?.full_name || thread.employee?.first_name + ' ' + thread.employee?.last_name || 'Unknown'}
+                              {thread.otherUser?.full_name || `${thread.employee?.first_name || ''} ${thread.employee?.last_name || ''}`.trim() || 'Unknown User'}
                             </p>
-                            <span className="text-[10px] text-slate-400">{formatTime(thread.last_message_at)}</span>
+                            <span className="text-[10px] text-slate-400 flex-shrink-0 ml-2">{formatTime(thread.last_message_at)}</span>
                           </div>
-                          <p className="text-xs text-slate-500 truncate mt-0.5">{thread.last_message || 'No messages'}</p>
+                          <p className="text-xs text-slate-500 truncate mt-0.5">{thread.last_message || 'No messages yet'}</p>
                           {thread.employee && (
-                            <p className="text-[10px] text-slate-400 truncate">{thread.employee.position || ''} · {thread.employee.department || ''}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{thread.employee.position || ''}{thread.employee.department ? ` · ${thread.employee.department}` : ''}</p>
                           )}
                         </div>
                       </div>
                     </div>
                   ))}
-                  {filteredThreads.length === 0 && (
-                    <div className="text-center py-8 text-slate-400">
-                      <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  {filteredThreads.length === 0 && !loading && (
+                    <div className="text-center py-12 text-slate-400">
+                      <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
                       <p className="text-sm">No conversations yet</p>
                       <p className="text-xs mt-1">Go to Contacts to start a chat</p>
                     </div>
@@ -340,50 +356,56 @@ export default function MessagesContacts() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="text" value={searchContacts} onChange={e => setSearchContacts(e.target.value)} 
-                      placeholder="Search contacts..." className="w-full pl-9 pr-3 py-2 neu-inset rounded-lg text-sm" />
+                      placeholder="Search by name, department, position..." className="w-full pl-9 pr-3 py-2 neu-inset rounded-lg text-sm" />
                   </div>
                 </div>
                 <div className="max-h-[500px] overflow-y-auto">
-                  {Object.entries(contactsByDept).map(([dept, emps]) => (
-                    <div key={dept}>
-                      <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 text-xs font-semibold text-slate-500 uppercase">
-                        {dept} ({emps.length})
-                      </div>
-                      {emps.map(emp => (
-                        <div key={emp.id}
-                          onClick={() => startChat(emp)}
-                          className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-50 dark:border-slate-700">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                            <span className="text-blue-600 font-bold text-sm">{emp.first_name?.[0]}{emp.last_name?.[0]}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
-                            <p className="text-xs text-slate-500">{emp.position || 'No position'}</p>
-                          </div>
-                          <div className="flex gap-1">
-                            {emp.phone && (
-                              <a href={`tel:${emp.phone}`} onClick={e => e.stopPropagation()} 
-                                className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Call">
-                                <Phone className="w-4 h-4" />
-                              </a>
-                            )}
-                            {emp.email && (
-                              <a href={`mailto:${emp.email}`} onClick={e => e.stopPropagation()}
-                                className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="Email">
-                                <Mail className="w-4 h-4" />
-                              </a>
-                            )}
-                            {emp.profiles?.id && (
+                  {Object.keys(contactsByDept).length > 0 ? (
+                    Object.entries(contactsByDept).map(([dept, emps]) => (
+                      <div key={dept}>
+                        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-700/50 text-xs font-semibold text-slate-500 uppercase flex items-center justify-between">
+                          <span>{dept}</span>
+                          <span className="bg-slate-200 dark:bg-slate-600 px-2 py-0.5 rounded-full text-[10px]">{emps.length}</span>
+                        </div>
+                        {emps.map(emp => (
+                          <div key={emp.id}
+                            onClick={() => startChat(emp)}
+                            className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer border-b border-slate-50 dark:border-slate-700/50 transition-colors">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                              <span className="text-blue-600 font-bold text-sm">{emp.first_name?.[0]}{emp.last_name?.[0]}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
+                              <p className="text-xs text-slate-500">{emp.position || 'No position'}</p>
+                            </div>
+                            <div className="flex gap-1">
+                              {emp.phone && (
+                                <a href={`tel:${emp.phone}`} onClick={e => e.stopPropagation()} 
+                                  className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600" title="Call">
+                                  <Phone className="w-4 h-4" />
+                                </a>
+                              )}
+                              {emp.email && (
+                                <a href={`mailto:${emp.email}`} onClick={e => e.stopPropagation()}
+                                  className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600" title="Email">
+                                  <Mail className="w-4 h-4" />
+                                </a>
+                              )}
                               <button onClick={(e) => { e.stopPropagation(); startChat(emp) }}
-                                className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Message">
+                                className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600" title="Message">
                                 <MessageCircle className="w-4 h-4" />
                               </button>
-                            )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 text-slate-400">
+                      <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">No contacts found</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
@@ -399,27 +421,26 @@ export default function MessagesContacts() {
                     <button onClick={() => setSelectedChat(null)} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 lg:hidden">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                      <User className="w-5 h-5 text-emerald-600" />
+                    <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                      <User className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
                       <p className="font-semibold text-sm">{selectedChat.name}</p>
                       {selectedChat.employee && (
                         <p className="text-xs text-slate-500">
-                          {selectedChat.employee.position} · {selectedChat.employee.department}
-                          {selectedChat.employee.phone && <span className="ml-2">📞 {selectedChat.employee.phone}</span>}
+                          {selectedChat.employee.position}{selectedChat.employee.department ? ` · ${selectedChat.employee.department}` : ''}
                         </p>
                       )}
                     </div>
                   </div>
                   <div className="flex gap-1">
                     {selectedChat.employee?.phone && (
-                      <a href={`tel:${selectedChat.employee.phone}`} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600">
+                      <a href={`tel:${selectedChat.employee.phone}`} className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600" title="Call">
                         <Phone className="w-5 h-5" />
                       </a>
                     )}
                     {selectedChat.employee?.email && (
-                      <a href={`mailto:${selectedChat.employee.email}`} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600">
+                      <a href={`mailto:${selectedChat.employee.email}`} className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600" title="Email">
                         <Mail className="w-5 h-5" />
                       </a>
                     )}
@@ -431,14 +452,15 @@ export default function MessagesContacts() {
                   {messages.map((msg, i) => {
                     const isMine = msg.sender_id === user?.id
                     const showTime = i === messages.length - 1 || 
-                      new Date(msg.created_at).getTime() - new Date(messages[i + 1]?.created_at).getTime() > 300000
+                      (i < messages.length - 1 && 
+                       new Date(msg.created_at).getTime() - new Date(messages[i + 1]?.created_at).getTime() > 300000)
                     
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[75%] ${isMine ? 'order-1' : ''}`}>
+                        <div className={`max-w-[75%]`}>
                           <div className={`rounded-2xl px-4 py-2.5 text-sm ${
                             isMine 
-                              ? 'bg-emerald-600 text-white rounded-br-md' 
+                              ? 'bg-purple-600 text-white rounded-br-md' 
                               : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-md shadow-sm'
                           }`}>
                             <p className="whitespace-pre-wrap break-words">{msg.message}</p>
@@ -477,7 +499,7 @@ export default function MessagesContacts() {
                     <button
                       onClick={handleSendMessage}
                       disabled={!newMessage.trim()}
-                      className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                      className="p-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors"
                     >
                       <Send className="w-5 h-5" />
                     </button>
@@ -489,17 +511,23 @@ export default function MessagesContacts() {
                 {activeTab === 'messages' ? (
                   <>
                     <MessageCircle className="w-20 h-20 text-slate-300 dark:text-slate-600 mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-500 mb-2">Messages</h3>
+                    <h3 className="text-xl font-semibold text-slate-500 mb-2">Your Messages</h3>
                     <p className="text-slate-400 text-sm max-w-md">
-                      Select a conversation from the left to view messages, or go to Contacts to start a new chat.
+                      Select a conversation from the left to view and reply to messages.
+                    </p>
+                    <p className="text-slate-400 text-xs mt-2 max-w-md">
+                      Or go to the <strong>Contacts</strong> tab to find employees and start a new chat.
                     </p>
                   </>
                 ) : (
                   <>
                     <Users className="w-20 h-20 text-slate-300 dark:text-slate-600 mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-500 mb-2">Employee Contacts</h3>
+                    <h3 className="text-xl font-semibold text-slate-500 mb-2">Employee Directory</h3>
                     <p className="text-slate-400 text-sm max-w-md">
-                      Browse employees by department. Click the message icon to start a chat, or use phone/email icons to contact directly.
+                      Browse all employees grouped by department. Click the message icon to start a chat.
+                    </p>
+                    <p className="text-slate-400 text-xs mt-2 max-w-md">
+                      Use the phone or email icons to contact employees directly.
                     </p>
                   </>
                 )}
