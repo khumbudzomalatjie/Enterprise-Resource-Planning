@@ -21,6 +21,7 @@ export default function Dashboard() {
 
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'User'
   const userRole = profile?.role
+  const isCleaner = userRole === USER_ROLES.CLEANER
 
   // ALL modules defined
   const allModules = [
@@ -47,12 +48,12 @@ export default function Dashboard() {
   })
 
   const isModuleBuilt = (module) => {
-    const builtModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field']
+    const builtModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field', '/mobile']
     return builtModules.includes(module.path)
   }
 
   const handleModuleClick = (module) => {
-    const availableModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field', '/dashboard', '/users']
+    const availableModules = ['/hr', '/payroll', '/crm', '/sales', '/operations', '/inventory', '/procurement', '/finance', '/fleet', '/reports', '/workflow', '/documents', '/assets', '/mobile/field', '/mobile', '/dashboard', '/users']
     if (availableModules.includes(module.path)) {
       navigate(module.path)
     } else {
@@ -77,14 +78,47 @@ export default function Dashboard() {
 
       <header className="pt-8 pb-4 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col items-start">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">Welcome {userName}</h1>
-            <p className="text-base text-slate-500 dark:text-slate-400 font-medium mt-1">Innovation Without End</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
+            <div className="flex flex-col items-start">
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">Welcome {userName}</h1>
+              <p className="text-base text-slate-500 dark:text-slate-400 font-medium mt-1">Innovation Without End</p>
+            </div>
+            
+            {/* MOBILE APP BUTTON - Visible to cleaners */}
+            {isCleaner && (
+              <button
+                onClick={() => navigate('/mobile')}
+                className="mt-4 sm:mt-0 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-700 text-white rounded-2xl font-bold text-lg shadow-lg hover:from-emerald-600 hover:to-emerald-800 transition-all flex items-center gap-3 animate-pulse"
+              >
+                <Smartphone className="w-6 h-6" />
+                <span>Open Mobile App</span>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded-full">📱</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main id="main-dashboard" className="max-w-7xl mx-auto px-4 pb-16 pt-4">
+        {/* Mobile App Banner for Cleaners */}
+        {isCleaner && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 p-6 bg-gradient-to-r from-emerald-500 to-emerald-700 rounded-3xl text-white text-center shadow-xl"
+          >
+            <Smartphone className="w-16 h-16 mx-auto mb-3" />
+            <h2 className="text-2xl font-bold mb-2">Field Worker Mobile App</h2>
+            <p className="text-emerald-100 mb-4">Manage your jobs, clock in/out, upload photos, and more from your phone!</p>
+            <button
+              onClick={() => navigate('/mobile')}
+              className="px-8 py-3 bg-white text-emerald-700 rounded-2xl font-bold text-lg hover:bg-emerald-50 transition-all shadow-lg"
+            >
+              📱 Open Mobile App
+            </button>
+          </motion.div>
+        )}
+
         <div className="mb-12">
           <div className="flex items-center gap-2 mb-5">
             <BarChart3 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
