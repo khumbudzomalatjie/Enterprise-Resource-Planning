@@ -93,7 +93,6 @@ export default function MobileHome() {
       await fetchMyJobs(profile.id)
     }
     await setupEmployee()
-    // Check clock after setup completes
     if (myEmployeeId) {
       await checkClockStatus()
       setClockChecked(true)
@@ -102,7 +101,6 @@ export default function MobileHome() {
 
   const setupEmployee = async () => {
     try {
-      // Try by user_id
       let { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
       if (emp) { 
         setMyEmployeeId(emp.id)
@@ -110,7 +108,6 @@ export default function MobileHome() {
         return 
       }
       
-      // Try by email
       const { data: empByEmail } = await supabase.from('employees').select('id').eq('email', user?.email).single()
       if (empByEmail) { 
         await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
@@ -119,7 +116,6 @@ export default function MobileHome() {
         return 
       }
       
-      // Create new
       const { data: newEmp } = await supabase.from('employees').insert([{
         user_id: user?.id, 
         first_name: user?.email?.split('@')[0] || 'Cleaner', 
@@ -139,18 +135,11 @@ export default function MobileHome() {
   }
 
   const checkClockStatus = async () => {
-    if (!myEmployeeId) {
-      // Try to get employee ID from state if available
-      const empId = myEmployeeId
-      if (!empId) return
-    }
-    
     const empIdToCheck = myEmployeeId
     if (!empIdToCheck) return
     
     try {
       const today = new Date().toISOString().split('T')[0]
-      console.log('🔍 Checking clock for:', empIdToCheck, today)
       
       const { data, error } = await supabase
         .from('attendance_records')
@@ -160,44 +149,83 @@ export default function MobileHome() {
         .order('created_at', { ascending: false })
         .limit(1)
 
-      console.log('📊 Clock data:', data, 'Error:', error)
-
       if (data && data.length > 0) {
         const record = data[0]
         if (record.clock_in_time && !record.clock_out_time) {
-          console.log('✅ CLOCKED IN since:', record.clock_in_time)
           setIsClockedIn(true)
           setClockInTime(record.clock_in_time)
         } else {
-          console.log('🚪 NOT clocked in')
           setIsClockedIn(false)
           setClockInTime(null)
         }
       } else {
-        console.log('📝 No record for today')
         setIsClockedIn(false)
         setClockInTime(null)
       }
     } catch (e) {
       console.error('Check error:', e)
-      setIsClockedIn(false)
-      setClockInTime(null)
     }
   }
 
+  // ============================================
+  // FIXED: Load jobs with exclusive assignment
+  // ============================================
   const loadAllJobs = async () => {
     setLoadingAllJobs(true)
     try {
-      const { data: o } = await supabase.from('jobs')
-        .select('id,title,job_number,status,scheduled_date,scheduled_start_time,scheduled_end_time,site_address,notes,clients(company_name,phone),job_categories(name,color)')
-        .in('status',['pending','scheduled']).order('scheduled_date').order('scheduled_start_time')
-      setAllOpenJobs(o||[])
-      
-      const { data: m } = await supabase.from('jobs')
-        .select('id,title,job_number,status,scheduled_date,scheduled_start_time,scheduled_end_time,site_address,notes,clients(company_name,phone),job_categories(name,color)')
-        .eq('status','in_progress').order('scheduled_date').order('scheduled_start_time')
-      setMyActiveJobs(m||[])
-    } catch(e){} finally { setLoadingAllJobs(false) }
+      // OPEN JOBS - Only show jobs that are NOT assigned to anyone
+      const { data: openJobsData } = await supabase
+        .from('jobs')
+        .select(`
+          id, title, job_number, status, scheduled_date, 
+          scheduled_start_time, scheduled_end_time, site_address, 
+          notes, clients(company_name, phone), 
+          job_categories(name, color),
+          job_assignments(id, employee_id, status)
+        `)
+        .in('status', ['pending', 'scheduled'])
+        .order('scheduled_date')
+        .order('scheduled_start_time')
+
+      // Filter out jobs that already have assignments (taken by other cleaners)
+      const openJobs = (openJobsData || []).filter(job => 
+        !job.job_assignments || job.job_assignments.length === 0
+      )
+      setAllOpenJobs(openJobs)
+
+      // MY ACTIVE JOBS - Only show jobs assigned to THIS cleaner
+      if (myEmployeeId) {
+        const { data: myAssignments } = await supabase
+          .from('job_assignments')
+          .select('job_id')
+          .eq('employee_id', myEmployeeId)
+
+        const myJobIds = myAssignments?.map(a => a.job_id) || []
+
+        if (myJobIds.length > 0) {
+          const { data: myJobsData } = await supabase
+            .from('jobs')
+            .select(`
+              id, title, job_number, status, scheduled_date,
+              scheduled_start_time, scheduled_end_time, site_address,
+              notes, clients(company_name, phone),
+              job_categories(name, color)
+            `)
+            .in('id', myJobIds)
+            .in('status', ['in_progress', 'scheduled', 'pending'])
+            .order('scheduled_date')
+            .order('scheduled_start_time')
+
+          setMyActiveJobs(myJobsData || [])
+        } else {
+          setMyActiveJobs([])
+        }
+      }
+    } catch (e) {
+      console.error('Error loading jobs:', e)
+    } finally {
+      setLoadingAllJobs(false)
+    }
   }
 
   const loadSchedules = async () => { 
@@ -259,20 +287,55 @@ export default function MobileHome() {
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
+  // ============================================
+  // FIXED: Exclusive job selection
+  // ============================================
   const handleSelectJob = async (jobId) => {
-    if(!myEmployeeId){toast.error('Profile not ready.');return}
+    if (!myEmployeeId) { toast.error('Profile not ready.'); return }
+    
     setUpdatingJob(jobId)
-    try { 
+    try {
+      // Check if job is already assigned to someone else
+      const { data: existingAssignment } = await supabase
+        .from('job_assignments')
+        .select('id, employee_id')
+        .eq('job_id', jobId)
+        .maybeSingle()
+
+      if (existingAssignment && existingAssignment.employee_id !== myEmployeeId) {
+        toast.error('⚠️ This job has already been selected by another cleaner')
+        setUpdatingJob(null)
+        return
+      }
+
+      // Create job assignment for this cleaner
+      if (!existingAssignment) {
+        await supabase.from('job_assignments').insert([{
+          job_id: jobId,
+          employee_id: myEmployeeId,
+          status: 'accepted',
+          assigned_date: new Date().toISOString().split('T')[0]
+        }])
+      }
+
+      // Update job status
       await supabase.from('jobs').update({
-        status:'in_progress',
-        actual_start_time:new Date().toISOString(),
-        updated_at:new Date().toISOString(),
-        notes:`SELECTED BY: ${myProfile?.first_name||user?.email?.split('@')[0]}`
-      }).eq('id',jobId)
-      toast.success('Job selected!✅')
+        status: 'in_progress',
+        actual_start_time: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        cleaners_assigned: 1,
+        notes: `SELECTED BY: ${myProfile?.first_name || user?.email?.split('@')[0]} on ${new Date().toLocaleString()}`
+      }).eq('id', jobId)
+
+      toast.success('✅ Job assigned exclusively to you!')
       await loadAllJobs()
       setActiveTab('mine')
-    } catch{} finally{setUpdatingJob(null)}
+    } catch (error) {
+      console.error('Error selecting job:', error)
+      toast.error('Failed to select job')
+    } finally {
+      setUpdatingJob(null)
+    }
   }
 
   const handleStartJob = async (jobId) => { 
@@ -300,10 +363,9 @@ export default function MobileHome() {
     }catch{}finally{setUpdatingJob(null)} 
   }
 
-  // CLOCK IN/OUT - Persists across refreshes
   const handleClockToggle = () => {
-    if(!myEmployeeId){toast.error('Profile not ready. Please wait or refresh.');return}
-    if(isClockedIn && !window.confirm('Clock out and end your shift?')) return
+    if(!myEmployeeId){toast.error('Profile not ready.');return}
+    if(isClockedIn && !window.confirm('Clock out?')) return
     
     if(navigator.geolocation){
       navigator.geolocation.getCurrentPosition(async(pos)=>{
@@ -311,11 +373,8 @@ export default function MobileHome() {
         try{
           const today = new Date().toISOString().split('T')[0]
           const now = new Date().toISOString()
-          console.log('🕐 Toggle. Clocked in?', isClockedIn)
 
           if(isClockedIn){
-            // CLOCK OUT
-            console.log('🚪 CLOCKING OUT...')
             const { data: r } = await supabase
               .from('attendance_records')
               .select('id')
@@ -325,38 +384,19 @@ export default function MobileHome() {
               .limit(1)
 
             if(r?.length > 0){
-              const { error } = await supabase
-                .from('attendance_records')
-                .update({
-                  clock_out_time: now,
-                  check_out_method: 'gps',
-                  check_out_latitude: pos.coords.latitude,
-                  check_out_longitude: pos.coords.longitude,
-                  updated_at: now
-                })
-                .eq('id', r[0].id)
-
-              if(error){
-                console.error('Clock out error:', error)
-                toast.error('Failed to clock out')
-              } else {
-                console.log('✅ Clocked OUT')
-                setIsClockedIn(false)
-                setClockInTime(null)
-                toast.success('✅ Clocked out! Have a great day! 👋')
-                if(profile?.id) await fetchMobileStats(profile.id)
-              }
-            } else {
-              console.log('⚠️ No active record')
+              await supabase.from('attendance_records').update({
+                clock_out_time: now,
+                check_out_method: 'gps',
+                check_out_latitude: pos.coords.latitude,
+                check_out_longitude: pos.coords.longitude,
+                updated_at: now
+              }).eq('id', r[0].id)
+              
               setIsClockedIn(false)
               setClockInTime(null)
-              toast('No active clock-in record found')
+              toast.success('✅ Clocked out! 👋')
             }
           } else {
-            // CLOCK IN
-            console.log('🟢 CLOCKING IN...')
-            
-            // Double-check not already clocked in
             const { data: ex } = await supabase
               .from('attendance_records')
               .select('id')
@@ -366,47 +406,31 @@ export default function MobileHome() {
               .limit(1)
 
             if(ex?.length > 0){
-              console.log('⚠️ Already clocked in!')
-              toast.error('You are already clocked in! Please clock out first.')
+              toast.error('Already clocked in!')
               await checkClockStatus()
               return
             }
 
-            const { error } = await supabase
-              .from('attendance_records')
-              .upsert([{
-                employee_id: myEmployeeId,
-                attendance_date: today,
-                clock_in_time: now,
-                check_in_method: 'gps',
-                check_in_latitude: pos.coords.latitude,
-                check_in_longitude: pos.coords.longitude,
-                status: 'present'
-              }], { onConflict: 'employee_id,attendance_date' })
+            await supabase.from('attendance_records').upsert([{
+              employee_id: myEmployeeId,
+              attendance_date: today,
+              clock_in_time: now,
+              check_in_method: 'gps',
+              check_in_latitude: pos.coords.latitude,
+              check_in_longitude: pos.coords.longitude,
+              status: 'present'
+            }], { onConflict: 'employee_id,attendance_date' })
 
-            if(error){
-              console.error('Clock in error:', error)
-              toast.error('Failed to clock in')
-            } else {
-              console.log('✅ Clocked IN')
-              setIsClockedIn(true)
-              setClockInTime(now)
-              toast.success('✅ Clocked in! 📍 Location recorded')
-              if(profile?.id) await fetchMobileStats(profile.id)
-            }
+            setIsClockedIn(true)
+            setClockInTime(now)
+            toast.success('✅ Clocked in! 📍')
           }
         }catch(error){
-          console.error('Clock error:', error)
           toast.error('Failed to record attendance')
         }finally{
           setClockingInOut(false)
         }
-      }, (err) => {
-        console.error('GPS error:', err)
-        toast.error('Location access needed. Please enable GPS.')
-      })
-    } else {
-      toast.error('Geolocation not available')
+      }, () => toast.error('Location access needed'))
     }
   }
 
@@ -485,13 +509,16 @@ export default function MobileHome() {
     <div className={cc}><h3 className="text-xl font-bold text-[#2e3b4e]">{greeting}, {myProfile?.first_name||'Cleaner'}</h3><p className="text-[#5e6f82] text-sm">ID: {myProfile?.employee_code||'N/A'}</p><p className="text-4xl font-bold text-center my-2 font-mono text-[#2e3b4e]">{fmtT(currentTime)}</p></div>
     <div className={`${cc} flex items-center justify-between`}><div><span className="flex items-center gap-2 text-[#2e3b4e] font-semibold">{isClockedIn?<><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Clocked In</>:<><span className="w-2 h-2 rounded-full bg-slate-400"></span> Not Clocked In</>}</span>{clockInTime&&<p className="text-xs text-[#5e6f82] mt-1">Since: {new Date(clockInTime).toLocaleTimeString()}</p>}</div><button onClick={handleClockToggle} disabled={clockingInOut} className={`rounded-[40px] py-3 px-6 font-semibold shadow-[6px_6px_14px_#bcc3cf] active:scale-[0.97] text-sm ${isClockedIn?'bg-gradient-to-br from-red-400 to-red-600 text-white':'bg-gradient-to-br from-[#4b9b6b] to-[#3d8b5f] text-white'}`}>{clockingInOut?<RefreshCw className="w-4 h-4 animate-spin inline mr-1"/>:isClockedIn?<LogOutIcon className="w-4 h-4 inline mr-1"/>:<LogIn className="w-4 h-4 inline mr-1"/>}{isClockedIn?'Clock Out':'Clock In'}</button></div>
     <div className={cc}><h4 className="font-semibold text-[#2e3b4e] mb-3">Quick Actions</h4><div className="grid grid-cols-3 gap-2.5">{[{icon:Briefcase,label:'My Jobs',screen:'jobs',color:'#5f7d9c'},{icon:Map,label:'Clock In',screen:'gps',color:'#4b9b6b'},{icon:Camera,label:'Photos',screen:'photos',color:'#7a94ae'},{icon:Package,label:'Supplies',screen:'supplies',color:'#c99f4b'},{icon:AlertCircle,label:'Incident',screen:'incident',color:'#c15b5b'},{icon:Umbrella,label:'Leave',screen:'leave',color:'#5f7d9c'},{icon:Calendar,label:'Schedule',screen:'schedule',color:'#7a94ae'},{icon:MessageCircle,label:'Messages',screen:'messages',color:'#4b9b6b'},{icon:BarChart3,label:'Stats',screen:'performance',color:'#c99f4b'}].map(item=>(<button key={item.label} onClick={()=>switchScreen(item.screen)} className="flex flex-col items-center gap-1.5 p-3 rounded-[18px] shadow-[6px_6px_12px_#bcc3cf,-4px_-4px_12px_#ffffff] bg-[#eef1f6] active:scale-[0.96] transition-all"><div className="p-2 rounded-2xl shadow-[inset_2px_2px_4px_#bcc3cf,inset_-2px_-2px_4px_#ffffff] bg-[#e9edf2]" style={{color:item.color}}><item.icon className="w-5 h-5"/></div><span className="text-[11px] font-semibold text-[#2e3b4e] text-center">{item.label}</span></button>))}</div></div>
-    <button onClick={()=>{if(themeVariant==='light')setThemeVariant('dark');else if(themeVariant==='dark')setThemeVariant('glass-neo');else setThemeVariant('light')}} className={bc+" text-xs w-full"}>🎨 {themeVariant==='light'?'Light':themeVariant==='dark'?'Dark':'Glass'}</button>
   </div>)
 
   const renderJobs = () => {
     const fo=allOpenJobs.filter(j=>!jobSearch||(j.title||'').toLowerCase().includes(jobSearch.toLowerCase()))
     const fm=myActiveJobs.filter(j=>!jobSearch||(j.title||'').toLowerCase().includes(jobSearch.toLowerCase()))
-    return (<div className="space-y-4"><button onClick={goBack} className={`${bc} text-sm`}>← Back</button><div className={cc}><h3 className="font-bold text-lg mb-3">Jobs</h3><div className="flex gap-2 mb-3">{[{id:'all',label:`Open (${fo.length})`},{id:'mine',label:`My Jobs (${fm.length})`}].map(t=>(<button key={t.id} onClick={()=>setActiveTab(t.id)} className={`flex-1 py-2.5 rounded-[30px] font-semibold text-sm ${activeTab===t.id?'bg-[#5f7d9c] text-white':'bg-[#eef1f6]'}`}>{t.label}</button>))}</div><div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5e6f82]"/><input type="text" value={jobSearch} onChange={e=>setJobSearch(e.target.value)} placeholder="Search..." className={ic+" pl-9"}/></div>{activeTab==='all'&&(loadingAllJobs?<p className="text-center py-4">Loading...</p>:fo.length>0?<div className="space-y-2 max-h-[350px] overflow-y-auto">{fo.map(j=>(<div key={j.id} className={cic+" border-l-4 border-l-[#5f7d9c]"}><div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{j.title}</p><p className="text-xs text-[#5e6f82]">{j.job_number}·{j.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#5f7d9c]/20 text-[#5f7d9c]">Open</span></div><div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline"/>{j.scheduled_date===todayStr?'Today':fmtDS(j.scheduled_date)}·<Clock className="w-3 h-3 inline"/>{j.scheduled_start_time?.slice(0,5)}-{j.scheduled_end_time?.slice(0,5)}</div><div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline"/>{j.site_address?.slice(0,35)}</div><button onClick={()=>handleSelectJob(j.id)} className={bpc+" w-full text-sm"}><Hand className="w-4 h-4 inline mr-1"/>Select Job</button></div>))}</div>:<div className={cic+" text-center"}><p>No open jobs</p></div>)}{activeTab==='mine'&&(loadingAllJobs?<p className="text-center py-4">Loading...</p>:fm.length>0?<div className="space-y-2 max-h-[350px] overflow-y-auto">{fm.map(j=>(<div key={j.id} className={cic+" border-l-4 border-l-[#c99f4b]"}><div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{j.title}</p><p className="text-xs text-[#5e6f82]">{j.job_number}·{j.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#c99f4b]/20 text-[#c99f4b]">Active</span></div><div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline"/>{j.scheduled_date===todayStr?'Today':fmtDS(j.scheduled_date)}·<Clock className="w-3 h-3 inline"/>{j.scheduled_start_time?.slice(0,5)}-{j.scheduled_end_time?.slice(0,5)}</div><div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline"/>{j.site_address?.slice(0,35)}</div><div className="flex gap-2 mb-2"><button onClick={()=>handleStartJob(j.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#5f7d9c] text-white"><Play className="w-3 h-3 inline mr-1"/>Start</button><button onClick={()=>handleCompleteJob(j.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#4b9b6b] text-white"><CheckCircle2 className="w-3 h-3 inline mr-1"/>Complete</button></div><div className="grid grid-cols-3 gap-1.5"><button onClick={()=>navigate('/mobile/photos')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#5f7d9c]"><Camera className="w-3 h-3 inline"/>Photos</button><button onClick={()=>navigate('/mobile/supplies')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#c99f4b]"><Package className="w-3 h-3 inline"/>Supplies</button><button onClick={()=>navigate('/mobile/incident')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#c15b5b]"><AlertCircle className="w-3 h-3 inline"/>Incident</button></div></div>))}</div>:<div className={cic+" text-center"}><p>No active jobs</p></div>)}</div></div>)
+    return (<div className="space-y-4"><button onClick={goBack} className={`${bc} text-sm`}>← Back</button><div className={cc}><h3 className="font-bold text-lg mb-3">Jobs</h3><div className="flex gap-2 mb-3">{[{id:'all',label:`Open (${fo.length})`},{id:'mine',label:`My Jobs (${fm.length})`}].map(t=>(<button key={t.id} onClick={()=>setActiveTab(t.id)} className={`flex-1 py-2.5 rounded-[30px] font-semibold text-sm ${activeTab===t.id?'bg-[#5f7d9c] text-white':'bg-[#eef1f6]'}`}>{t.label}</button>))}</div><div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5e6f82]"/><input type="text" value={jobSearch} onChange={e=>setJobSearch(e.target.value)} placeholder="Search..." className={ic+" pl-9"}/></div>
+    
+    {activeTab==='all'&&(loadingAllJobs?<p className="text-center py-4">Loading...</p>:fo.length>0?<div className="space-y-2 max-h-[350px] overflow-y-auto">{fo.map(j=>(<div key={j.id} className={cic+" border-l-4 border-l-[#5f7d9c]"}><div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{j.title}</p><p className="text-xs text-[#5e6f82]">{j.job_number}·{j.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#5f7d9c]/20 text-[#5f7d9c]">Open</span></div><div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline"/>{j.scheduled_date===todayStr?'Today':fmtDS(j.scheduled_date)}·<Clock className="w-3 h-3 inline"/>{j.scheduled_start_time?.slice(0,5)}-{j.scheduled_end_time?.slice(0,5)}</div><div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline"/>{j.site_address?.slice(0,35)}</div><button onClick={()=>handleSelectJob(j.id)} className={bpc+" w-full text-sm"}><Hand className="w-4 h-4 inline mr-1"/>Select Job</button></div>))}</div>:<div className={cic+" text-center"}><p>No open jobs available</p></div>)}
+    
+    {activeTab==='mine'&&(loadingAllJobs?<p className="text-center py-4">Loading...</p>:fm.length>0?<div className="space-y-2 max-h-[350px] overflow-y-auto">{fm.map(j=>(<div key={j.id} className={cic+" border-l-4 border-l-[#c99f4b]"}><div className="flex justify-between mb-1"><div><p className="font-semibold text-sm">{j.title}</p><p className="text-xs text-[#5e6f82]">{j.job_number}·{j.clients?.company_name}</p></div><span className="px-2 py-0.5 rounded-full text-[10px] bg-[#c99f4b]/20 text-[#c99f4b]">My Job</span></div><div className="text-xs text-[#5e6f82] mb-1"><Calendar className="w-3 h-3 inline"/>{j.scheduled_date===todayStr?'Today':fmtDS(j.scheduled_date)}·<Clock className="w-3 h-3 inline"/>{j.scheduled_start_time?.slice(0,5)}-{j.scheduled_end_time?.slice(0,5)}</div><div className="text-xs text-[#5e6f82] mb-2"><MapPin className="w-3 h-3 inline"/>{j.site_address?.slice(0,35)}</div><div className="flex gap-2 mb-2"><button onClick={()=>handleStartJob(j.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#5f7d9c] text-white"><Play className="w-3 h-3 inline mr-1"/>Start</button><button onClick={()=>handleCompleteJob(j.id)} className="flex-1 py-2 rounded-[40px] font-semibold text-xs bg-[#4b9b6b] text-white"><CheckCircle2 className="w-3 h-3 inline mr-1"/>Complete</button></div><div className="grid grid-cols-3 gap-1.5"><button onClick={()=>navigate('/mobile/photos')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#5f7d9c]"><Camera className="w-3 h-3 inline"/>Photos</button><button onClick={()=>navigate('/mobile/supplies')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#c99f4b]"><Package className="w-3 h-3 inline"/>Supplies</button><button onClick={()=>navigate('/mobile/incident')} className="py-1.5 rounded-xl text-[10px] font-medium bg-[#e9edf2] text-[#c15b5b]"><AlertCircle className="w-3 h-3 inline"/>Incident</button></div></div>))}</div>:<div className={cic+" text-center"}><p>You have no active jobs</p><p className="text-xs mt-1">Select a job from Open Jobs tab</p></div>)}</div></div>)
   }
 
   const renderGPS = () => (<div className="space-y-4"><button onClick={goBack} className={`${bc} text-sm`}>← Back</button><div className={cc+" text-center"}><div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center ${isClockedIn?'bg-green-100':'bg-[#e9edf2]'}`}>{isClockedIn?<LogOutIcon className="w-10 h-10 text-red-500"/>:<Map className="w-10 h-10 text-[#4b9b6b]"/>}</div><h3 className="font-bold text-lg mb-2">{isClockedIn?'Clock Out':'Clock In'}</h3><button onClick={handleClockToggle} disabled={clockingInOut} className={`rounded-[40px] py-4 w-full font-bold text-lg ${isClockedIn?'bg-gradient-to-br from-red-400 to-red-600 text-white':'bg-gradient-to-br from-[#4b9b6b] to-[#3d8b5f] text-white'}`}>{clockingInOut?<RefreshCw className="w-5 h-5 animate-spin inline mr-2"/>:isClockedIn?<LogOutIcon className="w-5 h-5 inline mr-2"/>:<Map className="w-5 h-5 inline mr-2"/>}{isClockedIn?'Clock Out':'Clock In with GPS'}</button><div className={cic+" mt-4 text-left"}><p className="text-sm">Status: {isClockedIn?'🟢Clocked In':'⚪Not Clocked In'}</p>{clockInTime&&<p className="text-xs mt-1">Since: {new Date(clockInTime).toLocaleTimeString()}</p>}</div></div></div>)
