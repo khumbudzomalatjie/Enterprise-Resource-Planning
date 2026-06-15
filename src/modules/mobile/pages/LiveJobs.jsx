@@ -9,9 +9,9 @@ import {
   Briefcase, Search, ArrowLeft, Sun, Moon, Sparkles,
   Clock, MapPin, User, CheckCircle2, Play, AlertCircle,
   Calendar, Eye, Building2, Phone, RefreshCw, Camera,
-  Package, FileText, DollarSign, Star, Clock3,
+  Package, FileText, DollarSign, Clock3,
   Users, ClipboardList, History, Receipt,
-  X, Download, MessageCircle, Wrench
+  X, Download, Wrench
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -63,6 +63,21 @@ export default function LiveJobs() {
         supabase.from('incident_reports').select('*').eq('job_id', job.id),
       ])
 
+      // === GET REAL USER NAMES ===
+      const userIds = new Set()
+      if (job.created_by) userIds.add(job.created_by)
+      if (job.assigned_supervisor) userIds.add(job.assigned_supervisor)
+      inspectionsRes.data?.forEach(i => { if (i.inspector_id) userIds.add(i.inspector_id) })
+      invoicesRes.data?.forEach(i => { if (i.created_by) userIds.add(i.created_by) })
+      const uniqueUserIds = [...userIds].filter(Boolean)
+
+      let usersMap = {}
+      if (uniqueUserIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('*').in('id', uniqueUserIds)
+        profiles?.forEach(p => { usersMap[p.id] = p })
+      }
+
+      // Get employee details for assignments
       let assignmentsWithEmployees = assignmentsRes.data || []
       if (assignmentsWithEmployees.length > 0) {
         const eIds = assignmentsWithEmployees.map(a => a.employee_id).filter(Boolean)
@@ -72,6 +87,7 @@ export default function LiveJobs() {
         }
       }
 
+      // Get attendance
       const eIds = assignmentsWithEmployees.map(a => a.employee_id).filter(Boolean)
       let attendanceData = []
       if (eIds.length > 0) {
@@ -79,6 +95,7 @@ export default function LiveJobs() {
         attendanceData = att || []
       }
 
+      // Get payments for invoices
       let invoicesWithPayments = invoicesRes.data || []
       if (invoicesWithPayments.length > 0) {
         const invIds = invoicesWithPayments.map(inv => inv.id)
@@ -92,10 +109,14 @@ export default function LiveJobs() {
         job_task_items: tasksRes.data || [], quality_inspections: inspectionsRes.data || [],
         quotations: quotationsRes.data ? [quotationsRes.data] : [], invoices: invoicesWithPayments,
         supplies: suppliesRes.data || [], incidents: incidentsRes.data || [], attendance: attendanceData,
+        usersMap: usersMap
       })
       setActiveTab('overview'); toast.success(`Job ${job.job_number} loaded!`)
-    } catch (error) { console.error(error); setSelectedJob({ ...job, clients: null, job_categories: null, job_assignments: [], job_photos: [], job_task_items: [], quality_inspections: [], quotations: [], invoices: [], supplies: [], incidents: [], attendance: [] }); setActiveTab('overview') }
-    finally { setLoading(false); setSearching(false) }
+    } catch (error) {
+      console.error(error)
+      setSelectedJob({ ...job, clients: null, job_categories: null, job_assignments: [], job_photos: [], job_task_items: [], quality_inspections: [], quotations: [], invoices: [], supplies: [], incidents: [], attendance: [], usersMap: {} })
+      setActiveTab('overview')
+    } finally { setLoading(false); setSearching(false) }
   }
 
   const handleKeyDown = (e) => { if (e.key === 'Enter') { setShowDropdown(false); searchJob() } }
@@ -109,16 +130,81 @@ export default function LiveJobs() {
     return b[s] || 'bg-slate-100 text-slate-700'
   }
 
+  // === AUDIT TRAIL WITH REAL USER NAMES ===
   const generateAuditTrail = (job) => {
     const trail = []
-    if (job.created_at) trail.push({ action: 'Job Created', user: 'System', date: job.created_at, icon: Briefcase })
-    if (job.scheduled_date) trail.push({ action: 'Scheduled', user: 'Operations', date: job.scheduled_date, icon: Calendar })
-    job.job_assignments?.forEach(a => trail.push({ action: `Assigned: ${a.employees?.first_name || 'Cleaner'} ${a.employees?.last_name || ''}`, user: 'Supervisor', date: a.created_at, icon: User }))
-    if (job.actual_start_time) trail.push({ action: 'Started', user: 'Cleaner', date: job.actual_start_time, icon: Play })
-    job.job_photos?.forEach(p => trail.push({ action: `Photo (${p.photo_type})`, user: 'Cleaner', date: p.taken_at, icon: Camera }))
-    job.quality_inspections?.forEach(q => trail.push({ action: `QC: ${q.overall_rating}/5`, user: 'Inspector', date: q.created_at, icon: CheckCircle2 }))
-    if (job.status === 'completed') trail.push({ action: 'Completed', user: 'Cleaner', date: job.actual_end_time, icon: CheckCircle2 })
-    job.invoices?.forEach(inv => trail.push({ action: `Invoice: ${inv.invoice_number}`, user: 'Finance', date: inv.created_at, icon: Receipt }))
+    const users = job.usersMap || {}
+    
+    // Who created
+    const creatorName = job.created_by ? (users[job.created_by]?.full_name || users[job.created_by]?.email?.split('@')[0] || 'System User') : 'System'
+    trail.push({ 
+      action: 'Job Created', user: creatorName, date: job.created_at, icon: Briefcase,
+      details: `Job #${job.job_number} was created`
+    })
+    
+    // Who scheduled
+    if (job.scheduled_date) {
+      trail.push({ 
+        action: 'Job Scheduled', user: creatorName, date: job.scheduled_date, icon: Calendar,
+        details: `Scheduled for ${formatDate(job.scheduled_date)} at ${formatTime(job.scheduled_start_time)} - ${formatTime(job.scheduled_end_time)}`
+      })
+    }
+    
+    // Who assigned cleaners
+    job.job_assignments?.forEach(a => {
+      const assignerName = job.assigned_supervisor ? (users[job.assigned_supervisor]?.full_name || users[job.assigned_supervisor]?.email?.split('@')[0] || 'Supervisor') : 'Supervisor'
+      const cleanerName = a.employees ? `${a.employees.first_name || ''} ${a.employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      trail.push({ 
+        action: `Assigned: ${cleanerName}`, user: assignerName, date: a.created_at || job.scheduled_date, icon: User,
+        details: `${cleanerName} was assigned to this job`
+      })
+    })
+    
+    // Who started
+    if (job.actual_start_time) {
+      const starterName = job.job_assignments?.[0]?.employees ? `${job.job_assignments[0].employees.first_name || ''} ${job.job_assignments[0].employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      trail.push({ 
+        action: 'Job Started (In Progress)', user: starterName, date: job.actual_start_time, icon: Play,
+        details: 'Work began on site - status changed to In Progress'
+      })
+    }
+    
+    // Photos uploaded
+    job.job_photos?.forEach(p => {
+      trail.push({ 
+        action: `Photo Uploaded (${p.photo_type})`, user: 'Cleaner', date: p.taken_at, icon: Camera,
+        details: p.caption || `${p.photo_type} photo uploaded`
+      })
+    })
+    
+    // Quality inspections
+    job.quality_inspections?.forEach(q => {
+      const inspectorName = q.inspector_id ? (users[q.inspector_id]?.full_name || users[q.inspector_id]?.email?.split('@')[0] || 'Inspector') : 'Inspector'
+      trail.push({ 
+        action: 'Quality Inspection Completed', user: inspectorName, date: q.inspection_date || q.created_at, icon: CheckCircle2,
+        details: `Overall: ${q.overall_rating}/5 | Cleanliness: ${q.cleanliness_score}/5 | Safety: ${q.safety_compliance_score}/5`
+      })
+    })
+    
+    // Who completed
+    if (job.status === 'completed' || job.actual_end_time) {
+      const completerName = job.job_assignments?.find(a => a.status === 'completed')?.employees ? 
+        `${job.job_assignments.find(a => a.status === 'completed').employees.first_name || ''} ${job.job_assignments.find(a => a.status === 'completed').employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      trail.push({ 
+        action: 'Job Completed', user: completerName, date: job.actual_end_time || job.updated_at, icon: CheckCircle2,
+        details: job.completion_notes || 'Job was marked as completed'
+      })
+    }
+    
+    // Who invoiced
+    job.invoices?.forEach(inv => {
+      const invoicerName = inv.created_by ? (users[inv.created_by]?.full_name || users[inv.created_by]?.email?.split('@')[0] || 'Finance Officer') : 'Finance Officer'
+      trail.push({ 
+        action: `Invoice Generated: ${inv.invoice_number}`, user: invoicerName, date: inv.created_at, icon: Receipt,
+        details: `Amount: ${formatCurrency(inv.total_amount)} | Status: ${inv.status}`
+      })
+    })
+
     trail.sort((a, b) => new Date(a.date) - new Date(b.date))
     return trail
   }
@@ -161,7 +247,7 @@ export default function LiveJobs() {
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3 mb-4">
             <Briefcase className="w-8 h-8 text-blue-600" />Job Tracker
           </h1>
-          <p className="text-slate-500 mb-6">Enter a Job Number to view the complete job history and all related information</p>
+          <p className="text-slate-500 mb-6">Enter a Job Number to view the complete job history, who did what and when</p>
           <div className="flex gap-3 relative">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
@@ -247,7 +333,7 @@ export default function LiveJobs() {
                 <h3 className="text-lg font-semibold mb-4">Job Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div className="space-y-2">
-                    {[['Title', selectedJob.title], ['Description', selectedJob.description || 'N/A'], ['Category', selectedJob.job_categories?.name || 'N/A'], ['Priority', selectedJob.priority], ['Status', selectedJob.status?.replace('_', ' ')], ['Cleaners Required', selectedJob.cleaners_required || 1], ['Estimated Duration', `${selectedJob.estimated_duration_minutes || 'N/A'} min`]].map(([l, v]) => (
+                    {[['Title', selectedJob.title], ['Description', selectedJob.description || 'N/A'], ['Category', selectedJob.job_categories?.name || 'N/A'], ['Priority', selectedJob.priority], ['Status', selectedJob.status?.replace('_', ' ')], ['Cleaners Required', selectedJob.cleaners_required || 1], ['Est. Duration', `${selectedJob.estimated_duration_minutes || 'N/A'} min`]].map(([l, v]) => (
                       <div key={l} className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">{l}</span><span className="font-medium capitalize">{v}</span></div>
                     ))}
                   </div>
@@ -319,8 +405,9 @@ export default function LiveJobs() {
                       <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 z-10 shadow-lg"><step.icon className="w-5 h-5 text-white" /></div>
                       <div className="flex-1 bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
                         <p className="font-semibold text-sm text-slate-800 dark:text-white">{step.action}</p>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-xs text-slate-500">{step.user}</span>
+                        <p className="text-xs text-slate-500 mt-1">{step.details}</p>
+                        <div className="flex justify-between mt-2">
+                          <span className="text-xs text-slate-500 font-medium">{step.user}</span>
                           <span className="text-xs text-slate-400">{formatDateTime(step.date)}</span>
                         </div>
                       </div>
@@ -344,7 +431,6 @@ export default function LiveJobs() {
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium text-white ${photo.photo_type === 'before' ? 'bg-blue-500' : photo.photo_type === 'after' ? 'bg-emerald-500' : 'bg-red-500'}`}>{photo.photo_type}</span>
                           <p className="text-white/80 text-[10px] mt-1">{formatDateTime(photo.taken_at)}</p>
                         </div>
-                        {photo.caption && <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full max-w-[120px] truncate">{photo.caption}</div>}
                       </div>
                     ))}
                   </div>
@@ -387,7 +473,7 @@ export default function LiveJobs() {
                 {selectedJob.attendance?.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b bg-slate-50 dark:bg-slate-700/30"><th className="text-left py-3 px-4">Date</th><th className="text-left py-3 px-4">Clock In</th><th className="text-left py-3 px-4">Clock Out</th><th className="text-right py-3 px-4">Hours</th><th className="text-left py-3 px-4">Method</th><th className="text-left py-3 px-4">Status</th></tr></thead>
+                      <thead><tr className="border-b bg-slate-50 dark:bg-slate-700/30"><th className="text-left py-3 px-4">Date</th><th className="text-left py-3 px-4">Clock In</th><th className="text-left py-3 px-4">Clock Out</th><th className="text-right py-3 px-4">Hours</th><th className="text-left py-3 px-4">Status</th></tr></thead>
                       <tbody>
                         {selectedJob.attendance.map(a => (
                           <tr key={a.id} className="border-b hover:bg-slate-50 dark:hover:bg-slate-700/20">
@@ -395,7 +481,6 @@ export default function LiveJobs() {
                             <td className="py-3 px-4">{a.clock_in_time ? new Date(a.clock_in_time).toLocaleTimeString() : '-'}</td>
                             <td className="py-3 px-4">{a.clock_out_time ? new Date(a.clock_out_time).toLocaleTimeString() : '-'}</td>
                             <td className="py-3 px-4 text-right font-bold">{a.total_hours?.toFixed(1) || '-'}</td>
-                            <td className="py-3 px-4 capitalize text-xs">{a.check_in_method?.replace('_', ' ') || '-'}</td>
                             <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded-full text-xs ${a.status === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{a.status}</span></td>
                           </tr>
                         ))}
@@ -404,7 +489,7 @@ export default function LiveJobs() {
                         <tr className="bg-slate-50 dark:bg-slate-700/30 font-bold">
                           <td className="py-3 px-4" colSpan={3}>Total Hours</td>
                           <td className="py-3 px-4 text-right">{selectedJob.attendance.reduce((s, a) => s + (a.total_hours || 0), 0).toFixed(1)}</td>
-                          <td className="py-3 px-4" colSpan={2}></td>
+                          <td className="py-3 px-4"></td>
                         </tr>
                       </tfoot>
                     </table>
@@ -418,7 +503,6 @@ export default function LiveJobs() {
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Financial Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Quotation */}
                   <div className="p-5 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800">
                     <div className="flex items-center gap-2 mb-3"><FileText className="w-5 h-5 text-blue-600" /><h4 className="font-semibold text-blue-700">Quotation</h4></div>
                     {selectedJob.quotations?.length > 0 ? selectedJob.quotations.map(q => (
@@ -433,8 +517,6 @@ export default function LiveJobs() {
                       </div>
                     )) : <p className="text-sm text-slate-500">No quotation generated</p>}
                   </div>
-
-                  {/* Invoice */}
                   <div className="p-5 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
                     <div className="flex items-center gap-2 mb-3"><Receipt className="w-5 h-5 text-emerald-600" /><h4 className="font-semibold text-emerald-700">Invoice</h4></div>
                     {selectedJob.invoices?.length > 0 ? selectedJob.invoices.map(inv => (
@@ -477,12 +559,11 @@ export default function LiveJobs() {
                       <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
                         <div className="flex items-center gap-3 mb-3">
                           <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"><Building2 className="w-6 h-6 text-blue-600" /></div>
-                          <div><p className="font-bold text-lg">{selectedJob.clients.company_name}</p><p className="text-xs text-slate-500">Client</p></div>
+                          <div><p className="font-bold text-lg">{selectedJob.clients.company_name}</p></div>
                         </div>
                         <div className="space-y-2 text-sm">
                           {selectedJob.clients.email && <div className="flex items-center gap-2"><span className="text-slate-500">Email:</span><a href={`mailto:${selectedJob.clients.email}`} className="text-blue-600 hover:underline">{selectedJob.clients.email}</a></div>}
                           {selectedJob.clients.phone && <div className="flex items-center gap-2"><span className="text-slate-500">Phone:</span><a href={`tel:${selectedJob.clients.phone}`} className="text-blue-600 hover:underline">{selectedJob.clients.phone}</a></div>}
-                          {selectedJob.clients.address_line1 && <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" /><span>{selectedJob.clients.address_line1}, {selectedJob.clients.city}</span></div>}
                         </div>
                       </div>
                       <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
@@ -490,20 +571,11 @@ export default function LiveJobs() {
                         <div className="space-y-2 text-sm">
                           <div><span className="text-slate-500">Name:</span> <span className="font-medium">{selectedJob.site_contact_name || 'N/A'}</span></div>
                           <div><span className="text-slate-500">Phone:</span> {selectedJob.site_contact_phone ? <a href={`tel:${selectedJob.site_contact_phone}`} className="text-blue-600 hover:underline">{selectedJob.site_contact_phone}</a> : 'N/A'}</div>
-                          <div><span className="text-slate-500">Address:</span> <span>{selectedJob.site_address || 'N/A'}</span></div>
                         </div>
                       </div>
                     </div>
-                    {/* Feedback */}
-                    {selectedJob.client_feedback && (
-                      <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200">
-                        <h4 className="font-semibold text-sm text-yellow-700 mb-2">Customer Feedback</h4>
-                        <div className="flex items-center gap-1 mb-2">{'⭐'.repeat(selectedJob.client_rating || 0)}<span className="text-sm ml-2">{selectedJob.client_rating}/5</span></div>
-                        <p className="text-sm text-yellow-600">{selectedJob.client_feedback}</p>
-                      </div>
-                    )}
                   </div>
-                ) : <div className="text-center py-8 text-slate-400"><Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" /><p>No client assigned to this job</p></div>}
+                ) : <div className="text-center py-8 text-slate-400"><Building2 className="w-12 h-12 mx-auto mb-2 opacity-50" /><p>No client assigned</p></div>}
               </div>
             )}
 
@@ -515,9 +587,10 @@ export default function LiveJobs() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50 dark:bg-slate-700/30">
-                        <th className="text-left py-3 px-4">#</th>
+                        <th className="text-left py-3 px-4 w-[40px]">#</th>
                         <th className="text-left py-3 px-4">Action</th>
-                        <th className="text-left py-3 px-4">User</th>
+                        <th className="text-left py-3 px-4">Performed By</th>
+                        <th className="text-left py-3 px-4">Details</th>
                         <th className="text-left py-3 px-4">Date/Time</th>
                       </tr>
                     </thead>
@@ -527,16 +600,24 @@ export default function LiveJobs() {
                           <td className="py-3 px-4 text-slate-400 text-xs">{i + 1}</td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
-                              <item.icon className="w-4 h-4 text-blue-600" />
+                              <item.icon className="w-4 h-4 text-blue-600 flex-shrink-0" />
                               <span className="font-medium">{item.action}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{item.user}</td>
-                          <td className="py-3 px-4 text-xs text-slate-500">{formatDateTime(item.date)}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                                <User className="w-3 h-3 text-purple-600" />
+                              </div>
+                              <span className="text-slate-700 dark:text-slate-300 font-medium">{item.user}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500 max-w-[250px]">{item.details || '-'}</td>
+                          <td className="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(item.date)}</td>
                         </tr>
                       ))}
                       {generateAuditTrail(selectedJob).length === 0 && (
-                        <tr><td colSpan={4} className="text-center py-8 text-slate-400">No audit records available</td></tr>
+                        <tr><td colSpan={5} className="text-center py-8 text-slate-400">No audit records available</td></tr>
                       )}
                     </tbody>
                   </table>
