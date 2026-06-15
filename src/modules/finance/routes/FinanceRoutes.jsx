@@ -4,6 +4,10 @@ import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import FinanceDashboard from '../pages/FinanceDashboard'
 import FinanceJobs from '../pages/FinanceJobs'
 import VendorApprovals from '../pages/VendorApprovals'
+import AccountsPayable from '../pages/AccountsPayable'
+import AccountsReceivable from '../pages/AccountsReceivable'
+import BudgetManagement from '../pages/BudgetManagement'
+import GeneralLedger from '../pages/GeneralLedger'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function FinanceRoutes() {
@@ -44,63 +48,63 @@ export default function FinanceRoutes() {
       />
 
       {/* ============================================ */}
-      {/* ACCOUNTS PAYABLE                            */}
+      {/* ACCOUNTS PAYABLE - Supplier Invoices         */}
       {/* ============================================ */}
       <Route 
         path="/payables" 
         element={
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
-              <FinanceDashboard />
+              <AccountsPayable />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
-      {/* ACCOUNTS RECEIVABLE                         */}
+      {/* ACCOUNTS RECEIVABLE - Customer Invoices      */}
       {/* ============================================ */}
       <Route 
         path="/receivables" 
         element={
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
-              <FinanceDashboard />
+              <AccountsReceivable />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
-      {/* BUDGETS                                      */}
+      {/* BUDGETS - Budget Planning & Tracking         */}
       {/* ============================================ */}
       <Route 
         path="/budgets" 
         element={
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
-              <FinanceDashboard />
+              <BudgetManagement />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
-      {/* GENERAL LEDGER                              */}
+      {/* GENERAL LEDGER - Financial Transactions      */}
       {/* ============================================ */}
       <Route 
         path="/ledger" 
         element={
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
-              <FinanceDashboard />
+              <GeneralLedger />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
       />
 
       {/* ============================================ */}
-      {/* PAYMENTS                                     */}
+      {/* PAYMENTS - Payment Tracking                  */}
       {/* ============================================ */}
       <Route 
         path="/payments" 
