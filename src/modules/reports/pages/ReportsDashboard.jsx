@@ -41,14 +41,6 @@ export default function ReportsDashboard() {
     { icon: Truck, label: 'Active Vehicles', value: overview.totalVehicles || 0, color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
   ]
 
-  const getKPIStatus = (kpi) => {
-    if (!kpi.current_value || !kpi.target_value) return 'text-slate-500'
-    const pct = (kpi.current_value / kpi.target_value) * 100
-    if (pct >= 90) return 'text-emerald-600'
-    if (pct >= 70) return 'text-amber-600'
-    return 'text-red-600'
-  }
-
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -102,84 +94,103 @@ export default function ReportsDashboard() {
         </div>
 
         {/* KPI Targets */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-8">
-          <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Target className="w-5 h-5 text-emerald-600" />KPI Targets</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {kpiTargets.slice(0, 8).map(kpi => {
-              const pct = kpi.target_value > 0 ? Math.round((kpi.current_value / kpi.target_value) * 100) : 0
-              return (
-                <div key={kpi.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-                  <p className="text-xs text-slate-500 mb-1">{kpi.kpi_name}</p>
-                  <div className="flex items-end justify-between mb-2">
-                    <span className="text-lg font-bold text-slate-800 dark:text-white">{kpi.current_value || 0}</span>
-                    <span className="text-xs text-slate-400">/ {kpi.target_value} {kpi.unit}</span>
+        {kpiTargets && kpiTargets.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-8">
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Target className="w-5 h-5 text-emerald-600" />KPI Targets</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {kpiTargets.slice(0, 8).map(kpi => {
+                const pct = kpi.target_value > 0 ? Math.round((kpi.current_value / kpi.target_value) * 100) : 0
+                return (
+                  <div key={kpi.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
+                    <p className="text-xs text-slate-500 mb-1">{kpi.kpi_name}</p>
+                    <div className="flex items-end justify-between mb-2">
+                      <span className="text-lg font-bold text-slate-800 dark:text-white">{kpi.current_value || 0}</span>
+                      <span className="text-xs text-slate-400">/ {kpi.target_value} {kpi.unit}</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(pct, 100)}%` }}></div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{pct}% of target</p>
                   </div>
-                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(pct, 100)}%` }}></div>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">{pct}% of target</p>
-                </div>
-              )
-            })}
-          </div>
-        </motion.div>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Sales & Operations Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Sales Chart */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-600" />Monthly Revenue</h2>
-            <div className="flex items-end gap-2 h-[150px]">
-              {salesReport.monthlySales?.map((m, i) => {
-                const maxVal = Math.max(...(salesReport.monthlySales?.map(s => s.revenue) || [1]), 1)
-                return (
-                  <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-slate-500">{formatCurrency(m.revenue).replace('R ','')}</span>
-                    <div className="w-full bg-emerald-500 rounded-t-sm" style={{ height: `${(m.revenue / maxVal) * 120}px` }}></div>
-                    <span className="text-[10px] text-slate-400">{m.month?.slice(5)}</span>
-                  </div>
-                )
-              })}
-            </div>
+            {salesReport?.monthlySales && salesReport.monthlySales.length > 0 ? (
+              <div className="flex items-end gap-2 h-[150px]">
+                {salesReport.monthlySales.map((m, i) => {
+                  const maxVal = Math.max(...(salesReport.monthlySales?.map(s => s.revenue) || [1]), 1)
+                  return (
+                    <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-slate-500">{formatCurrency(m.revenue).replace('R ','')}</span>
+                      <div className="w-full bg-emerald-500 rounded-t-sm" style={{ height: `${(m.revenue / maxVal) * 120}px` }}></div>
+                      <span className="text-[10px] text-slate-400">{m.month?.slice(5)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">No sales data for this period</div>
+            )}
           </motion.div>
 
           {/* Operations Chart */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Briefcase className="w-5 h-5 text-emerald-600" />Jobs by Category</h2>
-            <div className="space-y-3">
-              {operationsReport.categoryBreakdown?.map((cat, i) => {
-                const maxCount = Math.max(...(operationsReport.categoryBreakdown?.map(c => c.count) || [1]), 1)
-                const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#6366f1', '#ec4899']
-                return (
-                  <div key={cat.category}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-slate-600 dark:text-slate-400">{cat.category}</span>
-                      <span className="font-semibold text-slate-800 dark:text-white">{cat.count}</span>
+            {operationsReport?.categoryBreakdown && operationsReport.categoryBreakdown.length > 0 ? (
+              <div className="space-y-3">
+                {operationsReport.categoryBreakdown.map((cat, i) => {
+                  const maxCount = Math.max(...(operationsReport.categoryBreakdown?.map(c => c.count) || [1]), 1)
+                  const colors = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#6366f1', '#ec4899']
+                  return (
+                    <div key={cat.category}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-slate-600 dark:text-slate-400">{cat.category}</span>
+                        <span className="font-semibold text-slate-800 dark:text-white">{cat.count}</span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${(cat.count / maxCount) * 100}%`, backgroundColor: colors[i % colors.length] }}></div>
+                      </div>
                     </div>
-                    <div className="w-full h-3 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${(cat.count / maxCount) * 100}%`, backgroundColor: colors[i % colors.length] }}></div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">No operations data for this period</div>
+            )}
           </motion.div>
         </div>
 
         {/* Quick Report Links */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[
-            { label: 'Sales Report', icon: TrendingUp, path: '/reports/sales', color: 'text-blue-600' },
-            { label: 'Operations', icon: Briefcase, path: '/reports/operations', color: 'text-emerald-600' },
-            { label: 'Financial', icon: DollarSign, path: '/reports/financial', color: 'text-purple-600' },
-            { label: 'HR Report', icon: Users, path: '/reports/hr', color: 'text-amber-600' },
-            { label: 'Fleet Report', icon: Truck, path: '/reports/fleet', color: 'text-indigo-600' },
-          ].map(action => (
-            <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105">
-              <action.icon className={`w-6 h-6 ${action.color}`} />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
-            </button>
-          ))}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-emerald-600" />Detailed Reports
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {[
+              { label: 'Sales Report', icon: TrendingUp, path: '/reports/sales', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+              { label: 'Operations', icon: Briefcase, path: '/reports/operations', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+              { label: 'Financial', icon: DollarSign, path: '/reports/financial', color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
+              { label: 'HR Report', icon: Users, path: '/reports/hr', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+              { label: 'Fleet Report', icon: Truck, path: '/reports/fleet', color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+              { label: 'KPI Performance', icon: Target, path: '/reports/kpi', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
+            ].map(action => (
+              <button key={action.label} onClick={() => navigate(action.path)} 
+                className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform">
+                <div className={`w-10 h-10 rounded-xl ${action.bg} flex items-center justify-center`}>
+                  <action.icon className={`w-5 h-5 ${action.color}`} />
+                </div>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
+              </button>
+            ))}
+          </div>
         </motion.div>
       </main>
     </div>
