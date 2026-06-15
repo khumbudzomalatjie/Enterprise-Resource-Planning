@@ -29,7 +29,11 @@ export default function LiveJobs() {
   useEffect(() => { loadAvailableJobs() }, [])
 
   const loadAvailableJobs = async () => {
-    const { data } = await supabase.from('jobs').select('job_number, title, status').order('created_at', { ascending: false }).limit(50)
+    const { data } = await supabase
+      .from('jobs')
+      .select('job_number, title, status')
+      .order('created_at', { ascending: false })
+      .limit(50)
     setAvailableJobs(data || [])
   }
 
@@ -63,12 +67,13 @@ export default function LiveJobs() {
         supabase.from('incident_reports').select('*').eq('job_id', job.id),
       ])
 
-      // === GET REAL USER NAMES ===
+      // === COLLECT ALL USER IDs FOR NAME RESOLUTION ===
       const userIds = new Set()
       if (job.created_by) userIds.add(job.created_by)
       if (job.assigned_supervisor) userIds.add(job.assigned_supervisor)
+      if (job.approved_by) userIds.add(job.approved_by)
       inspectionsRes.data?.forEach(i => { if (i.inspector_id) userIds.add(i.inspector_id) })
-      invoicesRes.data?.forEach(i => { if (i.created_by) userIds.add(i.created_by) })
+      invoicesRes.data?.forEach(i => { if (i.created_by) userIds.add(i.created_by); if (i.approved_by) userIds.add(i.approved_by) })
       const uniqueUserIds = [...userIds].filter(Boolean)
 
       let usersMap = {}
@@ -87,7 +92,7 @@ export default function LiveJobs() {
         }
       }
 
-      // Get attendance
+      // Get attendance for assigned employees
       const eIds = assignmentsWithEmployees.map(a => a.employee_id).filter(Boolean)
       let attendanceData = []
       if (eIds.length > 0) {
@@ -135,14 +140,23 @@ export default function LiveJobs() {
     const trail = []
     const users = job.usersMap || {}
     
-    // Who created
-    const creatorName = job.created_by ? (users[job.created_by]?.full_name || users[job.created_by]?.email?.split('@')[0] || 'System User') : 'System'
+    // Helper to get user's real name from profiles
+    const getUserName = (userId, fallback) => {
+      if (!userId) return fallback
+      const user = users[userId]
+      if (user?.full_name && user.full_name.trim()) return user.full_name.trim()
+      if (user?.email) return user.email.split('@')[0]
+      return fallback
+    }
+    
+    // 1. Who created the job
+    const creatorName = getUserName(job.created_by, 'System')
     trail.push({ 
       action: 'Job Created', user: creatorName, date: job.created_at, icon: Briefcase,
       details: `Job #${job.job_number} was created`
     })
     
-    // Who scheduled
+    // 2. Who scheduled
     if (job.scheduled_date) {
       trail.push({ 
         action: 'Job Scheduled', user: creatorName, date: job.scheduled_date, icon: Calendar,
@@ -150,60 +164,81 @@ export default function LiveJobs() {
       })
     }
     
-    // Who assigned cleaners
+    // 3. Who assigned cleaners (use actual supervisor name from profiles)
     job.job_assignments?.forEach(a => {
-      const assignerName = job.assigned_supervisor ? (users[job.assigned_supervisor]?.full_name || users[job.assigned_supervisor]?.email?.split('@')[0] || 'Supervisor') : 'Supervisor'
-      const cleanerName = a.employees ? `${a.employees.first_name || ''} ${a.employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      const assignerName = getUserName(job.assigned_supervisor, 'Supervisor')
+      const assignedCleanerName = a.employees?.first_name 
+        ? `${a.employees.first_name} ${a.employees.last_name || ''}`.trim() 
+        : 'Cleaner'
       trail.push({ 
-        action: `Assigned: ${cleanerName}`, user: assignerName, date: a.created_at || job.scheduled_date, icon: User,
-        details: `${cleanerName} was assigned to this job`
+        action: `Assigned Cleaner: ${assignedCleanerName}`, user: assignerName, date: a.created_at || job.scheduled_date, icon: User,
+        details: `${assignedCleanerName} was assigned to this job by ${assignerName}`
       })
     })
     
-    // Who started
+    // 4. Who started the job
     if (job.actual_start_time) {
-      const starterName = job.job_assignments?.[0]?.employees ? `${job.job_assignments[0].employees.first_name || ''} ${job.job_assignments[0].employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      const assignedCleaner = job.job_assignments?.[0]
+      const starterName = assignedCleaner?.employees?.first_name 
+        ? `${assignedCleaner.employees.first_name} ${assignedCleaner.employees.last_name || ''}`.trim()
+        : getUserName(job.created_by, 'Cleaner')
       trail.push({ 
         action: 'Job Started (In Progress)', user: starterName, date: job.actual_start_time, icon: Play,
         details: 'Work began on site - status changed to In Progress'
       })
     }
     
-    // Photos uploaded
+    // 5. Photos uploaded - use cleaner name from assignments
+    const cleanerOnJob = job.job_assignments?.[0]?.employees
+    const cleanerName = cleanerOnJob?.first_name 
+      ? `${cleanerOnJob.first_name} ${cleanerOnJob.last_name || ''}`.trim()
+      : 'Cleaner'
+    
     job.job_photos?.forEach(p => {
       trail.push({ 
-        action: `Photo Uploaded (${p.photo_type})`, user: 'Cleaner', date: p.taken_at, icon: Camera,
+        action: `Photo Uploaded (${p.photo_type})`, user: cleanerName, date: p.taken_at, icon: Camera,
         details: p.caption || `${p.photo_type} photo uploaded`
       })
     })
     
-    // Quality inspections
+    // 6. Quality inspections - use actual inspector name from profiles
     job.quality_inspections?.forEach(q => {
-      const inspectorName = q.inspector_id ? (users[q.inspector_id]?.full_name || users[q.inspector_id]?.email?.split('@')[0] || 'Inspector') : 'Inspector'
+      const inspectorName = getUserName(q.inspector_id, 'Quality Inspector')
       trail.push({ 
         action: 'Quality Inspection Completed', user: inspectorName, date: q.inspection_date || q.created_at, icon: CheckCircle2,
-        details: `Overall: ${q.overall_rating}/5 | Cleanliness: ${q.cleanliness_score}/5 | Safety: ${q.safety_compliance_score}/5`
+        details: `Overall: ${q.overall_rating || 'N/A'}/5 | Cleanliness: ${q.cleanliness_score || 'N/A'}/5 | Safety: ${q.safety_compliance_score || 'N/A'}/5`
       })
     })
     
-    // Who completed
+    // 7. Who completed the job
     if (job.status === 'completed' || job.actual_end_time) {
-      const completerName = job.job_assignments?.find(a => a.status === 'completed')?.employees ? 
-        `${job.job_assignments.find(a => a.status === 'completed').employees.first_name || ''} ${job.job_assignments.find(a => a.status === 'completed').employees.last_name || ''}`.trim() || 'Cleaner' : 'Cleaner'
+      const completedAssignment = job.job_assignments?.find(a => a.status === 'completed')
+      const completerName = completedAssignment?.employees?.first_name
+        ? `${completedAssignment.employees.first_name} ${completedAssignment.employees.last_name || ''}`.trim()
+        : cleanerName
       trail.push({ 
         action: 'Job Completed', user: completerName, date: job.actual_end_time || job.updated_at, icon: CheckCircle2,
         details: job.completion_notes || 'Job was marked as completed'
       })
     }
     
-    // Who invoiced
+    // 8. Who generated invoice - use actual invoice creator from profiles
     job.invoices?.forEach(inv => {
-      const invoicerName = inv.created_by ? (users[inv.created_by]?.full_name || users[inv.created_by]?.email?.split('@')[0] || 'Finance Officer') : 'Finance Officer'
+      const invoicerName = getUserName(inv.created_by, 'Finance Officer')
       trail.push({ 
         action: `Invoice Generated: ${inv.invoice_number}`, user: invoicerName, date: inv.created_at, icon: Receipt,
         details: `Amount: ${formatCurrency(inv.total_amount)} | Status: ${inv.status}`
       })
     })
+
+    // 9. Who approved (if applicable)
+    if (job.approved_by) {
+      const approverName = getUserName(job.approved_by, 'Manager')
+      trail.push({
+        action: 'Job Approved', user: approverName, date: job.updated_at, icon: CheckCircle2,
+        details: 'Job was reviewed and approved'
+      })
+    }
 
     trail.sort((a, b) => new Date(a.date) - new Date(b.date))
     return trail
@@ -302,7 +337,7 @@ export default function LiveJobs() {
               ))}
             </div>
 
-            {/* ============ OVERVIEW TAB ============ */}
+            {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
@@ -327,7 +362,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ JOB DETAILS TAB ============ */}
+            {/* JOB DETAILS TAB */}
             {activeTab === 'details' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Job Details</h3>
@@ -358,7 +393,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ ASSIGNED STAFF TAB ============ */}
+            {/* ASSIGNED STAFF TAB */}
             {activeTab === 'staff' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Assigned Staff ({selectedJob.job_assignments?.length || 0})</h3>
@@ -394,7 +429,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ TIMELINE TAB ============ */}
+            {/* TIMELINE TAB */}
             {activeTab === 'timeline' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Job Timeline</h3>
@@ -418,7 +453,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ PHOTOS TAB ============ */}
+            {/* PHOTOS TAB */}
             {activeTab === 'photos' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Job Photos ({selectedJob.job_photos?.length || 0})</h3>
@@ -438,7 +473,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ INVENTORY TAB ============ */}
+            {/* INVENTORY TAB */}
             {activeTab === 'inventory' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Supplies & Inventory ({selectedJob.supplies?.length || 0})</h3>
@@ -466,7 +501,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ TIME TRACKING TAB ============ */}
+            {/* TIME TRACKING TAB */}
             {activeTab === 'time' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Time Tracking</h3>
@@ -498,7 +533,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ FINANCIALS TAB ============ */}
+            {/* FINANCIALS TAB */}
             {activeTab === 'financials' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Financial Information</h3>
@@ -549,7 +584,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ CUSTOMER TAB ============ */}
+            {/* CUSTOMER TAB */}
             {activeTab === 'customer' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Customer Information</h3>
@@ -579,7 +614,7 @@ export default function LiveJobs() {
               </div>
             )}
 
-            {/* ============ AUDIT LOG TAB ============ */}
+            {/* AUDIT LOG TAB */}
             {activeTab === 'audit' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Audit Trail</h3>
