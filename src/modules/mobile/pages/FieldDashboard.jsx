@@ -10,7 +10,7 @@ import {
   Users, MapPin, Clock, Camera, AlertCircle, 
   Package, CheckCircle2, Briefcase, Phone,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Activity, Eye, MessageCircle
+  Activity, Eye, MessageCircle, Play
 } from 'lucide-react'
 
 export default function FieldDashboard() {
@@ -167,21 +167,22 @@ export default function FieldDashboard() {
               <Users className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Field Operations Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, job tracker, photos, incidents, supplies & messages in real-time</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, job tracker, live jobs, photos, incidents, supplies & messages</p>
           </div>
           <button onClick={loadAllData} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
             <Activity className="w-4 h-4" /> Refresh Live
           </button>
         </motion.div>
 
-        {/* Quick Nav - 6 Buttons with Job Tracker */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+        {/* Quick Nav - 7 Buttons */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">
           {[
             { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600' },
             { label: 'Job Photos', icon: Camera, path: '/mobile/field/photos', color: 'bg-indigo-600' },
             { label: 'Incidents', icon: AlertCircle, path: '/mobile/field/incidents', color: 'bg-red-600' },
             { label: 'Supply Orders', icon: Package, path: '/mobile/field/supplies', color: 'bg-amber-600' },
             { label: 'Job Tracker', icon: Briefcase, path: '/mobile/field/live-jobs', color: 'bg-blue-600' },
+            { label: 'Live Jobs', icon: Play, path: '/mobile/field/manage-jobs', color: 'bg-orange-600' },
             { label: 'Messages', icon: MessageCircle, path: '/mobile/field/messages', color: 'bg-purple-600' },
           ].map(item => (
             <button key={item.label} onClick={() => navigate(item.path)}
@@ -233,9 +234,7 @@ export default function FieldDashboard() {
                     {cleaner.check_in_latitude && (
                       <div className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                          View on Map
-                        </a>
+                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View on Map</a>
                       </div>
                     )}
                   </div>
@@ -255,9 +254,8 @@ export default function FieldDashboard() {
           )}
         </motion.div>
 
-        {/* Two Column Layout: Incidents + Supply Requests */}
+        {/* Two Column: Incidents + Supply Requests */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Recent Incidents */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -265,24 +263,19 @@ export default function FieldDashboard() {
               </h2>
               <Link to="/mobile/field/incidents" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
-            
             {recentIncidents.length > 0 ? (
               <div className="space-y-3">
                 {recentIncidents.map(incident => (
                   <div key={incident.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
                     <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-semibold text-sm text-slate-800 dark:text-white capitalize">{incident.incident_type}</p>
-                        <p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name}</p>
-                      </div>
+                      <div><p className="font-semibold text-sm capitalize">{incident.incident_type}</p><p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name}</p></div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         incident.severity === 'critical' ? 'bg-red-100 text-red-700' :
                         incident.severity === 'high' ? 'bg-orange-100 text-orange-700' :
-                        incident.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 
-                        'bg-blue-100 text-blue-700'
+                        incident.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                       }`}>{incident.severity}</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{incident.description}</p>
+                    <p className="text-xs text-slate-600 line-clamp-2">{incident.description}</p>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-[10px] text-slate-400">{new Date(incident.incident_date).toLocaleString()}</span>
                       {incident.status !== 'resolved' && (
@@ -293,14 +286,10 @@ export default function FieldDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">No open incidents 🎉</p>
-              </div>
+              <div className="text-center py-6"><CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" /><p className="text-slate-500 text-sm">No open incidents 🎉</p></div>
             )}
           </motion.div>
 
-          {/* Supply Requests */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -308,37 +297,27 @@ export default function FieldDashboard() {
               </h2>
               <Link to="/mobile/field/supplies" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
-            
             {supplyRequests.length > 0 ? (
               <div className="space-y-3">
                 {supplyRequests.map(request => (
                   <div key={request.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
                     <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-semibold text-sm text-slate-800 dark:text-white">{request.employees?.first_name} {request.employees?.last_name}</p>
-                        <p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items requested</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        request.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                      }`}>{request.status}</span>
+                      <div><p className="font-semibold text-sm">{request.employees?.first_name} {request.employees?.last_name}</p><p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items</p></div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${request.status === 'pending' ? 'bg-amber-100 text-amber-700' : request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{request.status}</span>
                     </div>
                     <div className="space-y-1">
                       {request.supplies_request_items?.slice(0, 3).map((item, i) => (
-                        <p key={i} className="text-xs text-slate-600 dark:text-slate-400">• {item.item_name} x{item.quantity} {item.unit}</p>
+                        <p key={i} className="text-xs text-slate-600">• {item.item_name} x{item.quantity} {item.unit}</p>
                       ))}
                     </div>
                     {request.status === 'pending' && (
-                      <button onClick={() => handleApproveSupply(request.id)} className="mt-2 w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">Approve Request</button>
+                      <button onClick={() => handleApproveSupply(request.id)} className="mt-2 w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">Approve</button>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">No pending requests</p>
-              </div>
+              <div className="text-center py-6"><Package className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 text-sm">No pending requests</p></div>
             )}
           </motion.div>
         </div>
@@ -351,7 +330,6 @@ export default function FieldDashboard() {
             </h2>
             <Link to="/mobile/field/photos" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
           </div>
-          
           {recentPhotos.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {recentPhotos.map(photo => (
@@ -362,18 +340,13 @@ export default function FieldDashboard() {
                     <p className="text-white/70 text-[10px]">{photo.jobs?.title?.slice(0, 30)}</p>
                   </div>
                   <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${
-                    photo.photo_type === 'before' ? 'bg-blue-500 text-white' :
-                    photo.photo_type === 'after' ? 'bg-emerald-500 text-white' :
-                    photo.photo_type === 'incident' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white'
+                    photo.photo_type === 'before' ? 'bg-blue-500 text-white' : photo.photo_type === 'after' ? 'bg-emerald-500 text-white' : photo.photo_type === 'incident' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white'
                   }`}>{photo.photo_type}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-6">
-              <Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No photos uploaded yet</p>
-            </div>
+            <div className="text-center py-6"><Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 text-sm">No photos uploaded yet</p></div>
           )}
         </motion.div>
       </main>
