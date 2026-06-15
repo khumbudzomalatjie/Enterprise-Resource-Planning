@@ -11,7 +11,8 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const { signIn, loading, profile } = useAuthStore()
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const { signIn, loading, profile, user } = useAuthStore()
   const { isDark, toggleTheme, initTheme } = useThemeStore()
   const navigate = useNavigate()
 
@@ -19,17 +20,22 @@ export default function Login() {
     initTheme()
   }, [initTheme])
 
-  // Watch for profile changes after login
+  // Redirect based on role AFTER profile is loaded
   useEffect(() => {
-    if (profile && !loading) {
-      console.log('Profile loaded, role:', profile.role)
+    if (isLoggingIn && profile && user && !loading) {
+      console.log('✅ Login complete - Profile:', profile.role)
+      
       if (profile.role === 'cleaner') {
+        console.log('→ Redirecting cleaner to /mobile')
         navigate('/mobile', { replace: true })
       } else {
+        console.log('→ Redirecting to /dashboard')
         navigate('/dashboard', { replace: true })
       }
+      
+      setIsLoggingIn(false)
     }
-  }, [profile, loading])
+  }, [isLoggingIn, profile, user, loading, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -39,16 +45,27 @@ export default function Login() {
       return
     }
 
+    setIsLoggingIn(true)
     const result = await signIn(email, password)
     
-    if (result.success) {
-      toast.success('Welcome back!')
-      // Don't navigate here - let the useEffect above handle it
-      // The profile will be loaded and the useEffect will trigger the redirect
-    } else {
+    if (!result.success) {
+      setIsLoggingIn(false)
       toast.error(result.error || 'Login failed')
     }
+    // If success, the useEffect above will handle the redirect
+    // after the profile is loaded into the store
   }
+
+  // If already logged in, redirect immediately
+  useEffect(() => {
+    if (!loading && user && profile && !isLoggingIn) {
+      if (profile.role === 'cleaner') {
+        navigate('/mobile', { replace: true })
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
+    }
+  }, [])
 
   return (
     <div className={`min-h-screen flex items-center justify-center p-4 font-['Inter'] transition-colors duration-300 ${
@@ -197,7 +214,7 @@ export default function Login() {
             {/* Submit Button */}
             <motion.button
               type="submit"
-              disabled={loading}
+              disabled={loading || isLoggingIn}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className="
@@ -218,7 +235,7 @@ export default function Login() {
                 disabled:cursor-not-allowed
               "
             >
-              {loading ? 'Signing in...' : 'Log in'}
+              {loading || isLoggingIn ? 'Signing in...' : 'Log in'}
             </motion.button>
           </form>
         </div>
