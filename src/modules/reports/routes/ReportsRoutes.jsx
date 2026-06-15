@@ -11,13 +11,54 @@ import KPIPerformance from '../pages/KPIPerformance'
 export default function ReportsRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<ProtectedRoute><ReportsDashboard /></ProtectedRoute>} />
-      <Route path="/sales" element={<ProtectedRoute><SalesReports /></ProtectedRoute>} />
-      <Route path="/operations" element={<ProtectedRoute><OperationsReports /></ProtectedRoute>} />
-      <Route path="/financial" element={<ProtectedRoute><FinancialReports /></ProtectedRoute>} />
-      <Route path="/hr" element={<ProtectedRoute><HRReports /></ProtectedRoute>} />
-      <Route path="/fleet" element={<ProtectedRoute><FleetReports /></ProtectedRoute>} />
-      <Route path="/kpi" element={<ProtectedRoute><KPIPerformance /></ProtectedRoute>} />
+      {/* Main Reports Dashboard */}
+      <Route path="/" element={
+        <ProtectedRoute>
+          <ReportsDashboard />
+        </ProtectedRoute>
+      } />
+      
+      {/* Sales Report */}
+      <Route path="/sales" element={
+        <ProtectedRoute>
+          <SalesReports />
+        </ProtectedRoute>
+      } />
+      
+      {/* Operations Report */}
+      <Route path="/operations" element={
+        <ProtectedRoute>
+          <OperationsReports />
+        </ProtectedRoute>
+      } />
+      
+      {/* Financial Report */}
+      <Route path="/financial" element={
+        <ProtectedRoute>
+          <FinancialReports />
+        </ProtectedRoute>
+      } />
+      
+      {/* HR Report */}
+      <Route path="/hr" element={
+        <ProtectedRoute>
+          <HRReports />
+        </ProtectedRoute>
+      } />
+      
+      {/* Fleet Report */}
+      <Route path="/fleet" element={
+        <ProtectedRoute>
+          <FleetReports />
+        </ProtectedRoute>
+      } />
+      
+      {/* KPI Performance - Individual & Group */}
+      <Route path="/kpi" element={
+        <ProtectedRoute>
+          <KPIPerformance />
+        </ProtectedRoute>
+      } />
     </Routes>
   )
 }
