@@ -52,7 +52,6 @@ export default function AppRoutes() {
       
       {/* ============================================ */}
       {/* MODULE 1 - HR MANAGEMENT                     */}
-      {/* Access: Super Admin, HR Manager, Ops Manager */}
       {/* ============================================ */}
       <Route 
         path="/hr/*" 
@@ -71,7 +70,6 @@ export default function AppRoutes() {
       
       {/* ============================================ */}
       {/* MODULE 2 - PAYROLL MANAGEMENT                */}
-      {/* Access: Super Admin, Finance Officer, HR Mgr */}
       {/* ============================================ */}
       <Route 
         path="/payroll/*" 
@@ -89,13 +87,7 @@ export default function AppRoutes() {
       />
       
       {/* ============================================ */}
-      {/* MODULE 3 - ATTENDANCE TRACKING               */}
-      {/* (Integrated under HR Module /hr/attendance)  */}
-      {/* ============================================ */}
-      
-      {/* ============================================ */}
       {/* MODULE 4 - CRM & CLIENT MANAGEMENT           */}
-      {/* Access: Super Admin, Ops Manager, Sales Agent*/}
       {/* ============================================ */}
       <Route 
         path="/crm/*" 
@@ -114,7 +106,6 @@ export default function AppRoutes() {
       
       {/* ============================================ */}
       {/* MODULE 5 - SALES & QUOTATIONS                */}
-      {/* Access: Super Admin, Ops Mgr, Sales, Finance */}
       {/* ============================================ */}
       <Route 
         path="/sales/*" 
@@ -134,7 +125,6 @@ export default function AppRoutes() {
       
       {/* ============================================ */}
       {/* MODULE 6 - OPERATIONS & SCHEDULING           */}
-      {/* Access: Super Admin, Ops Manager, Supervisor */}
       {/* ============================================ */}
       <Route 
         path="/operations/*" 
@@ -153,7 +143,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 7 - INVENTORY MANAGEMENT              */}
-      {/* Access: Super Admin, Ops Manager, Supervisor */}
       {/* ============================================ */}
       <Route 
         path="/inventory/*" 
@@ -172,7 +161,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 8 - PROCUREMENT MANAGEMENT            */}
-      {/* Access: Super Admin, Ops Manager, Finance    */}
       {/* ============================================ */}
       <Route 
         path="/procurement/*" 
@@ -191,7 +179,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 9 - FINANCE & ACCOUNTING              */}
-      {/* Access: Super Admin, Finance Officer, Ops Mgr*/}
       {/* ============================================ */}
       <Route 
         path="/finance/*" 
@@ -210,7 +197,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 10 - FLEET MANAGEMENT                 */}
-      {/* Access: Super Admin, Ops Manager, Supervisor */}
       {/* ============================================ */}
       <Route 
         path="/fleet/*" 
@@ -229,7 +215,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 12 - REPORTING & ANALYTICS            */}
-      {/* Access: Super Admin, Ops Mgr, Finance, HR    */}
       {/* ============================================ */}
       <Route 
         path="/reports/*" 
@@ -249,7 +234,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 16 - WORKFLOW AUTOMATION              */}
-      {/* Access: Super Admin, Ops Manager, Finance    */}
       {/* ============================================ */}
       <Route 
         path="/workflow/*" 
@@ -268,7 +252,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 17 - DOCUMENT MANAGEMENT              */}
-      {/* Access: Super Admin, Ops Manager, HR Manager */}
       {/* ============================================ */}
       <Route 
         path="/documents/*" 
@@ -287,7 +270,6 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* ASSETS MANAGEMENT                            */}
-      {/* Access: Super Admin, Ops Manager, Finance    */}
       {/* ============================================ */}
       <Route 
         path="/assets/*" 
@@ -306,20 +288,14 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 14 - MOBILE WORKFORCE                 */}
-      {/* Access: Super Admin, Ops Mgr, Supervisor, Cleaner */}
+      {/* FIXED: Only ProtectedRoute, NO RoleBasedRoute */}
+      {/* This allows cleaners to access /mobile       */}
       {/* ============================================ */}
       <Route 
         path="/mobile/*" 
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.OPERATIONS_MANAGER, 
-              USER_ROLES.SUPERVISOR,
-              USER_ROLES.CLEANER
-            ]}>
-              <MobileRoutes />
-            </RoleBasedRoute>
+            <MobileRoutes />
           </ProtectedRoute>
         } 
       />
