@@ -6,7 +6,7 @@ import ClockInOut from '../pages/ClockInOut'
 import PhotoUpload from '../pages/PhotoUpload'
 import SuppliesRequest from '../pages/SuppliesRequest'
 import MyProfile from '../pages/MyProfile'
-import MessagesPage from '../pages/MessagesPage'
+import MessagesContacts from '../pages/MessagesContacts'
 import FieldDashboard from '../pages/FieldDashboard'
 import ActiveCleaners from '../pages/ActiveCleaners'
 import JobPhotos from '../pages/JobPhotos'
@@ -211,7 +211,7 @@ export default function MobileRoutes() {
       <Route path="/supplies" element={<ProtectedRoute><SuppliesRequest /></ProtectedRoute>} />
       <Route path="/incident" element={<ProtectedRoute><IncidentReportPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
-      <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><MessagesContacts /></ProtectedRoute>} />
 
       {/* ============================================ */}
       {/* MANAGER FIELD OPERATIONS ROUTES              */}
@@ -222,7 +222,7 @@ export default function MobileRoutes() {
       <Route path="/field/photos" element={<ProtectedRoute><JobPhotos /></ProtectedRoute>} />
       <Route path="/field/incidents" element={<ProtectedRoute><IncidentReports /></ProtectedRoute>} />
       <Route path="/field/supplies" element={<ProtectedRoute><SupplyOrders /></ProtectedRoute>} />
-      <Route path="/field/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+      <Route path="/field/messages" element={<ProtectedRoute><MessagesContacts /></ProtectedRoute>} />
       <Route path="/field/map" element={<ProtectedRoute><LiveMap /></ProtectedRoute>} />
     </Routes>
   )
