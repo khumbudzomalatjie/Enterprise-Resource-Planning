@@ -9,10 +9,9 @@ import {
   Briefcase, Search, ArrowLeft, Sun, Moon, Sparkles,
   Clock, MapPin, User, CheckCircle2, Play, AlertCircle,
   Calendar, Eye, Building2, Phone, RefreshCw, Camera,
-  Package, FileText, DollarSign, Star, Clock3, Map,
-  Users, ClipboardList, History, Receipt, BarChart3,
-  MessageCircle, ChevronDown, ChevronUp, X, Download,
-  ExternalLink
+  Package, FileText, DollarSign, Star, Clock3,
+  Users, ClipboardList, History, Receipt,
+  ChevronDown, ChevronUp, X, Download
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -24,9 +23,27 @@ export default function LiveJobs() {
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [availableJobs, setAvailableJobs] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
 
-  const searchJob = async () => {
-    if (!jobNumber.trim()) {
+  // Load available job numbers for suggestions
+  useEffect(() => {
+    loadAvailableJobs()
+  }, [])
+
+  const loadAvailableJobs = async () => {
+    const { data } = await supabase
+      .from('jobs')
+      .select('job_number, title, status')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setAvailableJobs(data || [])
+  }
+
+  const searchJob = async (number) => {
+    const searchNumber = (number || jobNumber).trim()
+    
+    if (!searchNumber) {
       toast.error('Please enter a job number')
       return
     }
@@ -34,46 +51,82 @@ export default function LiveJobs() {
     setSearching(true)
     setLoading(true)
     try {
-      const { data: job, error } = await supabase
+      // Try exact match first
+      let { data: job, error } = await supabase
         .from('jobs')
         .select(`
           *,
           clients(*),
           job_categories(*),
-          job_assignments(
-            *, 
-            employees(*)
-          ),
+          job_assignments(*, employees(*)),
           job_photos(*),
           job_task_items(*),
           quality_inspections(*),
           quotations(*, quotation_items(*)),
           invoices(*, invoice_items(*), payments(*))
         `)
-        .eq('job_number', jobNumber.trim().toUpperCase())
+        .eq('job_number', searchNumber.toUpperCase())
         .single()
 
+      // If not found, try case-insensitive partial match
       if (error || !job) {
-        toast.error('Job not found. Please check the job number.')
-        setSelectedJob(null)
-      } else {
-        // Fetch additional data
-        const [attendanceData, suppliesData, incidentsData, auditData] = await Promise.all([
-          supabase.from('attendance_records').select('*').in('employee_id', job.job_assignments?.map(a => a.employee_id) || []).order('attendance_date', { ascending: false }).limit(50),
-          supabase.from('supplies_requests').select('*, supplies_request_items(*)').eq('job_id', job.id),
-          supabase.from('incident_reports').select('*, employees(first_name, last_name)').eq('job_id', job.id),
-          supabase.from('payroll_audit_logs').select('*').eq('entity_id', job.id).order('created_at', { ascending: true })
-        ])
+        const { data: jobILike, error: ilikeError } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            clients(*),
+            job_categories(*),
+            job_assignments(*, employees(*)),
+            job_photos(*),
+            job_task_items(*),
+            quality_inspections(*),
+            quotations(*, quotation_items(*)),
+            invoices(*, invoice_items(*), payments(*))
+          `)
+          .ilike('job_number', `%${searchNumber}%`)
+          .limit(1)
+          .single()
 
-        setSelectedJob({
-          ...job,
-          attendance: attendanceData?.data || [],
-          supplies: suppliesData?.data || [],
-          incidents: incidentsData?.data || [],
-          auditLog: auditData?.data || []
-        })
-        setActiveTab('overview')
+        if (!ilikeError && jobILike) {
+          job = jobILike
+        }
       }
+
+      if (!job) {
+        toast.error(`Job "${searchNumber}" not found. Check the job number and try again.`)
+        setSelectedJob(null)
+        setLoading(false)
+        setSearching(false)
+        return
+      }
+
+      // Fetch additional data
+      const employeeIds = job.job_assignments?.map(a => a.employee_id) || []
+      
+      let attendanceData = { data: [] }
+      if (employeeIds.length > 0) {
+        attendanceData = await supabase
+          .from('attendance_records')
+          .select('*')
+          .in('employee_id', employeeIds)
+          .order('attendance_date', { ascending: false })
+          .limit(50)
+      }
+
+      const [suppliesData, incidentsData] = await Promise.all([
+        supabase.from('supplies_requests').select('*, supplies_request_items(*)').eq('job_id', job.id),
+        supabase.from('incident_reports').select('*, employees(first_name, last_name)').eq('job_id', job.id),
+      ])
+
+      setSelectedJob({
+        ...job,
+        attendance: attendanceData?.data || [],
+        supplies: suppliesData?.data || [],
+        incidents: incidentsData?.data || [],
+      })
+      setActiveTab('overview')
+      setShowDropdown(false)
+      toast.success(`Job ${job.job_number} loaded!`)
     } catch (error) {
       console.error('Search error:', error)
       toast.error('Error searching for job')
@@ -84,7 +137,10 @@ export default function LiveJobs() {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') searchJob()
+    if (e.key === 'Enter') {
+      setShowDropdown(false)
+      searchJob()
+    }
   }
 
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -106,34 +162,26 @@ export default function LiveJobs() {
 
   const generateAuditTrail = (job) => {
     const trail = []
-    
-    if (job.created_at) trail.push({ action: 'Job Created', user: job.created_by || 'System', date: job.created_at, icon: Briefcase })
+    if (job.created_at) trail.push({ action: 'Job Created', user: 'System', date: job.created_at, icon: Briefcase })
     if (job.scheduled_date) trail.push({ action: 'Job Scheduled', user: 'Operations', date: job.scheduled_date, icon: Calendar })
-    
     job.job_assignments?.forEach(a => {
-      trail.push({ action: `Assigned to ${a.employees?.first_name} ${a.employees?.last_name}`, user: 'Supervisor', date: a.created_at, icon: User })
+      trail.push({ action: `Assigned to ${a.employees?.first_name || 'Cleaner'} ${a.employees?.last_name || ''}`, user: 'Supervisor', date: a.created_at || job.scheduled_date, icon: User })
     })
-
     if (job.actual_start_time) trail.push({ action: 'Status: In Progress', user: 'Cleaner', date: job.actual_start_time, icon: Play })
-    
     job.job_photos?.forEach(p => {
       trail.push({ action: `Photo Uploaded (${p.photo_type})`, user: 'Cleaner', date: p.taken_at, icon: Camera })
     })
-
     if (job.quality_inspections?.length > 0) {
       job.quality_inspections.forEach(q => {
         trail.push({ action: `Quality Check: ${q.overall_rating}/5`, user: 'Inspector', date: q.created_at, icon: CheckCircle2 })
       })
     }
-
     if (job.status === 'completed') trail.push({ action: 'Job Completed', user: 'Cleaner', date: job.actual_end_time, icon: CheckCircle2 })
-    
     if (job.invoices?.length > 0) {
       job.invoices.forEach(inv => {
         trail.push({ action: `Invoice Generated: ${inv.invoice_number}`, user: 'Finance', date: inv.created_at, icon: Receipt })
       })
     }
-
     trail.sort((a, b) => new Date(a.date) - new Date(b.date))
     return trail
   }
@@ -150,6 +198,11 @@ export default function LiveJobs() {
     { id: 'customer', label: 'Customer', icon: Building2 },
     { id: 'audit', label: 'Audit Log', icon: FileText },
   ]
+
+  const filteredSuggestions = availableJobs.filter(j => 
+    (j.job_number || '').toLowerCase().includes(jobNumber.toLowerCase()) || 
+    (j.title || '').toLowerCase().includes(jobNumber.toLowerCase())
+  ).slice(0, 10)
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -176,26 +229,61 @@ export default function LiveJobs() {
           </h1>
           <p className="text-slate-500 mb-6">Enter a Job Number to view the complete job history, audit trail, and all related information</p>
           
-          <div className="flex gap-3">
+          {/* Search with Autocomplete */}
+          <div className="flex gap-3 relative">
             <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
               <input
                 type="text"
                 value={jobNumber}
-                onChange={e => setJobNumber(e.target.value)}
+                onChange={e => { setJobNumber(e.target.value); setShowDropdown(true) }}
+                onFocus={() => setShowDropdown(true)}
                 onKeyDown={handleKeyDown}
                 placeholder="Enter Job Number (e.g., JOB-2506-0001)..."
                 className="w-full pl-12 pr-4 py-4 neu-inset rounded-xl text-lg font-mono"
               />
+              
+              {/* Autocomplete Dropdown */}
+              {showDropdown && jobNumber.length > 0 && filteredSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 z-50 max-h-[250px] overflow-y-auto">
+                  {filteredSuggestions.map(job => (
+                    <button
+                      key={job.job_number}
+                      onClick={() => { setJobNumber(job.job_number); setShowDropdown(false); searchJob(job.job_number) }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between border-b border-slate-100 dark:border-slate-700"
+                    >
+                      <div>
+                        <span className="font-mono font-bold text-blue-600">{job.job_number}</span>
+                        <span className="text-sm text-slate-500 ml-2">{job.title}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusBadge(job.status)}`}>
+                        {job.status?.replace('_', ' ')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <button
-              onClick={searchJob}
-              disabled={searching}
-              className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-            >
+            <button onClick={() => { setShowDropdown(false); searchJob() }} disabled={searching}
+              className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
               {searching ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
               Search
             </button>
+          </div>
+
+          {/* Browse Available Jobs */}
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <p className="text-xs text-slate-400">Browse:</p>
+            {availableJobs.slice(0, 8).map(job => (
+              <button key={job.job_number}
+                onClick={() => { setJobNumber(job.job_number); searchJob(job.job_number) }}
+                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-xs font-mono text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                {job.job_number}
+              </button>
+            ))}
+            {availableJobs.length > 8 && (
+              <span className="text-xs text-slate-400">+{availableJobs.length - 8} more</span>
+            )}
           </div>
         </div>
 
@@ -221,8 +309,13 @@ export default function LiveJobs() {
                     </span>
                   </div>
                   <p className="text-slate-500">
-                    <span className="font-mono font-bold">{selectedJob.job_number}</span> · 
-                    {selectedJob.job_categories && <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: selectedJob.job_categories.color + '20', color: selectedJob.job_categories.color }}>{selectedJob.job_categories.name}</span>}
+                    <span className="font-mono font-bold">{selectedJob.job_number}</span>
+                    {selectedJob.job_categories && (
+                      <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium" 
+                        style={{ backgroundColor: selectedJob.job_categories.color + '20', color: selectedJob.job_categories.color }}>
+                        {selectedJob.job_categories.name}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -275,16 +368,30 @@ export default function LiveJobs() {
                 <h3 className="text-lg font-semibold mb-4">Job Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Title</span><span className="font-medium">{selectedJob.title}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Description</span><span>{selectedJob.description || 'N/A'}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Category</span><span>{selectedJob.job_categories?.name || 'N/A'}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Priority</span><span className="capitalize font-medium">{selectedJob.priority}</span></div>
+                    {[
+                      ['Title', selectedJob.title],
+                      ['Description', selectedJob.description || 'N/A'],
+                      ['Category', selectedJob.job_categories?.name || 'N/A'],
+                      ['Priority', selectedJob.priority],
+                      ['Status', selectedJob.status?.replace('_', ' ')],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                        <span className="text-slate-500">{label}</span><span className="font-medium capitalize">{value}</span>
+                      </div>
+                    ))}
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Site Address</span><span>{selectedJob.site_address}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Access Instructions</span><span>{selectedJob.access_instructions || 'None'}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Site Contact</span><span>{selectedJob.site_contact_name || 'N/A'}</span></div>
-                    <div className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg"><span className="text-slate-500">Contact Phone</span><span>{selectedJob.site_contact_phone || 'N/A'}</span></div>
+                    {[
+                      ['Site Address', selectedJob.site_address],
+                      ['Access Instructions', selectedJob.access_instructions || 'None'],
+                      ['Site Contact', selectedJob.site_contact_name || 'N/A'],
+                      ['Contact Phone', selectedJob.site_contact_phone || 'N/A'],
+                      ['Cleaners Required', selectedJob.cleaners_required || 1],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                        <span className="text-slate-500">{label}</span><span className="font-medium">{value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 {selectedJob.special_instructions && (
@@ -399,7 +506,7 @@ export default function LiveJobs() {
                 {selectedJob.attendance?.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b bg-slate-50"><th className="text-left py-2 px-3">Date</th><th className="text-left py-2 px-3">Clock In</th><th className="text-left py-2 px-3">Clock Out</th><th className="text-right py-2 px-3">Hours</th><th className="text-left py-2 px-3">Method</th></tr></thead>
+                      <thead><tr className="border-b bg-slate-50"><th className="text-left py-2 px-3">Date</th><th className="text-left py-2 px-3">Clock In</th><th className="text-left py-2 px-3">Clock Out</th><th className="text-right py-2 px-3">Hours</th></tr></thead>
                       <tbody>
                         {selectedJob.attendance.map(a => (
                           <tr key={a.id} className="border-b">
@@ -407,7 +514,6 @@ export default function LiveJobs() {
                             <td className="py-2 px-3">{a.clock_in_time ? new Date(a.clock_in_time).toLocaleTimeString() : '-'}</td>
                             <td className="py-2 px-3">{a.clock_out_time ? new Date(a.clock_out_time).toLocaleTimeString() : '-'}</td>
                             <td className="py-2 px-3 text-right">{a.total_hours?.toFixed(1) || '-'}</td>
-                            <td className="py-2 px-3 capitalize">{a.check_in_method?.replace('_', ' ') || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -421,7 +527,7 @@ export default function LiveJobs() {
             {activeTab === 'financials' && (
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Financial Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
                     <p className="text-sm text-blue-600 font-semibold">Quotation</p>
                     {selectedJob.quotations?.length > 0 ? (
@@ -442,9 +548,6 @@ export default function LiveJobs() {
                           <p className="text-xs">#{inv.invoice_number}</p>
                           <p className="text-lg font-bold">{formatCurrency(inv.total_amount)}</p>
                           <span className={`px-2 py-0.5 rounded-full text-xs ${inv.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{inv.status}</span>
-                          {inv.payments?.length > 0 && (
-                            <p className="text-xs text-slate-500 mt-1">Paid: {formatCurrency(inv.amount_paid)} / {formatCurrency(inv.total_amount)}</p>
-                          )}
                         </div>
                       ))
                     ) : <p className="text-xs text-slate-500 mt-2">No invoice</p>}
@@ -458,22 +561,19 @@ export default function LiveJobs() {
               <div className="neu-raised rounded-3xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Customer Information</h3>
                 {selectedJob.clients ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between p-2 bg-slate-50 rounded-lg"><span className="text-slate-500">Company</span><span className="font-medium">{selectedJob.clients.company_name}</span></div>
-                      {selectedJob.clients.phone && <div className="flex justify-between p-2 bg-slate-50 rounded-lg"><span className="text-slate-500">Phone</span><a href={`tel:${selectedJob.clients.phone}`} className="text-blue-600">{selectedJob.clients.phone}</a></div>}
-                      {selectedJob.clients.email && <div className="flex justify-between p-2 bg-slate-50 rounded-lg"><span className="text-slate-500">Email</span><a href={`mailto:${selectedJob.clients.email}`} className="text-blue-600">{selectedJob.clients.email}</a></div>}
-                    </div>
+                  <div className="space-y-2">
+                    {[
+                      ['Company', selectedJob.clients.company_name],
+                      ['Phone', selectedJob.clients.phone],
+                      ['Email', selectedJob.clients.email],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex justify-between p-2 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                        <span className="text-slate-500">{label}</span>
+                        <span className="font-medium">{value || 'N/A'}</span>
+                      </div>
+                    ))}
                   </div>
                 ) : <p className="text-slate-400 text-center py-4">No client assigned</p>}
-                
-                {selectedJob.client_feedback && (
-                  <div className="mt-4 p-4 bg-yellow-50 rounded-xl">
-                    <p className="font-semibold text-sm">Feedback</p>
-                    <p className="text-sm">{selectedJob.client_feedback}</p>
-                    <div className="flex items-center gap-1 mt-1">{'⭐'.repeat(selectedJob.client_rating || 0)}</div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -488,7 +588,6 @@ export default function LiveJobs() {
                         <th className="text-left py-3 px-4">Action</th>
                         <th className="text-left py-3 px-4">User</th>
                         <th className="text-left py-3 px-4">Date/Time</th>
-                        <th className="text-left py-3 px-4">Details</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -502,7 +601,6 @@ export default function LiveJobs() {
                           </td>
                           <td className="py-3 px-4">{item.user}</td>
                           <td className="py-3 px-4 text-xs">{formatDateTime(item.date)}</td>
-                          <td className="py-3 px-4 text-xs text-slate-500">-</td>
                         </tr>
                       ))}
                     </tbody>
@@ -519,19 +617,8 @@ export default function LiveJobs() {
             <Search className="w-20 h-20 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-slate-500 mb-2">Search for a Job</h3>
             <p className="text-slate-400 max-w-md mx-auto">
-              Enter a job number above to view the complete job profile including timeline, assigned staff, photos, financials, and full audit trail.
+              Enter a job number above or click one of the available jobs below to view the complete job profile.
             </p>
-            <div className="mt-6 text-left max-w-md mx-auto">
-              <p className="text-xs text-slate-400 font-semibold mb-2">Example job numbers:</p>
-              <div className="space-y-1">
-                {['JOB-2506-0001', 'JOB-2506-0002', 'JOB-2506-0003'].map(ex => (
-                  <button key={ex} onClick={() => { setJobNumber(ex); searchJob() }}
-                    className="block w-full text-left px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-700/30 text-sm text-blue-600 hover:bg-blue-50 font-mono">
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
@@ -546,7 +633,6 @@ export default function LiveJobs() {
               <img src={selectedPhoto.photo_url} alt={selectedPhoto.photo_type} className="w-full max-h-[70vh] object-contain bg-black" />
               <div className="p-4 text-sm">
                 <p>Uploaded: {formatDateTime(selectedPhoto.taken_at)}</p>
-                {selectedPhoto.caption && <p className="text-slate-500">Caption: {selectedPhoto.caption}</p>}
                 <a href={selectedPhoto.photo_url} download className="inline-flex items-center gap-1 mt-2 text-blue-600 hover:underline text-sm">
                   <Download className="w-4 h-4" /> Download
                 </a>
