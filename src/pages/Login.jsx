@@ -11,7 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const { signIn, loading, profile } = useAuthStore()
+  const { signIn, loading } = useAuthStore()
   const { isDark, toggleTheme, initTheme } = useThemeStore()
   const navigate = useNavigate()
 
@@ -32,15 +32,18 @@ export default function Login() {
     if (result.success) {
       toast.success('Welcome back!')
       
-      // Role-based redirect
-      // Get the profile after login to check role
-      const { profile } = useAuthStore.getState()
+      // FIXED: Role-based redirect
+      // Get the latest profile from the store
+      const state = useAuthStore.getState()
+      const userProfile = state.profile
       
-      if (profile?.role === 'cleaner') {
-        // Cleaners go to mobile workforce view
+      console.log('User role:', userProfile?.role) // Debug log
+      
+      if (userProfile?.role === 'cleaner') {
+        // Cleaners go to mobile home page (NOT field operations)
         navigate('/mobile')
       } else {
-        // All other roles go to main dashboard
+        // All other roles (admin, manager, supervisor, etc.) go to main dashboard
         navigate('/dashboard')
       }
     } else {
