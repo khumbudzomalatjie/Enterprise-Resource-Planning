@@ -10,9 +10,7 @@ import {
   Users, MapPin, Clock, Camera, AlertCircle, 
   Package, CheckCircle2, Briefcase, Phone,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Activity, Eye, Navigation, Wifi, Play,
-  Search, Filter, X, ChevronDown, Pause,
-  User, MessageCircle
+  Activity, Eye, Navigation, MessageCircle
 } from 'lucide-react'
 
 export default function FieldDashboard() {
@@ -24,7 +22,6 @@ export default function FieldDashboard() {
   const [recentPhotos, setRecentPhotos] = useState([])
   const [recentIncidents, setRecentIncidents] = useState([])
   const [supplyRequests, setSupplyRequests] = useState([])
-  const [liveJobs, setLiveJobs] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -40,8 +37,7 @@ export default function FieldDashboard() {
       loadActiveCleaners(),
       loadRecentPhotos(),
       loadIncidents(),
-      loadSupplyRequests(),
-      loadLiveJobs()
+      loadSupplyRequests()
     ])
     setLoading(false)
   }
@@ -56,8 +52,7 @@ export default function FieldDashboard() {
       { data: completedJobs },
       { data: pendingSupplies },
       { data: openIncidents },
-      { data: todayPhotos },
-      { data: liveJobsData }
+      { data: todayPhotos }
     ] = await Promise.all([
       supabase.from('employees').select('*').eq('employment_status', 'active'),
       supabase.from('attendance_records').select('*').eq('attendance_date', today).not('clock_in_time', 'is', null).is('clock_out_time', null),
@@ -65,8 +60,7 @@ export default function FieldDashboard() {
       supabase.from('jobs').select('*').eq('status', 'completed').gte('actual_end_time', `${today}T00:00:00`),
       supabase.from('supplies_requests').select('*').eq('status', 'pending'),
       supabase.from('incident_reports').select('*').in('status', ['reported', 'investigating']),
-      supabase.from('job_photos').select('*').gte('taken_at', `${today}T00:00:00`),
-      supabase.from('jobs').select('*').eq('status', 'in_progress')
+      supabase.from('job_photos').select('*').gte('taken_at', `${today}T00:00:00`)
     ])
 
     setStats({
@@ -76,13 +70,13 @@ export default function FieldDashboard() {
       completedToday: completedJobs?.length || 0,
       pendingSupplies: pendingSupplies?.length || 0,
       openIncidents: openIncidents?.length || 0,
-      photosToday: todayPhotos?.length || 0,
-      liveJobs: liveJobsData?.length || 0
+      photosToday: todayPhotos?.length || 0
     })
   }
 
   const loadActiveCleaners = async () => {
     const today = new Date().toISOString().split('T')[0]
+    
     const { data: attendance } = await supabase
       .from('attendance_records')
       .select('*, employees(first_name, last_name, phone, employee_code)')
@@ -90,17 +84,7 @@ export default function FieldDashboard() {
       .not('clock_in_time', 'is', null)
       .order('clock_in_time', { ascending: false })
 
-    const cleanersWithJobs = await Promise.all((attendance || []).map(async (c) => {
-      const { data: assignments } = await supabase
-        .from('job_assignments')
-        .select('*, jobs(title, job_number, site_address, status)')
-        .eq('employee_id', c.employee_id)
-        .eq('status', 'assigned')
-        .limit(5)
-      return { ...c, assignments: assignments || [] }
-    }))
-
-    setActiveCleaners(cleanersWithJobs)
+    setActiveCleaners(attendance || [])
   }
 
   const loadRecentPhotos = async () => {
@@ -109,6 +93,7 @@ export default function FieldDashboard() {
       .select('*, jobs(title, job_number), employees(first_name, last_name)')
       .order('taken_at', { ascending: false })
       .limit(8)
+
     setRecentPhotos(data || [])
   }
 
@@ -118,6 +103,7 @@ export default function FieldDashboard() {
       .select('*, employees(first_name, last_name), jobs(title, job_number, site_address)')
       .order('incident_date', { ascending: false })
       .limit(10)
+
     setRecentIncidents(data || [])
   }
 
@@ -127,16 +113,8 @@ export default function FieldDashboard() {
       .select('*, employees(first_name, last_name), supplies_request_items(*)')
       .order('created_at', { ascending: false })
       .limit(10)
-    setSupplyRequests(data || [])
-  }
 
-  const loadLiveJobs = async () => {
-    const { data } = await supabase
-      .from('jobs')
-      .select('*, clients(company_name), employees!jobs_assigned_to_fkey(first_name, last_name)')
-      .eq('status', 'in_progress')
-      .order('actual_start_time', { ascending: false })
-    setLiveJobs(data || [])
+    setSupplyRequests(data || [])
   }
 
   const handleApproveSupply = async (id) => {
@@ -148,35 +126,20 @@ export default function FieldDashboard() {
 
   const handleResolveIncident = async (id) => {
     await supabase.from('incident_reports').update({ status: 'resolved' }).eq('id', id)
-    toast.success('Incident resolved!')
+    toast.success('Incident marked as resolved')
     loadIncidents()
     loadStats()
   }
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
-
   const statCards = [
     { icon: Users, label: 'Total Cleaners', value: stats.totalCleaners || 0, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
     { icon: Activity, label: 'Active Now', value: stats.activeNow || 0, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-    { icon: Play, label: 'Live Jobs', value: stats.liveJobs || 0, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+    { icon: Briefcase, label: 'Assigned Jobs', value: stats.assignedJobs || 0, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
     { icon: CheckCircle2, label: 'Completed Today', value: stats.completedToday || 0, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
     { icon: Camera, label: 'Photos Today', value: stats.photosToday || 0, color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
     { icon: AlertCircle, label: 'Open Incidents', value: stats.openIncidents || 0, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-    { icon: Package, label: 'Supply Requests', value: stats.pendingSupplies || 0, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
+    { icon: Package, label: 'Supply Requests', value: stats.pendingSupplies || 0, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
   ]
-
-  const getSeverityBadge = (severity) => {
-    if (severity === 'critical') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    if (severity === 'high') return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-    if (severity === 'medium') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-    return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-  }
-
-  const getStatusBadge = (status) => {
-    if (status === 'resolved' || status === 'approved') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-    if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-    return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
-  }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -204,32 +167,27 @@ export default function FieldDashboard() {
               <Users className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Field Operations Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, live jobs, photos, incidents, supplies & messages in real-time</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, jobs, photos, incidents, supplies & messages in real-time</p>
           </div>
           <button onClick={loadAllData} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
             <Activity className="w-4 h-4" /> Refresh Live
           </button>
         </motion.div>
 
-        {/* Quick Nav */}
+        {/* Quick Nav - 6 Buttons with Messages */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {[
-            { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600', count: stats.activeNow },
-            { label: 'Live Jobs', icon: Play, path: '/mobile/field/live-jobs', color: 'bg-amber-600', count: stats.liveJobs },
-            { label: 'Job Photos', icon: Camera, path: '/mobile/field/photos', color: 'bg-indigo-600', count: stats.photosToday },
-            { label: 'Incidents', icon: AlertCircle, path: '/mobile/field/incidents', color: 'bg-red-600', count: stats.openIncidents },
-            { label: 'Supplies', icon: Package, path: '/mobile/field/supplies', color: 'bg-orange-600', count: stats.pendingSupplies },
-            { label: 'Messages', icon: MessageCircle, path: '/mobile/field/messages', color: 'bg-blue-600', count: 0 },
+            { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600' },
+            { label: 'Job Photos', icon: Camera, path: '/mobile/field/photos', color: 'bg-indigo-600' },
+            { label: 'Incidents', icon: AlertCircle, path: '/mobile/field/incidents', color: 'bg-red-600' },
+            { label: 'Supply Orders', icon: Package, path: '/mobile/field/supplies', color: 'bg-amber-600' },
+            { label: 'Live Map', icon: Navigation, path: '/mobile/field/map', color: 'bg-blue-600' },
+            { label: 'Messages', icon: MessageCircle, path: '/mobile/field/messages', color: 'bg-purple-600' },
           ].map(item => (
             <button key={item.label} onClick={() => navigate(item.path)}
-              className={`${item.color} text-white rounded-2xl p-3 flex flex-col items-center gap-1 hover:scale-105 transition-transform text-sm font-medium shadow-lg relative`}>
+              className={`${item.color} text-white rounded-2xl p-3 flex flex-col items-center gap-1 hover:scale-105 transition-transform text-sm font-medium shadow-lg`}>
               <item.icon className="w-6 h-6" />
               {item.label}
-              {item.count > 0 && (
-                <span className="absolute -top-1 -right-1 bg-white text-red-600 rounded-full w-5 h-5 text-[10px] font-bold flex items-center justify-center shadow">
-                  {item.count}
-                </span>
-              )}
             </button>
           ))}
         </motion.div>
@@ -245,80 +203,44 @@ export default function FieldDashboard() {
           ))}
         </div>
 
-        {/* LIVE JOBS SECTION */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="neu-raised rounded-3xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <Play className="w-5 h-5 text-amber-600" />Live Jobs In Progress
-            </h2>
-            <button onClick={() => navigate('/mobile/field/live-jobs')} className="text-sm text-emerald-600 flex items-center gap-1">
-              View All <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-          
-          {liveJobs.length > 0 ? (
-            <div className="space-y-3">
-              {liveJobs.slice(0, 5).map(job => (
-                <div key={job.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-100 dark:border-slate-600">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-semibold text-slate-800 dark:text-white">{job.title}</p>
-                      <p className="text-xs text-slate-500">{job.job_number} · {job.clients?.company_name || 'N/A'}</p>
-                    </div>
-                    <span className="px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-700">In Progress</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs text-slate-500">
-                    <div className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 20)}</div>
-                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
-                    <div className="flex items-center gap-1"><User className="w-3 h-3" />{job.employees?.first_name || 'Unassigned'}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <Play className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No live jobs at the moment</p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* ACTIVE CLEANERS */}
+        {/* Active Cleaners Live */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-emerald-600" />Active Cleaners
+              <Activity className="w-5 h-5 text-emerald-600" />Cleaners Working Now
             </h2>
-            <button onClick={() => navigate('/mobile/field/cleaners')} className="text-sm text-emerald-600 flex items-center gap-1">
-              View All ({activeCleaners.length}) <ChevronRight className="w-4 h-4" />
-            </button>
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-xs font-medium">
+              {activeCleaners.length} Active
+            </span>
           </div>
           
           {activeCleaners.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {activeCleaners.slice(0, 6).map(cleaner => (
+              {activeCleaners.map(cleaner => (
                 <div key={cleaner.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-100 dark:border-slate-600">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center relative">
                       <Users className="w-5 h-5 text-emerald-600" />
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white animate-pulse"></span>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse"></span>
                     </div>
                     <div>
                       <p className="font-semibold text-slate-800 dark:text-white text-sm">{cleaner.employees?.first_name} {cleaner.employees?.last_name}</p>
                       <p className="text-xs text-slate-500">{cleaner.employees?.employee_code}</p>
                     </div>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" />Clocked in: {new Date(cleaner.clock_in_time).toLocaleTimeString()}</div>
+                  <div className="space-y-1 text-xs text-slate-500">
+                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(cleaner.clock_in_time).toLocaleTimeString()}</div>
                     {cleaner.check_in_latitude && (
-                      <div className="flex items-center gap-1 mt-1">
+                      <div className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View Location</a>
+                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                          View on Map
+                        </a>
                       </div>
                     )}
                   </div>
                   {cleaner.employees?.phone && (
-                    <a href={`tel:${cleaner.employees.phone}`} className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline">
+                    <a href={`tel:${cleaner.employees.phone}`} className="mt-2 inline-flex items-center gap-1 text-emerald-600 text-xs font-medium hover:underline">
                       <Phone className="w-3 h-3" /> Call
                     </a>
                   )}
@@ -326,51 +248,44 @@ export default function FieldDashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-6">
-              <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No cleaners currently active</p>
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="text-slate-500">No cleaners currently active</p>
             </div>
           )}
         </motion.div>
 
-        {/* INCIDENTS & SUPPLIES - Two Column */}
+        {/* Two Column Layout: Incidents + Supply Requests */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Incidents */}
+          {/* Recent Incidents */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-red-600" />Recent Incidents
               </h2>
-              <button onClick={() => navigate('/mobile/field/incidents')} className="text-sm text-emerald-600 flex items-center gap-1">
-                View All <ChevronRight className="w-4 h-4" />
-              </button>
+              <Link to="/mobile/field/incidents" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
             
             {recentIncidents.length > 0 ? (
               <div className="space-y-3">
-                {recentIncidents.slice(0, 5).map(incident => (
+                {recentIncidents.map(incident => (
                   <div key={incident.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="font-semibold text-sm text-slate-800 dark:text-white capitalize">{incident.incident_type}</p>
-                        <p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name} · {incident.jobs?.job_number}</p>
+                        <p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getSeverityBadge(incident.severity)}`}>
-                          {incident.severity || 'low'}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(incident.status)}`}>
-                          {incident.status || 'reported'}
-                        </span>
-                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        incident.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                        incident.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                        'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                      }`}>{incident.severity}</span>
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{incident.description}</p>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-[10px] text-slate-400">{new Date(incident.incident_date).toLocaleString()}</span>
                       {incident.status !== 'resolved' && (
-                        <button onClick={() => handleResolveIncident(incident.id)} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">
-                          Mark Resolved
-                        </button>
+                        <button onClick={() => handleResolveIncident(incident.id)} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">Mark Resolved</button>
                       )}
                     </div>
                   </div>
@@ -390,36 +305,30 @@ export default function FieldDashboard() {
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-600" />Supply Requests
               </h2>
-              <button onClick={() => navigate('/mobile/field/supplies')} className="text-sm text-emerald-600 flex items-center gap-1">
-                View All <ChevronRight className="w-4 h-4" />
-              </button>
+              <Link to="/mobile/field/supplies" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
             
             {supplyRequests.length > 0 ? (
               <div className="space-y-3">
-                {supplyRequests.slice(0, 5).map(request => (
+                {supplyRequests.map(request => (
                   <div key={request.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="font-semibold text-sm text-slate-800 dark:text-white">{request.employees?.first_name} {request.employees?.last_name}</p>
                         <p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items requested</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadge(request.status)}`}>
-                        {request.status || 'pending'}
-                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        request.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                      }`}>{request.status}</span>
                     </div>
-                    <div className="space-y-1 mb-2">
+                    <div className="space-y-1">
                       {request.supplies_request_items?.slice(0, 3).map((item, i) => (
                         <p key={i} className="text-xs text-slate-600 dark:text-slate-400">• {item.item_name} x{item.quantity} {item.unit}</p>
                       ))}
-                      {(request.supplies_request_items?.length || 0) > 3 && (
-                        <p className="text-xs text-slate-400">+{(request.supplies_request_items?.length || 0) - 3} more</p>
-                      )}
                     </div>
                     {request.status === 'pending' && (
-                      <button onClick={() => handleApproveSupply(request.id)} className="w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">
-                        Approve Request
-                      </button>
+                      <button onClick={() => handleApproveSupply(request.id)} className="mt-2 w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">Approve Request</button>
                     )}
                   </div>
                 ))}
@@ -439,14 +348,12 @@ export default function FieldDashboard() {
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
               <Camera className="w-5 h-5 text-indigo-600" />Recent Job Photos
             </h2>
-            <button onClick={() => navigate('/mobile/field/photos')} className="text-sm text-emerald-600 flex items-center gap-1">
-              View All <ChevronRight className="w-4 h-4" />
-            </button>
+            <Link to="/mobile/field/photos" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
           </div>
           
           {recentPhotos.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {recentPhotos.slice(0, 8).map(photo => (
+              {recentPhotos.map(photo => (
                 <div key={photo.id} className="relative group cursor-pointer rounded-xl overflow-hidden" onClick={() => window.open(photo.photo_url, '_blank')}>
                   <img src={photo.photo_url} alt={photo.caption || 'Job photo'} className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
