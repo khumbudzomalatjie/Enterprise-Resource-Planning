@@ -6,249 +6,191 @@ import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  Briefcase, MapPin, Clock, Calendar, Search,
-  Users, CheckCircle2, AlertCircle, ArrowLeft,
-  Sun, Moon, Sparkles, RefreshCw, RotateCcw,
-  UserPlus, X
+  Briefcase, Search, Filter, ArrowLeft, Sun, Moon, Sparkles,
+  Clock, MapPin, User, CheckCircle2, Play, AlertCircle,
+  Calendar, Eye, ChevronDown, ChevronUp, Building2, Phone,
+  RefreshCw, Camera, Package
 } from 'lucide-react'
 
 export default function LiveJobs() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  
-  const [allJobs, setAllJobs] = useState([])
+  const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [releasingJob, setReleasingJob] = useState(null)
-  
-  // Assign Modal State
-  const [showAssignModal, setShowAssignModal] = useState(false)
-  const [assigningJob, setAssigningJob] = useState(null)
-  const [cleaners, setCleaners] = useState([])
-  const [selectedCleaner, setSelectedCleaner] = useState('')
-  const [assigning, setAssigning] = useState(false)
+  const [expandedJob, setExpandedJob] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
-    loadAllJobs()
-    loadCleaners()
+    loadJobs()
+    const interval = setInterval(loadJobs, 30000) // Auto-refresh every 30s
+    return () => clearInterval(interval)
   }, [statusFilter])
 
-  const loadAllJobs = async () => {
+  const loadJobs = async () => {
     setLoading(true)
-    
     try {
       let query = supabase
         .from('jobs')
-        .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, actual_end_time, clients(company_name, phone), job_categories(name, color)')
-        .order('scheduled_date', { ascending: true })
+        .select(`
+          *,
+          clients(company_name, phone),
+          job_categories(name, color),
+          job_assignments(
+            id, status,
+            employees(first_name, last_name, employee_code, phone)
+          ),
+          job_photos(id, photo_url, photo_type, taken_at),
+          quality_inspections(id, overall_rating, status)
+        `)
+        .order('scheduled_date', { ascending: false })
         .order('scheduled_start_time', { ascending: true })
 
-      if (statusFilter === 'open') {
-        query = query.in('status', ['pending', 'scheduled'])
-      } else if (statusFilter === 'active') {
-        query = query.eq('status', 'in_progress')
-      } else if (statusFilter === 'completed') {
-        query = query.eq('status', 'completed')
-      } else if (statusFilter === 'held') {
-        query = query.eq('status', 'on_hold')
-      } else {
-        query = query.not('status', 'eq', 'cancelled')
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter)
       }
 
-      const { data: jobs } = await query
-      setAllJobs(jobs || [])
-      
+      const { data } = await query
+      setJobs(data || [])
     } catch (error) {
       console.error('Error loading jobs:', error)
-    } finally {
-      setLoading(false)
+      toast.error('Failed to load jobs')
     }
+    setLoading(false)
+    setRefreshing(false)
   }
 
-  // Load all active cleaners for assignment
-  const loadCleaners = async () => {
-    try {
-      const { data } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, employee_code')
-        .eq('employment_status', 'active')
-        .order('first_name')
-
-      setCleaners(data || [])
-    } catch (error) {
-      console.error('Error loading cleaners:', error)
-    }
-  }
-
-  // Open assign modal
-  const handleOpenAssign = (job) => {
-    setAssigningJob(job)
-    setSelectedCleaner('')
-    setShowAssignModal(true)
-  }
-
-  // ASSIGN JOB - Completely replaces notes to clear old assignment
-  const handleAssignJob = async () => {
-    if (!selectedCleaner) {
-      toast.error('Please select a cleaner')
-      return
-    }
-
-    setAssigning(true)
-    
-    try {
-      const cleaner = cleaners.find(c => c.id === selectedCleaner)
-      const cleanerName = cleaner ? cleaner.first_name + ' ' + cleaner.last_name : 'Assigned Cleaner'
-      
-      // IMPORTANT: Completely replace notes to remove any old cleaner assignment
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          status: 'in_progress',
-          actual_start_time: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          notes: 'ASSIGNED BY MANAGEMENT: ' + cleanerName + ' at ' + new Date().toLocaleString()
-        })
-        .eq('id', assigningJob.id)
-
-      if (error) {
-        console.error('Assign error:', error)
-        toast.error('Failed to assign job')
-        return
-      }
-
-      toast.success('Job assigned to ' + cleanerName + '!')
-      setShowAssignModal(false)
-      setAssigningJob(null)
-      loadAllJobs()
-      
-    } catch (error) {
-      console.error('Assign exception:', error)
-      toast.error('Failed to assign job')
-    } finally {
-      setAssigning(false)
-    }
-  }
-
-  // Extract cleaner name from job notes
-  const getCleanerName = (job) => {
-    if (!job?.notes) return null
-    
-    if (job.notes.includes('SELECTED BY:')) {
-      const name = job.notes.split('SELECTED BY:')[1]?.split('at')[0]?.trim()
-      if (name && name !== 'undefined') return name
-    }
-    
-    if (job.notes.includes('ASSIGNED BY MANAGEMENT:')) {
-      const name = job.notes.split('ASSIGNED BY MANAGEMENT:')[1]?.split('at')[0]?.trim()
-      if (name && name !== 'undefined') return name
-    }
-    
-    if (job.notes.includes('COMPLETED BY:')) {
-      const name = job.notes.split('COMPLETED BY:')[1]?.split('at')[0]?.trim()
-      if (name && name !== 'undefined') return name
-    }
-    
-    if (job.notes.includes('PAUSED BY CLEANER:')) {
-      const name = job.notes.split('PAUSED BY CLEANER:')[1]?.split('\n')[0]?.trim()
-      if (name && name !== 'undefined') return name
-    }
-    
-    const nameMatch = job.notes.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+at\s+/)
-    if (nameMatch && nameMatch[1] && nameMatch[1] !== 'undefined') {
-      return nameMatch[1]
-    }
-    
-    return null
-  }
-
-  const getCleanerStatus = (job) => {
-    const name = getCleanerName(job)
-    if (name) return { name, hasCleaner: true }
-    if (job.status === 'pending' || job.status === 'scheduled') return { name: 'Available', hasCleaner: false }
-    return { name: 'Unassigned', hasCleaner: false }
-  }
-
-  // RELEASE JOB - Completely replaces notes to clear old assignment
-  const handleReleaseJob = async (jobId, jobTitle) => {
-    if (!window.confirm('Release "' + jobTitle + '" back to Open Pool? This will clear the current assignment.')) return
-    setReleasingJob(jobId)
-    
-    try {
-      // COMPLETELY replace notes to remove old assignment
-      const { error } = await supabase
-        .from('jobs')
-        .update({ 
-          status: 'scheduled',
-          actual_start_time: null,
-          updated_at: new Date().toISOString(),
-          notes: 'RELEASED BY MANAGEMENT at ' + new Date().toLocaleString()
-        })
-        .eq('id', jobId)
-
-      if (error) {
-        console.error('Release error:', error)
-        toast.error('Failed to release job')
-        return
-      }
-
-      toast.success('Job released back to Open Pool!')
-      loadAllJobs()
-      
-    } catch (error) {
-      console.error('Release exception:', error)
-      toast.error('Failed to release job')
-    } finally {
-      setReleasingJob(null)
-    }
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadJobs()
   }
 
   const formatDate = (date) => {
     if (!date) return 'N/A'
-    return new Date(date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
+    return new Date(date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
-  const formatDateTime = (date) => {
-    if (!date) return 'N/A'
-    return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const formatTime = (time) => {
+    if (!time) return ''
+    return time.slice(0, 5)
   }
-
-  const todayStr = new Date().toISOString().split('T')[0]
-
-  const filteredJobs = allJobs.filter(job => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    const cleanerName = getCleanerName(job) || ''
-    return (job.title || '').toLowerCase().includes(s) ||
-           (job.job_number || '').toLowerCase().includes(s) ||
-           (job.clients?.company_name || '').toLowerCase().includes(s) ||
-           (job.site_address || '').toLowerCase().includes(s) ||
-           cleanerName.toLowerCase().includes(s)
-  })
-
-  const openCount = allJobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length
-  const activeCount = allJobs.filter(j => j.status === 'in_progress').length
-  const completedCount = allJobs.filter(j => j.status === 'completed').length
-  const heldCount = allJobs.filter(j => j.status === 'on_hold').length
-  const jobsWithCleaner = allJobs.filter(j => getCleanerName(j)).length
 
   const getStatusBadge = (status) => {
     const badges = {
-      pending: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
-      scheduled: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-      in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-      completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-      on_hold: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-      cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+      pending: 'bg-slate-100 text-slate-700 border-slate-300',
+      scheduled: 'bg-blue-100 text-blue-700 border-blue-300',
+      in_progress: 'bg-amber-100 text-amber-700 border-amber-300',
+      completed: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+      cancelled: 'bg-red-100 text-red-700 border-red-300',
+      on_hold: 'bg-purple-100 text-purple-700 border-purple-300',
+      overdue: 'bg-red-100 text-red-700 border-red-300',
     }
-    return badges[status] || 'bg-slate-100 text-slate-700'
+    return badges[status] || 'bg-slate-100 text-slate-700 border-slate-300'
+  }
+
+  const getStatusIcon = (status) => {
+    const icons = {
+      pending: Clock,
+      scheduled: Calendar,
+      in_progress: Play,
+      completed: CheckCircle2,
+      cancelled: AlertCircle,
+      on_hold: AlertCircle,
+      overdue: AlertCircle,
+    }
+    return icons[status] || Clock
+  }
+
+  const getTimelineSteps = (job) => {
+    const steps = []
+    
+    // Step 1: Created
+    steps.push({
+      label: 'Job Created',
+      date: job.created_at,
+      icon: Briefcase,
+      color: 'bg-blue-500',
+      completed: true
+    })
+
+    // Step 2: Scheduled (if scheduled_date exists)
+    if (job.scheduled_date) {
+      steps.push({
+        label: 'Scheduled',
+        date: job.scheduled_date,
+        icon: Calendar,
+        color: 'bg-blue-500',
+        completed: true
+      })
+    }
+
+    // Step 3: Assigned (if cleaners assigned)
+    if (job.job_assignments?.length > 0) {
+      steps.push({
+        label: `Assigned (${job.job_assignments.length} cleaner${job.job_assignments.length > 1 ? 's' : ''})`,
+        date: job.job_assignments[0]?.assigned_date || job.scheduled_date,
+        icon: User,
+        color: 'bg-purple-500',
+        completed: true
+      })
+    }
+
+    // Step 4: In Progress (if started)
+    if (job.actual_start_time) {
+      steps.push({
+        label: 'In Progress',
+        date: job.actual_start_time,
+        icon: Play,
+        color: 'bg-amber-500',
+        completed: true
+      })
+    }
+
+    // Step 5: Completed
+    if (job.status === 'completed') {
+      steps.push({
+        label: 'Completed',
+        date: job.actual_end_time,
+        icon: CheckCircle2,
+        color: 'bg-emerald-500',
+        completed: true
+      })
+    } else if (job.status === 'cancelled') {
+      steps.push({
+        label: 'Cancelled',
+        date: job.updated_at,
+        icon: AlertCircle,
+        color: 'bg-red-500',
+        completed: true
+      })
+    }
+
+    return steps
+  }
+
+  const filteredJobs = jobs.filter(job => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    return (job.title || '').toLowerCase().includes(s) ||
+           (job.job_number || '').toLowerCase().includes(s) ||
+           (job.clients?.company_name || '').toLowerCase().includes(s) ||
+           (job.site_address || '').toLowerCase().includes(s)
+  })
+
+  // Stats
+  const statsCounts = {
+    total: jobs.length,
+    pending: jobs.filter(j => j.status === 'pending').length,
+    scheduled: jobs.filter(j => j.status === 'scheduled').length,
+    inProgress: jobs.filter(j => j.status === 'in_progress').length,
+    completed: jobs.filter(j => j.status === 'completed').length,
+    cancelled: jobs.filter(j => j.status === 'cancelled').length,
   }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
-      
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -264,292 +206,245 @@ export default function LiveJobs() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Field Operations</span>
         </Link>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <Briefcase className="w-8 h-8 text-purple-600" />
-              <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Live Jobs Monitor</h1>
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">
-              Real-time sync with mobile · {allJobs.length} total jobs · {jobsWithCleaner} with cleaner assigned
-            </p>
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+              <Briefcase className="w-8 h-8 text-blue-600" />Job Tracker
+            </h1>
+            <p className="text-slate-500 mt-1">Track every job from creation to completion - who, when, and how</p>
           </div>
-          <button onClick={loadAllJobs} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" /> Refresh
+          <button onClick={handleRefresh} disabled={refreshing}
+            className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
           </button>
-        </motion.div>
+        </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {/* Status Summary */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
           {[
-            { icon: Briefcase, label: 'Open Pool', value: openCount, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', desc: 'Available for selection' },
-            { icon: Users, label: 'Active/Selected', value: activeCount, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30', desc: 'Being worked on' },
-            { icon: CheckCircle2, label: 'Completed', value: completedCount, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30', desc: 'Finished jobs' },
-            { icon: AlertCircle, label: 'On Hold', value: heldCount, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', desc: 'Paused jobs' },
-          ].map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}
-              onClick={() => {
-                if (s.label === 'Open Pool') setStatusFilter('open')
-                else if (s.label === 'Active/Selected') setStatusFilter('active')
-                else if (s.label === 'Completed') setStatusFilter('completed')
-                else if (s.label === 'On Hold') setStatusFilter('held')
-              }}
-              className="neu-raised rounded-2xl p-4 stat-card cursor-pointer hover:scale-[1.02] transition-transform">
-              <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-5 h-5 ${s.color}`} /></div>
-              <p className="text-lg font-bold text-slate-800 dark:text-white">{s.value}</p>
-              <p className="text-xs text-slate-500 mt-1">{s.label}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{s.desc}</p>
-            </motion.div>
+            { label: 'All', count: statsCounts.total, color: 'bg-slate-600' },
+            { label: 'Pending', count: statsCounts.pending, color: 'bg-slate-500' },
+            { label: 'Scheduled', count: statsCounts.scheduled, color: 'bg-blue-500' },
+            { label: 'In Progress', count: statsCounts.inProgress, color: 'bg-amber-500' },
+            { label: 'Completed', count: statsCounts.completed, color: 'bg-emerald-500' },
+            { label: 'Cancelled', count: statsCounts.cancelled, color: 'bg-red-500' },
+          ].map(s => (
+            <button key={s.label}
+              onClick={() => setStatusFilter(s.label === 'All' ? 'all' : s.label.toLowerCase().replace(' ', '_'))}
+              className={`${s.color} text-white rounded-xl p-3 text-center text-sm font-medium hover:opacity-90 transition-opacity ${
+                (s.label === 'All' && statusFilter === 'all') || statusFilter === s.label.toLowerCase().replace(' ', '_') ? 'ring-2 ring-offset-2 ring-blue-300' : ''
+              }`}>
+              <p className="text-2xl font-bold">{s.count}</p>
+              <p className="text-xs opacity-90">{s.label}</p>
+            </button>
           ))}
         </div>
 
-        {/* Search & Filter */}
-        <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
+        {/* Search */}
+        <div className="neu-raised rounded-2xl p-4 mb-6">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by job #, title, client, cleaner name, address..."
+              placeholder="Search by job title, number, client, or address..."
               className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
           </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="px-4 py-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
-            <option value="all">All Status</option>
-            <option value="open">Open Pool</option>
-            <option value="active">Active/Selected</option>
-            <option value="completed">Completed</option>
-            <option value="held">On Hold</option>
-          </select>
-          <button onClick={() => { setStatusFilter('all'); setSearch(''); loadAllJobs() }}
-            className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white text-sm">Clear</button>
         </div>
 
-        {/* Jobs Table */}
+        {/* Jobs List */}
         {loading ? (
-          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div><p className="text-slate-500">Loading jobs...</p></div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-slate-500 mt-4">Loading jobs...</p>
+          </div>
+        ) : filteredJobs.length === 0 ? (
+          <div className="text-center py-12 neu-raised rounded-3xl">
+            <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500 text-lg">No jobs found</p>
+          </div>
         ) : (
-          <div className="neu-raised rounded-3xl overflow-hidden">
-            {filteredJobs.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Job #</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Title / Category</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Client</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Cleaner</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Location</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Date</th>
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium">Time</th>
-                      <th className="text-center py-3 px-3 text-slate-500 font-medium">Status</th>
-                      <th className="text-center py-3 px-3 text-slate-500 font-medium">Completed</th>
-                      <th className="text-center py-3 px-3 text-slate-500 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredJobs.map((job, i) => {
-                      const cleanerInfo = getCleanerStatus(job)
-                      const isToday = job.scheduled_date === todayStr
-                      const isActive = job.status === 'in_progress'
-                      const isCompleted = job.status === 'completed'
-                      const isOpen = job.status === 'pending' || job.status === 'scheduled'
+          <div className="space-y-4">
+            {filteredJobs.map(job => {
+              const StatusIcon = getStatusIcon(job.status)
+              const isExpanded = expandedJob === job.id
+              const timeline = getTimelineSteps(job)
+
+              return (
+                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                  className={`neu-raised rounded-2xl overflow-hidden transition-all ${isExpanded ? 'ring-2 ring-blue-500' : ''}`}>
+                  
+                  {/* Job Header */}
+                  <div className="p-5 cursor-pointer" onClick={() => setExpandedJob(isExpanded ? null : job.id)}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          job.status === 'completed' ? 'bg-emerald-100' :
+                          job.status === 'in_progress' ? 'bg-amber-100' :
+                          job.status === 'cancelled' ? 'bg-red-100' : 'bg-blue-100'
+                        }`}>
+                          <StatusIcon className={`w-5 h-5 ${
+                            job.status === 'completed' ? 'text-emerald-600' :
+                            job.status === 'in_progress' ? 'text-amber-600' :
+                            job.status === 'cancelled' ? 'text-red-600' : 'text-blue-600'
+                          }`} />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-800 dark:text-white">{job.title}</h3>
+                          <p className="text-xs text-slate-500">{job.job_number} · {job.clients?.company_name || 'No client'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadge(job.status)}`}>
+                          {job.status?.replace('_', ' ')}
+                        </span>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                      </div>
+                    </div>
+
+                    {/* Quick Info */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.site_address?.slice(0, 25)}</div>
+                      <div className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(job.scheduled_date)}</div>
+                      <div className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatTime(job.scheduled_start_time)} - {formatTime(job.scheduled_end_time)}</div>
+                      <div className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{job.job_assignments?.length || 0} cleaner{job.job_assignments?.length !== 1 ? 's' : ''}</div>
+                    </div>
+
+                    {/* Category Badge */}
+                    {job.job_categories && (
+                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: job.job_categories.color + '20', color: job.job_categories.color }}>
+                        {job.job_categories.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Expanded Detail */}
+                  {isExpanded && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                      className="border-t border-slate-200 dark:border-slate-600 p-5 bg-slate-50 dark:bg-slate-800/30 space-y-6">
                       
-                      return (
-                        <tr key={job.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
-                          isActive ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''
-                        } ${isCompleted ? 'bg-emerald-50/20 dark:bg-emerald-900/5' : ''}`}>
-                          <td className="py-3 px-3">
-                            <span className="font-mono text-xs font-medium text-slate-600 dark:text-slate-400">{job.job_number}</span>
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-2">
-                              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse flex-shrink-0"></span>}
+                      {/* Timeline */}
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">📋 Job Timeline</h4>
+                        <div className="relative">
+                          {timeline.map((step, i) => (
+                            <div key={i} className="flex items-start gap-3 mb-4 relative">
+                              {/* Line */}
+                              {i < timeline.length - 1 && (
+                                <div className="absolute left-4 top-8 w-0.5 h-full bg-slate-300 dark:bg-slate-600"></div>
+                              )}
+                              {/* Dot */}
+                              <div className={`w-8 h-8 rounded-full ${step.color} flex items-center justify-center flex-shrink-0 z-10`}>
+                                <step.icon className="w-4 h-4 text-white" />
+                              </div>
                               <div>
-                                <p className="font-medium text-slate-800 dark:text-white">{job.title}</p>
-                                {job.job_categories?.name && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{backgroundColor: job.job_categories.color + '20', color: job.job_categories.color}}>
-                                    {job.job_categories.name}
-                                  </span>
+                                <p className="font-medium text-sm text-slate-800 dark:text-white">{step.label}</p>
+                                <p className="text-xs text-slate-500">{formatDate(step.date)} {step.date && new Date(step.date).toLocaleTimeString()}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Assigned Cleaners */}
+                      {job.job_assignments?.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            👥 Assigned Cleaners ({job.job_assignments.length})
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {job.job_assignments.map(assign => (
+                              <div key={assign.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-700 rounded-lg">
+                                <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-purple-600" />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{assign.employees?.first_name} {assign.employees?.last_name}</p>
+                                  <p className="text-xs text-slate-500">{assign.employees?.employee_code}</p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                  assign.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                  assign.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>{assign.status}</span>
+                                {assign.employees?.phone && (
+                                  <a href={`tel:${assign.employees.phone}`} className="p-1.5 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600">
+                                    <Phone className="w-4 h-4" />
+                                  </a>
                                 )}
                               </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-sm text-slate-600 dark:text-slate-400">
-                            {job.clients?.company_name || 'N/A'}
-                            {job.clients?.phone && (
-                              <a href={`tel:${job.clients.phone}`} className="block text-[10px] text-blue-500 hover:underline mt-0.5">📞 Call</a>
-                            )}
-                          </td>
-                          <td className="py-3 px-3">
-                            {cleanerInfo.hasCleaner ? (
-                              <div className="flex items-center gap-2">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                                  isActive ? 'bg-amber-100 dark:bg-amber-900/30' : 
-                                  isCompleted ? 'bg-emerald-100 dark:bg-emerald-900/30' : 
-                                  'bg-blue-100 dark:bg-blue-900/30'
-                                }`}>
-                                  <Users className={`w-3.5 h-3.5 ${
-                                    isActive ? 'text-amber-600' : 
-                                    isCompleted ? 'text-emerald-600' : 
-                                    'text-blue-600'
-                                  }`} />
-                                </div>
-                                <div>
-                                  <span className={`text-sm font-medium ${
-                                    isActive ? 'text-amber-700 dark:text-amber-400' : 
-                                    isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 
-                                    'text-blue-700 dark:text-blue-400'
-                                  }`}>
-                                    {cleanerInfo.name}
-                                  </span>
-                                  {isCompleted && (
-                                    <span className="block text-[9px] text-emerald-500">Completed job</span>
-                                  )}
-                                </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Photos */}
+                      {job.job_photos?.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                            📸 Job Photos ({job.job_photos.length})
+                          </h4>
+                          <div className="grid grid-cols-3 gap-2">
+                            {job.job_photos.map(photo => (
+                              <div key={photo.id} className="relative rounded-lg overflow-hidden cursor-pointer"
+                                onClick={() => window.open(photo.photo_url, '_blank')}>
+                                <img src={photo.photo_url} alt={photo.photo_type} className="w-full h-24 object-cover" />
+                                <span className={`absolute top-1 left-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                                  photo.photo_type === 'before' ? 'bg-blue-500 text-white' :
+                                  photo.photo_type === 'after' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
+                                }`}>{photo.photo_type}</span>
                               </div>
-                            ) : (
-                              <span className={`text-xs italic ${
-                                cleanerInfo.name === 'Available' ? 'text-blue-400' : 'text-slate-400'
-                              }`}>
-                                {cleanerInfo.name}
-                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quality Inspection */}
+                      {job.quality_inspections?.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                            ✅ Quality Inspection
+                          </h4>
+                          {job.quality_inspections.map(insp => (
+                            <div key={insp.id} className="flex items-center gap-3 p-2 bg-white dark:bg-slate-700 rounded-lg">
+                              <div className="text-2xl">
+                                {'⭐'.repeat(insp.overall_rating || 0)}
+                              </div>
+                              <span className="text-sm">{insp.overall_rating}/5</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs ${insp.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{insp.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Client Info */}
+                      {job.clients && (
+                        <div className="flex items-center gap-4 p-3 bg-white dark:bg-slate-700 rounded-lg">
+                          <Building2 className="w-5 h-5 text-slate-400" />
+                          <div>
+                            <p className="font-medium text-sm">{job.clients.company_name}</p>
+                            {job.clients.phone && (
+                              <a href={`tel:${job.clients.phone}`} className="text-xs text-blue-600 hover:underline">{job.clients.phone}</a>
                             )}
-                          </td>
-                          <td className="py-3 px-3 text-xs text-slate-500">
-                            <div className="flex items-center gap-1"><MapPin className="w-3 h-3 flex-shrink-0" />{job.site_address?.slice(0, 30) || 'N/A'}</div>
-                          </td>
-                          <td className="py-3 px-3 text-xs text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              <span className={isToday ? 'text-emerald-600 font-medium' : ''}>
-                                {isToday ? 'Today' : formatDate(job.scheduled_date)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-xs text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {job.scheduled_start_time?.slice(0,5) || '--'} - {job.scheduled_end_time?.slice(0,5) || '--'}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <span className={`px-2 py-1 rounded-full text-[10px] font-medium ${getStatusBadge(job.status)}`}>
-                              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block mr-1 animate-pulse"></span>}
-                              {(job.status || 'pending').replace('_', ' ')}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            {isCompleted && job.actual_end_time ? (
-                              <span className="text-[10px] text-emerald-600 font-medium">{formatDateTime(job.actual_end_time)}</span>
-                            ) : isCompleted ? (
-                              <span className="text-[10px] text-emerald-500">Done</span>
-                            ) : (<span className="text-[10px] text-slate-400">-</span>)}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {/* Assign Button - For open/unassigned jobs */}
-                              {isOpen && (
-                                <button onClick={() => handleOpenAssign(job)}
-                                  className="px-2 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 text-xs hover:bg-indigo-200 flex items-center gap-1"
-                                  title="Assign to cleaner">
-                                  <UserPlus className="w-3 h-3" /> Assign
-                                </button>
-                              )}
-                              {/* Release Button - For active jobs */}
-                              {isActive && (
-                                <button onClick={() => handleReleaseJob(job.id, job.title)} disabled={releasingJob === job.id}
-                                  className="px-2 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-xs hover:bg-orange-200 disabled:opacity-50 flex items-center gap-1"
-                                  title="Release back to Open Pool (clears assignment)">
-                                  {releasingJob === job.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-orange-600"></div> : <RotateCcw className="w-3 h-3" />}
-                                  Release
-                                </button>
-                              )}
-                              {/* Resume for held jobs */}
-                              {job.status === 'on_hold' && (
-                                <button onClick={() => handleReleaseJob(job.id, job.title)} disabled={releasingJob === job.id}
-                                  className="px-2 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 disabled:opacity-50 flex items-center gap-1"
-                                  title="Resume to Open Pool">
-                                  {releasingJob === job.id ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div> : <RotateCcw className="w-3 h-3" />}
-                                  Resume
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-16">
-                <Briefcase className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-500 text-lg mb-2">No jobs found</p>
-              </div>
-            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Special Instructions */}
+                      {job.special_instructions && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <p className="text-xs font-semibold text-amber-700 mb-1">📝 Special Instructions</p>
+                          <p className="text-xs text-amber-600">{job.special_instructions}</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         )}
-
-        {/* Legend */}
-        <div className="mt-6 neu-raised rounded-2xl p-4 flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500"></span><span className="text-slate-600 dark:text-slate-400">Open Pool</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span><span className="text-slate-600 dark:text-slate-400">Active</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-500"></span><span className="text-slate-600 dark:text-slate-400">Completed</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-purple-500"></span><span className="text-slate-600 dark:text-slate-400">On Hold</span></div>
-          <div className="flex items-center gap-2"><UserPlus className="w-3 h-3 text-indigo-500" /><span className="text-slate-600 dark:text-slate-400">Assign</span></div>
-          <div className="flex items-center gap-2"><RotateCcw className="w-3 h-3 text-orange-500" /><span className="text-slate-600 dark:text-slate-400">Release</span></div>
-        </div>
       </main>
-
-      {/* ASSIGN MODAL */}
-      {showAssignModal && assigningJob && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignModal(false)}>
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            
-            <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Assign Job</h3>
-                <p className="text-xs text-slate-500">{assigningJob.job_number} - {assigningJob.title}</p>
-              </div>
-              <button onClick={() => setShowAssignModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="text-sm font-semibold text-slate-500 mb-2 block">Select Cleaner</label>
-                <select value={selectedCleaner} onChange={e => setSelectedCleaner(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm">
-                  <option value="">Choose a cleaner...</option>
-                  {cleaners.map(cleaner => (
-                    <option key={cleaner.id} value={cleaner.id}>
-                      {cleaner.first_name} {cleaner.last_name} ({cleaner.employee_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400">
-                <p className="font-medium mb-1">Note:</p>
-                <p>This will assign the job to the selected cleaner and remove any previous assignment. The job will appear in their "My Jobs" list.</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700">
-              <button onClick={() => setShowAssignModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium">
-                Cancel
-              </button>
-              <button onClick={handleAssignJob} disabled={assigning || !selectedCleaner}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2">
-                {assigning ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div> : <UserPlus className="w-4 h-4" />}
-                Assign Job
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   )
 }
