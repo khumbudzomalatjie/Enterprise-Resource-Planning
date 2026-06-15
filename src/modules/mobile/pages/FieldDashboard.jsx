@@ -44,7 +44,6 @@ export default function FieldDashboard() {
 
   const loadStats = async () => {
     const today = new Date().toISOString().split('T')[0]
-    
     const [
       { data: cleaners },
       { data: activeAttendance },
@@ -62,7 +61,6 @@ export default function FieldDashboard() {
       supabase.from('incident_reports').select('*').in('status', ['reported', 'investigating']),
       supabase.from('job_photos').select('*').gte('taken_at', `${today}T00:00:00`)
     ])
-
     setStats({
       totalCleaners: cleaners?.length || 0,
       activeNow: activeAttendance?.length || 0,
@@ -76,14 +74,12 @@ export default function FieldDashboard() {
 
   const loadActiveCleaners = async () => {
     const today = new Date().toISOString().split('T')[0]
-    
     const { data: attendance } = await supabase
       .from('attendance_records')
       .select('*, employees(first_name, last_name, phone, employee_code)')
       .eq('attendance_date', today)
       .not('clock_in_time', 'is', null)
       .order('clock_in_time', { ascending: false })
-
     setActiveCleaners(attendance || [])
   }
 
@@ -91,9 +87,7 @@ export default function FieldDashboard() {
     const { data } = await supabase
       .from('job_photos')
       .select('*, jobs(title, job_number), employees(first_name, last_name)')
-      .order('taken_at', { ascending: false })
-      .limit(8)
-
+      .order('taken_at', { ascending: false }).limit(8)
     setRecentPhotos(data || [])
   }
 
@@ -101,9 +95,7 @@ export default function FieldDashboard() {
     const { data } = await supabase
       .from('incident_reports')
       .select('*, employees(first_name, last_name), jobs(title, job_number, site_address)')
-      .order('incident_date', { ascending: false })
-      .limit(10)
-
+      .order('incident_date', { ascending: false }).limit(10)
     setRecentIncidents(data || [])
   }
 
@@ -111,9 +103,7 @@ export default function FieldDashboard() {
     const { data } = await supabase
       .from('supplies_requests')
       .select('*, employees(first_name, last_name), supplies_request_items(*)')
-      .order('created_at', { ascending: false })
-      .limit(10)
-
+      .order('created_at', { ascending: false }).limit(10)
     setSupplyRequests(data || [])
   }
 
@@ -126,9 +116,20 @@ export default function FieldDashboard() {
 
   const handleResolveIncident = async (id) => {
     await supabase.from('incident_reports').update({ status: 'resolved' }).eq('id', id)
-    toast.success('Incident marked as resolved')
+    toast.success('Incident resolved')
     loadIncidents()
     loadStats()
+  }
+
+  // Navigation handler with error catching
+  const handleNavigate = (path) => {
+    console.log('Navigating to:', path)
+    try {
+      navigate(path)
+    } catch (error) {
+      console.error('Navigation error:', error)
+      window.location.href = path
+    }
   }
 
   const statCards = [
@@ -160,21 +161,20 @@ export default function FieldDashboard() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Main Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Field Operations Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, jobs, photos, incidents, supplies & messages in real-time</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Monitor cleaners, jobs, photos, incidents & messages</p>
           </div>
           <button onClick={loadAllData} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
             <Activity className="w-4 h-4" /> Refresh Live
           </button>
         </motion.div>
 
-        {/* Quick Nav - 6 Buttons with Messages */}
+        {/* Quick Nav Buttons - USING handleNavigate for safety */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {[
             { label: 'Active Cleaners', icon: Activity, path: '/mobile/field/cleaners', color: 'bg-emerald-600' },
@@ -184,7 +184,7 @@ export default function FieldDashboard() {
             { label: 'Live Map', icon: Navigation, path: '/mobile/field/map', color: 'bg-blue-600' },
             { label: 'Messages', icon: MessageCircle, path: '/mobile/field/messages', color: 'bg-purple-600' },
           ].map(item => (
-            <button key={item.label} onClick={() => navigate(item.path)}
+            <button key={item.label} onClick={() => handleNavigate(item.path)}
               className={`${item.color} text-white rounded-2xl p-3 flex flex-col items-center gap-1 hover:scale-105 transition-transform text-sm font-medium shadow-lg`}>
               <item.icon className="w-6 h-6" />
               {item.label}
@@ -203,17 +203,14 @@ export default function FieldDashboard() {
           ))}
         </div>
 
-        {/* Active Cleaners Live */}
+        {/* Active Cleaners */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
               <Activity className="w-5 h-5 text-emerald-600" />Cleaners Working Now
             </h2>
-            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-xs font-medium">
-              {activeCleaners.length} Active
-            </span>
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-xs font-medium">{activeCleaners.length} Active</span>
           </div>
-          
           {activeCleaners.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {activeCleaners.map(cleaner => (
@@ -224,155 +221,117 @@ export default function FieldDashboard() {
                       <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800 animate-pulse"></span>
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-800 dark:text-white text-sm">{cleaner.employees?.first_name} {cleaner.employees?.last_name}</p>
+                      <p className="font-semibold text-sm">{cleaner.employees?.first_name} {cleaner.employees?.last_name}</p>
                       <p className="text-xs text-slate-500">{cleaner.employees?.employee_code}</p>
                     </div>
                   </div>
                   <div className="space-y-1 text-xs text-slate-500">
                     <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(cleaner.clock_in_time).toLocaleTimeString()}</div>
                     {cleaner.check_in_latitude && (
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                          View on Map
-                        </a>
+                      <div className="flex items-center gap-1"><MapPin className="w-3 h-3" />
+                        <a href={`https://www.google.com/maps?q=${cleaner.check_in_latitude},${cleaner.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View on Map</a>
                       </div>
                     )}
                   </div>
                   {cleaner.employees?.phone && (
-                    <a href={`tel:${cleaner.employees.phone}`} className="mt-2 inline-flex items-center gap-1 text-emerald-600 text-xs font-medium hover:underline">
-                      <Phone className="w-3 h-3" /> Call
-                    </a>
+                    <a href={`tel:${cleaner.employees.phone}`} className="mt-2 inline-flex items-center gap-1 text-emerald-600 text-xs font-medium hover:underline"><Phone className="w-3 h-3" /> Call</a>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-              <p className="text-slate-500">No cleaners currently active</p>
-            </div>
+            <div className="text-center py-8"><Users className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500">No cleaners active</p></div>
           )}
         </motion.div>
 
-        {/* Two Column Layout: Incidents + Supply Requests */}
+        {/* Incidents & Supply Requests */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Recent Incidents */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600" />Recent Incidents
-              </h2>
-              <Link to="/mobile/field/incidents" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2"><AlertCircle className="w-5 h-5 text-red-600" />Recent Incidents</h2>
+              <button onClick={() => handleNavigate('/mobile/field/incidents')} className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></button>
             </div>
-            
             {recentIncidents.length > 0 ? (
               <div className="space-y-3">
-                {recentIncidents.map(incident => (
-                  <div key={incident.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
+                {recentIncidents.slice(0, 5).map(incident => (
+                  <div key={incident.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="font-semibold text-sm text-slate-800 dark:text-white capitalize">{incident.incident_type}</p>
+                        <p className="font-semibold text-sm capitalize">{incident.incident_type}</p>
                         <p className="text-xs text-slate-500">{incident.employees?.first_name} {incident.employees?.last_name}</p>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         incident.severity === 'critical' ? 'bg-red-100 text-red-700' :
                         incident.severity === 'high' ? 'bg-orange-100 text-orange-700' :
-                        'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                        incident.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                       }`}>{incident.severity}</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{incident.description}</p>
+                    <p className="text-xs text-slate-600 line-clamp-2">{incident.description}</p>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-[10px] text-slate-400">{new Date(incident.incident_date).toLocaleString()}</span>
                       {incident.status !== 'resolved' && (
-                        <button onClick={() => handleResolveIncident(incident.id)} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">Mark Resolved</button>
+                        <button onClick={() => handleResolveIncident(incident.id)} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">Resolve</button>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">No open incidents 🎉</p>
-              </div>
+              <div className="text-center py-6"><CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" /><p className="text-slate-500 text-sm">No incidents 🎉</p></div>
             )}
           </motion.div>
 
-          {/* Supply Requests */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <Package className="w-5 h-5 text-amber-600" />Supply Requests
-              </h2>
-              <Link to="/mobile/field/supplies" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Package className="w-5 h-5 text-amber-600" />Supply Requests</h2>
+              <button onClick={() => handleNavigate('/mobile/field/supplies')} className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></button>
             </div>
-            
             {supplyRequests.length > 0 ? (
               <div className="space-y-3">
-                {supplyRequests.map(request => (
-                  <div key={request.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 border border-slate-100 dark:border-slate-600">
+                {supplyRequests.slice(0, 5).map(request => (
+                  <div key={request.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="font-semibold text-sm text-slate-800 dark:text-white">{request.employees?.first_name} {request.employees?.last_name}</p>
-                        <p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items requested</p>
+                        <p className="font-semibold text-sm">{request.employees?.first_name} {request.employees?.last_name}</p>
+                        <p className="text-xs text-slate-500">{request.supplies_request_items?.length || 0} items</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        request.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                      }`}>{request.status}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {request.supplies_request_items?.slice(0, 3).map((item, i) => (
-                        <p key={i} className="text-xs text-slate-600 dark:text-slate-400">• {item.item_name} x{item.quantity} {item.unit}</p>
-                      ))}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${request.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{request.status}</span>
                     </div>
                     {request.status === 'pending' && (
-                      <button onClick={() => handleApproveSupply(request.id)} className="mt-2 w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">Approve Request</button>
+                      <button onClick={() => handleApproveSupply(request.id)} className="mt-2 w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-medium hover:bg-emerald-600">Approve</button>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">No pending requests</p>
-              </div>
+              <div className="text-center py-6"><Package className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 text-sm">No pending requests</p></div>
             )}
           </motion.div>
         </div>
 
-        {/* Recent Photos Gallery */}
+        {/* Recent Photos */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="neu-raised rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <Camera className="w-5 h-5 text-indigo-600" />Recent Job Photos
-            </h2>
-            <Link to="/mobile/field/photos" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2"><Camera className="w-5 h-5 text-indigo-600" />Recent Job Photos</h2>
+            <button onClick={() => handleNavigate('/mobile/field/photos')} className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></button>
           </div>
-          
           {recentPhotos.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {recentPhotos.map(photo => (
                 <div key={photo.id} className="relative group cursor-pointer rounded-xl overflow-hidden" onClick={() => window.open(photo.photo_url, '_blank')}>
-                  <img src={photo.photo_url} alt={photo.caption || 'Job photo'} className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
+                  <img src={photo.photo_url} alt="" className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
                     <p className="text-white text-xs font-medium">{photo.employees?.first_name} {photo.employees?.last_name}</p>
                     <p className="text-white/70 text-[10px]">{photo.jobs?.title?.slice(0, 30)}</p>
                   </div>
                   <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${
-                    photo.photo_type === 'before' ? 'bg-blue-500 text-white' :
-                    photo.photo_type === 'after' ? 'bg-emerald-500 text-white' :
-                    photo.photo_type === 'incident' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white'
+                    photo.photo_type === 'before' ? 'bg-blue-500 text-white' : photo.photo_type === 'after' ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
                   }`}>{photo.photo_type}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-6">
-              <Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">No photos uploaded yet</p>
-            </div>
+            <div className="text-center py-6"><Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 text-sm">No photos yet</p></div>
           )}
         </motion.div>
       </main>
