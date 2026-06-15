@@ -20,22 +20,36 @@ export default function Login() {
     initTheme()
   }, [initTheme])
 
+  // If already logged in, redirect immediately
+  useEffect(() => {
+    if (!loading && user && profile && !isLoggingIn) {
+      if (profile.role === 'cleaner') {
+        window.location.href = '/mobile'
+      } else {
+        window.location.href = '/dashboard'
+      }
+    }
+  }, [])
+
   // Redirect based on role AFTER profile is loaded
   useEffect(() => {
     if (isLoggingIn && profile && user && !loading) {
       console.log('✅ Login complete - Profile:', profile.role)
       
-      if (profile.role === 'cleaner') {
-        console.log('→ Redirecting cleaner to /mobile')
-        navigate('/mobile', { replace: true })
-      } else {
-        console.log('→ Redirecting to /dashboard')
-        navigate('/dashboard', { replace: true })
-      }
+      // Force a small delay to ensure state is set, then hard redirect
+      setTimeout(() => {
+        if (profile.role === 'cleaner') {
+          console.log('→ Redirecting cleaner to /mobile')
+          window.location.href = '/mobile'
+        } else {
+          console.log('→ Redirecting to /dashboard')
+          window.location.href = '/dashboard'
+        }
+      }, 500)
       
       setIsLoggingIn(false)
     }
-  }, [isLoggingIn, profile, user, loading, navigate])
+  }, [isLoggingIn, profile, user, loading])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -55,17 +69,6 @@ export default function Login() {
     // If success, the useEffect above will handle the redirect
     // after the profile is loaded into the store
   }
-
-  // If already logged in, redirect immediately
-  useEffect(() => {
-    if (!loading && user && profile && !isLoggingIn) {
-      if (profile.role === 'cleaner') {
-        navigate('/mobile', { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
-      }
-    }
-  }, [])
 
   return (
     <div className={`min-h-screen flex items-center justify-center p-4 font-['Inter'] transition-colors duration-300 ${
