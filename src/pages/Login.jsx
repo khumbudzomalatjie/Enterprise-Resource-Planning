@@ -11,13 +11,25 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const { signIn, loading } = useAuthStore()
+  const { signIn, loading, profile } = useAuthStore()
   const { isDark, toggleTheme, initTheme } = useThemeStore()
   const navigate = useNavigate()
 
   useEffect(() => {
     initTheme()
   }, [initTheme])
+
+  // Watch for profile changes after login
+  useEffect(() => {
+    if (profile && !loading) {
+      console.log('Profile loaded, role:', profile.role)
+      if (profile.role === 'cleaner') {
+        navigate('/mobile', { replace: true })
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
+    }
+  }, [profile, loading])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -31,21 +43,8 @@ export default function Login() {
     
     if (result.success) {
       toast.success('Welcome back!')
-      
-      // FIXED: Role-based redirect
-      // Get the latest profile from the store
-      const state = useAuthStore.getState()
-      const userProfile = state.profile
-      
-      console.log('User role:', userProfile?.role) // Debug log
-      
-      if (userProfile?.role === 'cleaner') {
-        // Cleaners go to mobile home page (NOT field operations)
-        navigate('/mobile')
-      } else {
-        // All other roles (admin, manager, supervisor, etc.) go to main dashboard
-        navigate('/dashboard')
-      }
+      // Don't navigate here - let the useEffect above handle it
+      // The profile will be loaded and the useEffect will trigger the redirect
     } else {
       toast.error(result.error || 'Login failed')
     }
