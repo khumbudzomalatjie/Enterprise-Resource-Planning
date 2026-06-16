@@ -9,7 +9,7 @@ import {
   FileText, Search, Eye, Edit, ChevronRight,
   Sun, Moon, Sparkles, Download, MoreVertical,
   CheckCircle, XCircle, Send, Trash2, AlertTriangle,
-  Briefcase
+  Briefcase, Lock
 } from 'lucide-react'
 
 export default function QuotationList() {
@@ -39,7 +39,7 @@ export default function QuotationList() {
     loadQuotations()
   }
 
-  // Status change handler - FIXED
+  // Status change handler
   const handleStatusChange = async (id, newStatus) => {
     setActionMenu(null)
     
@@ -60,7 +60,7 @@ export default function QuotationList() {
     }
   }
 
-  // Accept quotation and create job
+  // Accept quotation
   const handleAcceptQuotation = async () => {
     if (!acceptConfirm) return
     
@@ -91,14 +91,19 @@ export default function QuotationList() {
     }
   }
 
-  // Edit quotation - FIXED: navigate to the quotation detail/edit page
-  const handleEdit = (quote) => {
+  // View quotation detail
+  const handleView = (quote) => {
     navigate(`/sales/quotations/${quote.id}`)
   }
 
-  // View quotation
-  const handleView = (quote) => {
-    navigate(`/sales/quotations/${quote.id}`)
+  // Edit quotation - only if not accepted/converted
+  const handleEdit = (quote) => {
+    if (quote.status === 'accepted' || quote.status === 'converted') {
+      toast.error('Cannot edit accepted or converted quotations')
+      return
+    }
+    // Navigate to edit page which opens CreateQuotation in edit mode
+    navigate(`/sales/quotations/${quote.id}/edit`)
   }
 
   const handleDownloadPDF = async (quotation) => {
@@ -158,6 +163,18 @@ export default function QuotationList() {
       cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     }
     return badges[status] || badges.draft
+  }
+
+  const canEdit = (status) => {
+    return status === 'draft' || status === 'sent'
+  }
+
+  const canChangeStatus = (status) => {
+    return status === 'draft' || status === 'sent'
+  }
+
+  const canDelete = (status) => {
+    return status === 'draft' || status === 'sent'
   }
 
   return (
@@ -251,23 +268,29 @@ export default function QuotationList() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* View Button */}
+                          {/* View Button - Always available */}
                           <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Details">
                             <Eye className="w-4 h-4" />
                           </button>
                           
-                          {/* Edit Button - FIXED: goes to quotation detail page */}
-                          <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Quotation">
-                            <Edit className="w-4 h-4" />
-                          </button>
+                          {/* Edit Button - Only for draft/sent (NOT accepted/converted) */}
+                          {canEdit(quote.status) ? (
+                            <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Quotation">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit accepted/converted quotations" disabled>
+                              <Lock className="w-4 h-4" />
+                            </button>
+                          )}
                           
-                          {/* Download PDF */}
+                          {/* Download PDF - Always available */}
                           <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download PDF">
                             <Download className="w-4 h-4" />
                           </button>
                           
-                          {/* Status Change Menu */}
-                          {(quote.status === 'draft' || quote.status === 'sent') && (
+                          {/* Status Change Menu - Only for draft/sent */}
+                          {canChangeStatus(quote.status) && (
                             <div className="relative">
                               <button onClick={() => setActionMenu(actionMenu === quote.id ? null : quote.id)} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Change Status">
                                 <MoreVertical className="w-4 h-4" />
@@ -281,18 +304,18 @@ export default function QuotationList() {
                                     </button>
                                   )}
                                   <button onClick={() => handleStatusChange(quote.id, 'accepted')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-emerald-50">
-                                    <CheckCircle className="w-3 h-3 text-emerald-500" /> Accept & Create Job
+                                    <CheckCircle className="w-3 h-3 text-emerald-500" /> Accept
                                   </button>
                                   <button onClick={() => handleStatusChange(quote.id, 'rejected')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-red-50">
-                                    <XCircle className="w-3 h-3 text-red-500" /> Mark as Rejected
+                                    <XCircle className="w-3 h-3 text-red-500" /> Reject
                                   </button>
                                 </div>
                               )}
                             </div>
                           )}
                           
-                          {/* Delete Button */}
-                          {(quote.status === 'draft' || quote.status === 'sent') && (
+                          {/* Delete Button - Only for draft/sent */}
+                          {canDelete(quote.status) && (
                             <button onClick={() => setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -324,7 +347,7 @@ export default function QuotationList() {
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">This will:</p>
                     <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1 list-disc list-inside">
                       <li>Mark quotation as <strong>Accepted</strong></li>
-                      <li>Update the quotation status</li>
+                      <li>Lock the quotation from further edits</li>
                     </ul>
                   </div>
                 </div>
