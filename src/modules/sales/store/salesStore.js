@@ -70,6 +70,32 @@ const useSalesStore = create((set, get) => ({
     }
   },
 
+  // NEW: Update quotation status only
+  updateQuotationStatus: async (id, status) => {
+    try {
+      const result = await salesApi.updateQuotationStatus(id, status)
+      if (result.error) throw result.error
+      // If cancelled, remove from list. Otherwise update.
+      if (status === 'cancelled') {
+        set((state) => ({
+          quotations: (state.quotations || []).filter((q) => q.id !== id),
+          selectedQuotation: state.selectedQuotation?.id === id ? null : state.selectedQuotation
+        }))
+      } else {
+        set((state) => ({
+          quotations: (state.quotations || []).map((q) =>
+            q.id === id ? result.data : q
+          ),
+          selectedQuotation:
+            state.selectedQuotation?.id === id ? result.data : state.selectedQuotation
+        }))
+      }
+      return { success: true, data: result.data }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  },
+
   acceptQuotation: async (id) => {
     return await get().updateQuotation(id, {
       status: 'accepted',
