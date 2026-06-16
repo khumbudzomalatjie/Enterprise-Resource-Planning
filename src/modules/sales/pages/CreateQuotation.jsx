@@ -66,8 +66,9 @@ function QuotationTemplate({ quotation, items }) {
   return (
     <div style={{
       width: '210mm',
-      height: '297mm',
-      padding: '10mm 15mm',
+      minHeight: '297mm',
+      maxHeight: '297mm',
+      padding: '8mm 12mm',
       backgroundColor: 'white',
       fontFamily: 'Inter, Arial, sans-serif',
       color: '#1e293b',
@@ -77,23 +78,23 @@ function QuotationTemplate({ quotation, items }) {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Header with Logo – compact */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6mm', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '4mm' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6mm' }}>
-          <div style={{ width: '14mm', height: '14mm', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
+      {/* Header with Logo */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4mm', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '3mm' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4mm' }}>
+          <div style={{ width: '12mm', height: '12mm', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
             <img src="/logo.png" alt="Logo" style={{ width: '80%', height: '80%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:12px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
+              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:10px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '14px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '6px', color: '#64748b', margin: '1px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '5px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678</p>
+            <h1 style={{ fontSize: '12px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
+            <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>Professional Cleaning & Hygiene Services</p>
+            <p style={{ fontSize: '4px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '1px' }}>QUOTATION</h2>
-          <p style={{ fontSize: '12px', color: COLORS.main, margin: '1px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
-          <div style={{ marginTop: '2mm', fontSize: '6px', color: '#64748b' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '1px' }}>QUOTATION</h2>
+          <p style={{ fontSize: '10px', color: COLORS.main, margin: '1px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
+          <div style={{ marginTop: '1mm', fontSize: '5px', color: '#64748b' }}>
             <p style={{ margin: '0' }}>Date: {formatDate(quotation?.quotation_date)}</p>
             <p style={{ margin: '0' }}>Valid: {formatDate(quotation?.valid_until)}</p>
           </div>
@@ -101,82 +102,82 @@ function QuotationTemplate({ quotation, items }) {
       </div>
 
       {/* Bill To & Details */}
-      <div style={{ marginBottom: '5mm', display: 'flex', gap: '15mm' }}>
+      <div style={{ marginBottom: '3mm', display: 'flex', gap: '10mm' }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Bill To:</h3>
-          <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
-          {quotation?.client_email && <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>{quotation.client_email}</p>}
-          <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>{quotation?.client_address || ''}</p>
+          <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Bill To:</h3>
+          <p style={{ fontSize: '9px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
+          {quotation?.client_email && <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>{quotation.client_email}</p>}
+          <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>{quotation?.client_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Details:</h3>
-          <p style={{ fontSize: '8px', color: '#1e293b', margin: '0' }}>Prepared: Ndanduleni Group Sales</p>
-          <p style={{ fontSize: '7px', color: '#64748b', margin: '0' }}>Terms: {quotation?.payment_terms || '50% Deposit'}</p>
+          <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Details:</h3>
+          <p style={{ fontSize: '7px', color: '#1e293b', margin: '0' }}>Prepared: Ndanduleni Group Sales</p>
+          <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>Terms: {quotation?.payment_terms || '50% Deposit'}</p>
         </div>
       </div>
 
-      {/* Items Table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '5mm' }}>
+      {/* Items Table - Compact */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '3mm' }}>
         <thead>
           <tr style={{ backgroundColor: COLORS.tableHeader, color: 'white' }}>
-            <th style={{ padding: '2mm 3mm', textAlign: 'left', fontSize: '6px', fontWeight: 'bold' }}>#</th>
-            <th style={{ padding: '2mm 3mm', textAlign: 'left', fontSize: '6px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '2mm 3mm', textAlign: 'center', fontSize: '6px', fontWeight: 'bold', width: '10mm' }}>Qty</th>
-            <th style={{ padding: '2mm 3mm', textAlign: 'right', fontSize: '6px', fontWeight: 'bold', width: '25mm' }}>Unit Price</th>
-            <th style={{ padding: '2mm 3mm', textAlign: 'right', fontSize: '6px', fontWeight: 'bold', width: '25mm' }}>Total</th>
+            <th style={{ padding: '1.5mm 2mm', textAlign: 'left', fontSize: '5px', fontWeight: 'bold' }}>#</th>
+            <th style={{ padding: '1.5mm 2mm', textAlign: 'left', fontSize: '5px', fontWeight: 'bold' }}>Description</th>
+            <th style={{ padding: '1.5mm 2mm', textAlign: 'center', fontSize: '5px', fontWeight: 'bold', width: '8mm' }}>Qty</th>
+            <th style={{ padding: '1.5mm 2mm', textAlign: 'right', fontSize: '5px', fontWeight: 'bold', width: '22mm' }}>Unit Price</th>
+            <th style={{ padding: '1.5mm 2mm', textAlign: 'right', fontSize: '5px', fontWeight: 'bold', width: '22mm' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           {(items || []).filter(item => item.description).map((item, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#64748b' }}>{i + 1}</td>
-              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
-              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
-              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
-              <td style={{ padding: '1.5mm 3mm', fontSize: '6px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
+              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#64748b' }}>{i + 1}</td>
+              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
+              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
+              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
+              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
       {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '5mm' }}>
-        <div style={{ width: '200px', border: '1px solid #e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2mm 8px', borderBottom: '1px solid #e2e8f0', fontSize: '6px', backgroundColor: '#f8fafc' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '3mm' }}>
+        <div style={{ width: '180px', border: '1px solid #e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5mm 6px', borderBottom: '1px solid #e2e8f0', fontSize: '5px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>Subtotal (Excl. VAT):</span>
             <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(subtotal)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2mm 8px', borderBottom: '1px solid #e2e8f0', fontSize: '6px', backgroundColor: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5mm 6px', borderBottom: '1px solid #e2e8f0', fontSize: '5px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(vatAmount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3mm 8px', fontSize: '10px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2.5mm 6px', fontSize: '9px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
             <span style={{ color: COLORS.dark }}>TOTAL (Incl. VAT):</span>
-            <span style={{ color: COLORS.dark, fontSize: '12px' }}>{formatCurrency(totalAmount)}</span>
+            <span style={{ color: COLORS.dark, fontSize: '10px' }}>{formatCurrency(totalAmount)}</span>
           </div>
         </div>
       </div>
 
       {/* Terms */}
-      <div style={{ marginBottom: '4mm' }}>
-        <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Terms & Conditions</h3>
-        <p style={{ fontSize: '5px', color: '#94a3b8', lineHeight: '1.2', margin: '0' }}>
+      <div style={{ marginBottom: '2mm' }}>
+        <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Terms & Conditions</h3>
+        <p style={{ fontSize: '4px', color: '#94a3b8', lineHeight: '1.1', margin: '0' }}>
           1. Valid for 30 days. 2. Payment: {quotation?.payment_terms || '50% Deposit, Balance on Completion'}. 3. Prices include VAT at 15%. 4. Services rendered per agreed schedule. 5. 30 days cancellation notice.
         </p>
       </div>
 
       {quotation?.notes && (
-        <div style={{ marginBottom: '4mm', padding: '2mm 6mm', backgroundColor: '#f8fafc', borderRadius: '2px' }}>
-          <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
+        <div style={{ marginBottom: '2mm', padding: '1.5mm 5mm', backgroundColor: '#f8fafc', borderRadius: '2px' }}>
+          <p style={{ fontSize: '4px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
         </div>
       )}
 
       {/* Footer */}
-      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '3mm', textAlign: 'center' }}>
-        <p style={{ fontSize: '5px', color: '#94a3b8', margin: '0' }}>
+      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '2mm', textAlign: 'center' }}>
+        <p style={{ fontSize: '4px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123 | 123 Main Street, Johannesburg
         </p>
-        <p style={{ fontSize: '8px', color: COLORS.main, margin: '2mm 0 0 0', fontWeight: 'bold' }}>
+        <p style={{ fontSize: '7px', color: COLORS.main, margin: '1mm 0 0 0', fontWeight: 'bold' }}>
           Thank you for your business!
         </p>
       </div>
@@ -188,7 +189,6 @@ function QuotationTemplate({ quotation, items }) {
 // Create/Edit Quotation Page
 // ═══════════════════════════════════════════════
 export default function CreateQuotation() {
-  // Get ID from URL for edit mode
   const { id } = useParams()
   const isEditMode = Boolean(id)
 
@@ -228,9 +228,6 @@ export default function CreateQuotation() {
     fetchClients({ status: 'active' })
   }, [fetchClients])
 
-  // ═══════════════════════════════════════════
-  // LOAD EXISTING QUOTATION FOR EDIT MODE
-  // ═══════════════════════════════════════════
   useEffect(() => {
     if (id) {
       loadExistingQuotation(id)
@@ -244,7 +241,6 @@ export default function CreateQuotation() {
       if (result.success && result.data) {
         const quote = result.data
         
-        // Populate form fields
         setQuotationData({
           client_id: quote.client_id || '',
           client_name: quote.client_name || quote.clients?.company_name || '',
@@ -260,7 +256,6 @@ export default function CreateQuotation() {
           status: quote.status || 'draft'
         })
 
-        // Populate items
         if (quote.quotation_items && quote.quotation_items.length > 0) {
           setItems(quote.quotation_items.map(item => ({
             description: item.description || '',
@@ -273,7 +268,6 @@ export default function CreateQuotation() {
         }
 
         setSavedQuotationId(quote.id)
-        toast.success('Quotation loaded for editing')
       } else {
         toast.error('Failed to load quotation')
         navigate('/sales/quotations')
@@ -285,7 +279,6 @@ export default function CreateQuotation() {
     setLoadingQuote(false)
   }
 
-  // Calculator functions
   const calculateLineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
   const calculateSubtotal = () => items.reduce((sum, item) => sum + calculateLineTotal(item), 0)
   const calculateVAT = () => calculateSubtotal() * 0.15
@@ -340,9 +333,6 @@ export default function CreateQuotation() {
     setItems(newItems)
   }
 
-  // ═══════════════════════════════════════════
-  // SAVE - Handles both CREATE and UPDATE
-  // ═══════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) {
       toast.error('Please select a client')
@@ -376,7 +366,6 @@ export default function CreateQuotation() {
     }
 
     if (isEditMode) {
-      // UPDATE existing quotation
       const result = await updateQuotation(id, quotePayload)
       if (!result.success) {
         toast.error('Failed to update quotation: ' + (result.error || 'Unknown error'))
@@ -385,7 +374,6 @@ export default function CreateQuotation() {
       toast.success(status === 'sent' ? 'Quotation updated and sent!' : 'Quotation updated!')
       navigate(`/sales/quotations/${id}`)
     } else {
-      // CREATE new quotation
       const result = await createQuotation(quotePayload, cleanItems)
       if (!result.success) {
         toast.error('Failed to save quotation: ' + (result.error || 'Unknown error'))
@@ -396,6 +384,9 @@ export default function CreateQuotation() {
     }
   }
 
+  // ═══════════════════════════════════════════
+  // FIXED: PDF Download - Force Single A4 Page
+  // ═══════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       const html2pdf = (await import('html2pdf.js')).default
@@ -405,6 +396,7 @@ export default function CreateQuotation() {
       tempDiv.style.left = '-9999px'
       tempDiv.style.top = '0'
       tempDiv.style.width = '794px'
+      tempDiv.style.height = '1123px'
       document.body.appendChild(tempDiv)
 
       const ReactDOM = (await import('react-dom/client')).default
@@ -417,33 +409,108 @@ export default function CreateQuotation() {
         })
       )
 
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 800))
 
       const opt = {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
-        image: { type: 'jpeg', quality: 1 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794, windowHeight: 1123 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          letterRendering: true, 
+          width: 794,
+          height: 1123,
+          windowWidth: 794, 
+          windowHeight: 1123 
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait',
+          compress: true,
+          precision: 2
+        },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         pagesplit: false
       }
 
-      await html2pdf().set(opt).from(tempDiv).toPdf().get('pdf').then((pdf) => {
-        if (pdf.internal.getNumberOfPages() > 1) {
-          for (let i = pdf.internal.getNumberOfPages(); i > 1; i--) {
-            pdf.deletePage(i)
-          }
+      const pdf = await html2pdf().set(opt).from(tempDiv).toPdf().outputPdf('blob')
+      
+      // Force single page using jsPDF directly
+      const { default: jsPDF } = await import('jspdf')
+      const reader = new FileReader()
+      
+      reader.onload = function() {
+        const pdfData = new Uint8Array(reader.result)
+        const pdfDoc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
+        
+        // Get the first page only
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        const img = new Image()
+        
+        img.onload = function() {
+          canvas.width = 794
+          canvas.height = 1123
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, 794, 1123)
+          ctx.drawImage(img, 0, 0, 794, 1123)
+          
+          pdfDoc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297)
+          pdfDoc.save(opt.filename)
+          
+          root.unmount()
+          document.body.removeChild(tempDiv)
+          toast.success('PDF downloaded successfully!')
         }
-        pdf.save(opt.filename)
-      })
-
-      root.unmount()
-      document.body.removeChild(tempDiv)
-      toast.success('PDF downloaded successfully!')
+        
+        img.src = URL.createObjectURL(new Blob([pdfData], { type: 'application/pdf' }))
+      }
+      
+      reader.readAsArrayBuffer(pdf)
+      
     } catch (error) {
       console.error('PDF generation error:', error)
-      toast.error('Failed to generate PDF')
+      
+      // Fallback: use simpler method
+      try {
+        const html2pdf = (await import('html2pdf.js')).default
+        const tempDiv2 = document.createElement('div')
+        tempDiv2.style.position = 'absolute'
+        tempDiv2.style.left = '-9999px'
+        tempDiv2.style.top = '0'
+        tempDiv2.style.width = '794px'
+        document.body.appendChild(tempDiv2)
+        
+        const ReactDOM = (await import('react-dom/client')).default
+        const React = (await import('react'))
+        const root2 = ReactDOM.createRoot(tempDiv2)
+        root2.render(
+          React.createElement(QuotationTemplate, {
+            quotation: { ...quotationData, quotation_number: 'DRAFT' },
+            items: items.filter((item) => item.description)
+          })
+        )
+        
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        
+        const opt2 = {
+          margin: 0,
+          filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
+          image: { type: 'jpeg', quality: 1 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        }
+        
+        await html2pdf().set(opt2).from(tempDiv2).save()
+        
+        root2.unmount()
+        document.body.removeChild(tempDiv2)
+        toast.success('PDF downloaded!')
+      } catch (fallbackError) {
+        toast.error('Failed to generate PDF')
+      }
     }
   }
 
@@ -457,7 +524,6 @@ export default function CreateQuotation() {
 
   const serviceCategories = [...new Set(SERVICES.map((s) => s.category))]
 
-  // Loading state for edit mode
   if (loadingQuote) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -486,7 +552,6 @@ export default function CreateQuotation() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -497,7 +562,6 @@ export default function CreateQuotation() {
           </span>
         </div>
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <FileText className="w-8 h-8 text-emerald-600" />
@@ -520,7 +584,6 @@ export default function CreateQuotation() {
           </div>
         </div>
 
-        {/* Convert to Job Button - only for new quotations that have been saved */}
         {savedQuotationId && !isEditMode && (
           <div className="mb-6 p-4 neu-raised rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 flex items-center justify-between">
             <div>
@@ -534,23 +597,14 @@ export default function CreateQuotation() {
           </div>
         )}
 
-        {/* Quotation Form */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Form - Left Side */}
           <div className="space-y-6">
-            {/* Client Selection */}
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Client Information</h2>
               <div className="space-y-4">
-                <select
-                  value={quotationData.client_id}
-                  onChange={(e) => handleClientSelect(e.target.value)}
-                  className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
-                >
+                <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
                   <option value="">Select Client</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.company_name || 'Client'}</option>
-                  ))}
+                  {clients.map((client) => (<option key={client.id} value={client.id}>{client.company_name || 'Client'}</option>))}
                 </select>
                 <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({ ...quotationData, client_name: e.target.value })} placeholder="Client Name" className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
                 <div className="grid grid-cols-2 gap-3">
@@ -561,127 +615,66 @@ export default function CreateQuotation() {
               </div>
             </div>
 
-            {/* Services */}
             <div className="neu-raised rounded-3xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Services</h2>
-                <button onClick={addItem} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-sm">
-                  <Plus className="w-4 h-4" /> Add Service
-                </button>
+                <button onClick={addItem} className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" /> Add Service</button>
               </div>
-
               <div className="space-y-4">
                 {items.map((item, index) => (
                   <div key={index} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-500">Service {index + 1}</span>
-                      <button onClick={() => removeItem(index)} className="text-red-500 hover:text-red-600">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <button onClick={() => removeItem(index)} className="text-red-500 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                     </div>
-
-                    <select
-                      value={item.description}
-                      onChange={(e) => handleServiceSelect(index, e.target.value)}
-                      className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300"
-                    >
+                    <select value={item.description} onChange={(e) => handleServiceSelect(index, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300">
                       <option value="">Select Service</option>
                       {serviceCategories.map((category) => (
                         <optgroup key={category} label={category}>
                           {SERVICES.filter((s) => s.category === category).map((service) => (
-                            <option key={service.name} value={service.name}>
-                              {service.name} - {formatCurrency(service.unit_price)}
-                            </option>
+                            <option key={service.name} value={service.name}>{service.name} - {formatCurrency(service.unit_price)}</option>
                           ))}
                         </optgroup>
                       ))}
                     </select>
-
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-slate-500">Quantity</label>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          min="1"
-                          className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500">Unit Price (Excl. VAT)</label>
-                        <input
-                          type="number"
-                          value={item.unit_price}
-                          onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                          className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1"
-                        />
-                      </div>
+                      <div><label className="text-xs text-slate-500">Quantity</label><input type="number" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)} min="1" className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" /></div>
+                      <div><label className="text-xs text-slate-500">Unit Price (Excl. VAT)</label><input type="number" value={item.unit_price} onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)} className="w-full p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300 mt-1" /></div>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-600">
                       <span className="text-xs text-slate-500">Line Total (Excl. VAT):</span>
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                        {formatCurrency(calculateLineTotal(item))}
-                      </span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{formatCurrency(calculateLineTotal(item))}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Dates & Notes */}
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Details</h2>
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-slate-500">Valid Until</label>
-                  <input
-                    type="date"
-                    value={quotationData.valid_until}
-                    onChange={(e) => setQuotationData({ ...quotationData, valid_until: e.target.value })}
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300"
-                  />
-                </div>
-                <textarea
-                  value={quotationData.notes}
-                  onChange={(e) => setQuotationData({ ...quotationData, notes: e.target.value })}
-                  placeholder="Additional notes for client..."
-                  rows={2}
-                  className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
-                />
+                <div><label className="text-sm text-slate-500">Valid Until</label><input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({ ...quotationData, valid_until: e.target.value })} className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300" /></div>
+                <textarea value={quotationData.notes} onChange={(e) => setQuotationData({ ...quotationData, notes: e.target.value })} placeholder="Additional notes for client..." rows={2} className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
               </div>
             </div>
           </div>
 
-          {/* Preview - Right Side */}
+          {/* Preview - Right Side - FIXED SCALE */}
           <div className="lg:sticky lg:top-24 h-fit space-y-4">
-            {/* Totals Summary */}
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Quotation Summary</h3>
               <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Subtotal (Excl. VAT):</span>
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">VAT (15%):</span>
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(vatAmount)}</span>
-                </div>
-                <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-200 dark:border-slate-600">
-                  <span className="text-slate-800 dark:text-white">Total (Incl. VAT):</span>
-                  <span className="text-emerald-600">{formatCurrency(totalAmount)}</span>
-                </div>
+                <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal (Excl. VAT):</span><span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(subtotal)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-500">VAT (15%):</span><span className="text-slate-700 dark:text-slate-300 font-medium">{formatCurrency(vatAmount)}</span></div>
+                <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-200 dark:border-slate-600"><span className="text-slate-800 dark:text-white">Total (Incl. VAT):</span><span className="text-emerald-600">{formatCurrency(totalAmount)}</span></div>
               </div>
             </div>
 
-            {/* Preview */}
+            {/* FIXED: Preview scale reduced to fit single page */}
             <div className="neu-raised rounded-3xl p-4">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <Eye className="w-5 h-5 text-emerald-600" />
-                Preview
-              </h2>
-              <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
-                <div style={{ transform: 'scale(0.45)', transformOrigin: 'top left', width: '222%' }}>
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
+              <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
+                <div style={{ transform: 'scale(0.38)', transformOrigin: 'top left', width: '263%' }}>
                   <QuotationTemplate
                     quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' }}
                     items={items.filter((item) => item.description)}
@@ -693,8 +686,8 @@ export default function CreateQuotation() {
         </div>
       </main>
 
-      {/* Hidden PDF element (for download) */}
-      <div ref={pdfRef} style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px' }}>
+      {/* Hidden PDF element */}
+      <div ref={pdfRef} style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px', height: '1123px' }}>
         <QuotationTemplate
           quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' }}
           items={items.filter((item) => item.description)}
