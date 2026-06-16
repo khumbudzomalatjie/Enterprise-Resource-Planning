@@ -65,10 +65,9 @@ function QuotationTemplate({ quotation, items }) {
 
   return (
     <div style={{
-      width: '210mm',
-      minHeight: '297mm',
-      maxHeight: '297mm',
-      padding: '8mm 12mm',
+      width: '794px',
+      height: '1123px',
+      padding: '28px 42px',
       backgroundColor: 'white',
       fontFamily: 'Inter, Arial, sans-serif',
       color: '#1e293b',
@@ -79,106 +78,138 @@ function QuotationTemplate({ quotation, items }) {
       flexDirection: 'column'
     }}>
       {/* Header with Logo */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4mm', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '3mm' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4mm' }}>
-          <div style={{ width: '12mm', height: '12mm', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: COLORS.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${COLORS.lightBorder}` }}>
             <img src="/logo.png" alt="Logo" style={{ width: '80%', height: '80%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:10px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
+              onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:18px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '12px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '4px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678</p>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
+            <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
+            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678 | info@ndanduleni.co.za</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '1px' }}>QUOTATION</h2>
-          <p style={{ fontSize: '10px', color: COLORS.main, margin: '1px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
-          <div style={{ marginTop: '1mm', fontSize: '5px', color: '#64748b' }}>
-            <p style={{ margin: '0' }}>Date: {formatDate(quotation?.quotation_date)}</p>
-            <p style={{ margin: '0' }}>Valid: {formatDate(quotation?.valid_until)}</p>
+          <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: COLORS.dark, margin: '0', letterSpacing: '2px' }}>QUOTATION</h2>
+          <p style={{ fontSize: '16px', color: COLORS.main, margin: '2px 0', fontWeight: 'bold' }}>#{quotation?.quotation_number || 'DRAFT'}</p>
+          <div style={{ marginTop: '4px', fontSize: '9px', color: '#64748b' }}>
+            <p style={{ margin: '1px 0' }}>Date: {formatDate(quotation?.quotation_date)}</p>
+            <p style={{ margin: '1px 0' }}>Valid Until: {formatDate(quotation?.valid_until)}</p>
           </div>
         </div>
       </div>
 
       {/* Bill To & Details */}
-      <div style={{ marginBottom: '3mm', display: 'flex', gap: '10mm' }}>
+      <div style={{ marginBottom: '10px', display: 'flex', gap: '30px' }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Bill To:</h3>
-          <p style={{ fontSize: '9px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
-          {quotation?.client_email && <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>{quotation.client_email}</p>}
-          <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}>{quotation?.client_address || ''}</p>
+          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '1px' }}>Bill To:</h3>
+          <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{quotation?.client_name || 'Client'}</p>
+          {quotation?.client_email && <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{quotation.client_email}</p>}
+          <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0', whiteSpace: 'pre-line' }}>{quotation?.client_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Details:</h3>
-          <p style={{ fontSize: '7px', color: '#1e293b', margin: '0' }}>Prepared: Ndanduleni Group Sales</p>
-          <p style={{ fontSize: '6px', color: '#64748b', margin: '0' }}>Terms: {quotation?.payment_terms || '50% Deposit'}</p>
+          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '1px' }}>Details:</h3>
+          <p style={{ fontSize: '11px', color: '#1e293b', margin: '1px 0' }}><strong>Prepared By:</strong> Ndanduleni Group Sales</p>
+          <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Payment Terms:</strong> {quotation?.payment_terms || '50% Deposit, Balance on Completion'}</p>
+          <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Validity:</strong> 30 Days from date of issue</p>
         </div>
       </div>
 
-      {/* Items Table - Compact */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '3mm' }}>
+      {/* Items Table */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
         <thead>
           <tr style={{ backgroundColor: COLORS.tableHeader, color: 'white' }}>
-            <th style={{ padding: '1.5mm 2mm', textAlign: 'left', fontSize: '5px', fontWeight: 'bold' }}>#</th>
-            <th style={{ padding: '1.5mm 2mm', textAlign: 'left', fontSize: '5px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '1.5mm 2mm', textAlign: 'center', fontSize: '5px', fontWeight: 'bold', width: '8mm' }}>Qty</th>
-            <th style={{ padding: '1.5mm 2mm', textAlign: 'right', fontSize: '5px', fontWeight: 'bold', width: '22mm' }}>Unit Price</th>
-            <th style={{ padding: '1.5mm 2mm', textAlign: 'right', fontSize: '5px', fontWeight: 'bold', width: '22mm' }}>Total</th>
+            <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>#</th>
+            <th style={{ padding: '6px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>Description</th>
+            <th style={{ padding: '6px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', width: '40px' }}>Qty</th>
+            <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', width: '90px' }}>Unit Price</th>
+            <th style={{ padding: '6px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', width: '90px' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           {(items || []).filter(item => item.description).map((item, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#64748b' }}>{i + 1}</td>
-              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
-              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
-              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
-              <td style={{ padding: '1mm 2mm', fontSize: '5px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
+              <td style={{ padding: '5px 10px', fontSize: '9px', color: '#64748b' }}>{i + 1}</td>
+              <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', fontWeight: '500' }}>{item.description}</td>
+              <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
+              <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
+              <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
+            </tr>
+          ))}
+          {/* Fill empty rows to push content up */}
+          {Array.from({ length: Math.max(0, 15 - (items || []).filter(item => item.description).length) }).map((_, i) => (
+            <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <td style={{ padding: '5px 10px', fontSize: '9px' }}>&nbsp;</td>
+              <td style={{ padding: '5px 10px' }}></td>
+              <td style={{ padding: '5px 10px' }}></td>
+              <td style={{ padding: '5px 10px' }}></td>
+              <td style={{ padding: '5px 10px' }}></td>
             </tr>
           ))}
         </tbody>
       </table>
 
       {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '3mm' }}>
-        <div style={{ width: '180px', border: '1px solid #e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5mm 6px', borderBottom: '1px solid #e2e8f0', fontSize: '5px', backgroundColor: '#f8fafc' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+        <div style={{ width: '280px', border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '9px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>Subtotal (Excl. VAT):</span>
             <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(subtotal)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5mm 6px', borderBottom: '1px solid #e2e8f0', fontSize: '5px', backgroundColor: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '9px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(vatAmount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2.5mm 6px', fontSize: '9px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: COLORS.totalBg }}>
             <span style={{ color: COLORS.dark }}>TOTAL (Incl. VAT):</span>
-            <span style={{ color: COLORS.dark, fontSize: '10px' }}>{formatCurrency(totalAmount)}</span>
+            <span style={{ color: COLORS.dark, fontSize: '16px' }}>{formatCurrency(totalAmount)}</span>
           </div>
         </div>
       </div>
 
       {/* Terms */}
-      <div style={{ marginBottom: '2mm' }}>
-        <h3 style={{ fontSize: '5px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Terms & Conditions</h3>
-        <p style={{ fontSize: '4px', color: '#94a3b8', lineHeight: '1.1', margin: '0' }}>
-          1. Valid for 30 days. 2. Payment: {quotation?.payment_terms || '50% Deposit, Balance on Completion'}. 3. Prices include VAT at 15%. 4. Services rendered per agreed schedule. 5. 30 days cancellation notice.
+      <div style={{ marginBottom: '8px' }}>
+        <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px', letterSpacing: '1px' }}>Terms & Conditions</h3>
+        <p style={{ fontSize: '7px', color: '#94a3b8', lineHeight: '1.3', margin: '0' }}>
+          1. This quotation is valid for 30 days from the date of issue. 2. Payment Terms: {quotation?.payment_terms || '50% Deposit, Balance on Completion'}. 3. All prices include VAT at 15%. 4. Services will be rendered as per the agreed schedule. 5. Cancellation requires 30 days written notice. 6. Ndanduleni Group reserves the right to adjust pricing for any changes in scope of work.
         </p>
       </div>
 
+      {/* Payment Info */}
+      <div style={{ marginBottom: '8px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: COLORS.main, marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '1px' }}>Banking Details</h3>
+        <div style={{ display: 'flex', gap: '20px', fontSize: '7px', color: '#64748b' }}>
+          <div>
+            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> First National Bank (FNB)</p>
+            <p style={{ margin: '1px 0' }}><strong>Account Name:</strong> Ndanduleni Group (Pty) Ltd</p>
+          </div>
+          <div>
+            <p style={{ margin: '1px 0' }}><strong>Account Number:</strong> 6277 123 45678</p>
+            <p style={{ margin: '1px 0' }}><strong>Branch Code:</strong> 250655</p>
+          </div>
+          <div>
+            <p style={{ margin: '1px 0' }}><strong>Reference:</strong> {quotation?.quotation_number || 'Quote Ref'}</p>
+          </div>
+        </div>
+      </div>
+
       {quotation?.notes && (
-        <div style={{ marginBottom: '2mm', padding: '1.5mm 5mm', backgroundColor: '#f8fafc', borderRadius: '2px' }}>
-          <p style={{ fontSize: '4px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
+        <div style={{ marginBottom: '8px', padding: '6px 10px', backgroundColor: '#f8fafc', borderRadius: '4px' }}>
+          <p style={{ fontSize: '7px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
         </div>
       )}
 
       {/* Footer */}
-      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '2mm', textAlign: 'center' }}>
-        <p style={{ fontSize: '4px', color: '#94a3b8', margin: '0' }}>
-          Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123 | 123 Main Street, Johannesburg
+      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '8px', textAlign: 'center' }}>
+        <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>
+          Ndanduleni Group (Pty) Ltd | Registration: 2020/123456/07 | VAT: 4567890123
         </p>
-        <p style={{ fontSize: '7px', color: COLORS.main, margin: '1mm 0 0 0', fontWeight: 'bold' }}>
-          Thank you for your business!
+        <p style={{ fontSize: '7px', color: '#94a3b8', margin: '1px 0' }}>
+          123 Main Street, Johannesburg, 2000 | Tel: +27 11 234 5678 | Email: info@ndanduleni.co.za
+        </p>
+        <p style={{ fontSize: '11px', color: COLORS.main, margin: '6px 0 0 0', fontWeight: 'bold', letterSpacing: '1px' }}>
+          Thank you for your business! We appreciate the opportunity to serve you.
         </p>
       </div>
     </div>
@@ -200,7 +231,6 @@ export default function CreateQuotation() {
   const isDark = useThemeStore((state) => state.isDark)
   const toggleTheme = useThemeStore((state) => state.toggleTheme)
   const navigate = useNavigate()
-  const pdfRef = useRef(null)
 
   const [quotationData, setQuotationData] = useState({
     client_id: '',
@@ -385,132 +415,81 @@ export default function CreateQuotation() {
   }
 
   // ═══════════════════════════════════════════
-  // FIXED: PDF Download - Force Single A4 Page
+  // RELIABLE SINGLE A4 PAGE PDF DOWNLOAD
+  // Uses html2canvas to capture as one image, then places on single PDF page
   // ═══════════════════════════════════════════
   const downloadPDF = async () => {
     try {
-      const html2pdf = (await import('html2pdf.js')).default
+      // Dynamically import html2canvas and jsPDF
+      const html2canvas = (await import('html2canvas')).default
+      const { default: jsPDF } = await import('jspdf')
 
+      // Create a temporary container at exact A4 proportions
       const tempDiv = document.createElement('div')
       tempDiv.style.position = 'absolute'
       tempDiv.style.left = '-9999px'
       tempDiv.style.top = '0'
       tempDiv.style.width = '794px'
       tempDiv.style.height = '1123px'
+      tempDiv.style.overflow = 'hidden'
       document.body.appendChild(tempDiv)
 
+      // Render the React component into the temp div
       const ReactDOM = (await import('react-dom/client')).default
       const React = (await import('react'))
       const root = ReactDOM.createRoot(tempDiv)
       root.render(
         React.createElement(QuotationTemplate, {
-          quotation: { ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' },
+          quotation: { 
+            ...quotationData, 
+            quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' 
+          },
           items: items.filter((item) => item.description)
         })
       )
 
-      await new Promise((resolve) => setTimeout(resolve, 800))
+      // Wait for images and fonts to load
+      await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      const opt = {
-        margin: [0, 0, 0, 0],
-        filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          letterRendering: true, 
-          width: 794,
-          height: 1123,
-          windowWidth: 794, 
-          windowHeight: 1123 
-        },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait',
-          compress: true,
-          precision: 2
-        },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        pagesplit: false
-      }
+      // Capture the entire div as a single canvas
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123,
+        logging: false
+      })
 
-      const pdf = await html2pdf().set(opt).from(tempDiv).toPdf().outputPdf('blob')
-      
-      // Force single page using jsPDF directly
-      const { default: jsPDF } = await import('jspdf')
-      const reader = new FileReader()
-      
-      reader.onload = function() {
-        const pdfData = new Uint8Array(reader.result)
-        const pdfDoc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
-        
-        // Get the first page only
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        const img = new Image()
-        
-        img.onload = function() {
-          canvas.width = 794
-          canvas.height = 1123
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, 794, 1123)
-          ctx.drawImage(img, 0, 0, 794, 1123)
-          
-          pdfDoc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297)
-          pdfDoc.save(opt.filename)
-          
-          root.unmount()
-          document.body.removeChild(tempDiv)
-          toast.success('PDF downloaded successfully!')
-        }
-        
-        img.src = URL.createObjectURL(new Blob([pdfData], { type: 'application/pdf' }))
-      }
-      
-      reader.readAsArrayBuffer(pdf)
+      // Convert to high-quality JPEG
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+
+      // Create a single-page A4 PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      })
+
+      // Add the image to fill exactly one A4 page
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
+
+      // Save
+      const filename = `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`
+      pdf.save(filename)
+
+      // Cleanup
+      root.unmount()
+      document.body.removeChild(tempDiv)
+      toast.success('PDF downloaded successfully!')
       
     } catch (error) {
       console.error('PDF generation error:', error)
-      
-      // Fallback: use simpler method
-      try {
-        const html2pdf = (await import('html2pdf.js')).default
-        const tempDiv2 = document.createElement('div')
-        tempDiv2.style.position = 'absolute'
-        tempDiv2.style.left = '-9999px'
-        tempDiv2.style.top = '0'
-        tempDiv2.style.width = '794px'
-        document.body.appendChild(tempDiv2)
-        
-        const ReactDOM = (await import('react-dom/client')).default
-        const React = (await import('react'))
-        const root2 = ReactDOM.createRoot(tempDiv2)
-        root2.render(
-          React.createElement(QuotationTemplate, {
-            quotation: { ...quotationData, quotation_number: 'DRAFT' },
-            items: items.filter((item) => item.description)
-          })
-        )
-        
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        
-        const opt2 = {
-          margin: 0,
-          filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
-          image: { type: 'jpeg', quality: 1 },
-          html2canvas: { scale: 2, useCORS: true },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        }
-        
-        await html2pdf().set(opt2).from(tempDiv2).save()
-        
-        root2.unmount()
-        document.body.removeChild(tempDiv2)
-        toast.success('PDF downloaded!')
-      } catch (fallbackError) {
-        toast.error('Failed to generate PDF')
-      }
+      toast.error('Failed to generate PDF. Please try again.')
     }
   }
 
@@ -659,7 +638,6 @@ export default function CreateQuotation() {
             </div>
           </div>
 
-          {/* Preview - Right Side - FIXED SCALE */}
           <div className="lg:sticky lg:top-24 h-fit space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Quotation Summary</h3>
@@ -670,11 +648,10 @@ export default function CreateQuotation() {
               </div>
             </div>
 
-            {/* FIXED: Preview scale reduced to fit single page */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
-                <div style={{ transform: 'scale(0.38)', transformOrigin: 'top left', width: '263%' }}>
+                <div style={{ transform: 'scale(0.35)', transformOrigin: 'top left', width: '285%' }}>
                   <QuotationTemplate
                     quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' }}
                     items={items.filter((item) => item.description)}
@@ -685,14 +662,6 @@ export default function CreateQuotation() {
           </div>
         </div>
       </main>
-
-      {/* Hidden PDF element */}
-      <div ref={pdfRef} style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px', height: '1123px' }}>
-        <QuotationTemplate
-          quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' }}
-          items={items.filter((item) => item.description)}
-        />
-      </div>
     </div>
   )
 }
