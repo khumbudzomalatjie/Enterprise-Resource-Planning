@@ -13,6 +13,7 @@ export default function SalesRoutes() {
 
   return (
     <Routes>
+      {/* Sales Dashboard */}
       <Route path="/" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={salesRoles}>
@@ -20,6 +21,8 @@ export default function SalesRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
+      
+      {/* Quotation List */}
       <Route path="/quotations" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={salesRoles}>
@@ -27,6 +30,8 @@ export default function SalesRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
+      
+      {/* New Quotation */}
       <Route path="/quotations/new" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={createRoles}>
@@ -34,6 +39,8 @@ export default function SalesRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
+      
+      {/* View Quotation Detail */}
       <Route path="/quotations/:id" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={salesRoles}>
@@ -41,6 +48,8 @@ export default function SalesRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
+      
+      {/* Edit Quotation - opens CreateQuotation in edit mode */}
       <Route path="/quotations/:id/edit" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={createRoles}>
