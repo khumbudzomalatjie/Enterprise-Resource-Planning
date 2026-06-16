@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
@@ -66,13 +66,13 @@ function QuotationTemplate({ quotation, items }) {
   return (
     <div style={{
       width: '210mm',
-      height: '297mm',               // fixed A4
-      padding: '10mm 15mm',          // reduced top/bottom padding
+      height: '297mm',
+      padding: '10mm 15mm',
       backgroundColor: 'white',
       fontFamily: 'Inter, Arial, sans-serif',
       color: '#1e293b',
       boxSizing: 'border-box',
-      overflow: 'hidden',            // clip anything exceeding
+      overflow: 'hidden',
       position: 'relative',
       display: 'flex',
       flexDirection: 'column'
@@ -115,7 +115,7 @@ function QuotationTemplate({ quotation, items }) {
         </div>
       </div>
 
-      {/* Items Table – even tighter */}
+      {/* Items Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '5mm' }}>
         <thead>
           <tr style={{ backgroundColor: COLORS.tableHeader, color: 'white' }}>
@@ -139,7 +139,7 @@ function QuotationTemplate({ quotation, items }) {
         </tbody>
       </table>
 
-      {/* Totals – compact */}
+      {/* Totals */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '5mm' }}>
         <div style={{ width: '200px', border: '1px solid #e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2mm 8px', borderBottom: '1px solid #e2e8f0', fontSize: '6px', backgroundColor: '#f8fafc' }}>
@@ -157,7 +157,7 @@ function QuotationTemplate({ quotation, items }) {
         </div>
       </div>
 
-      {/* Terms – minimal */}
+      {/* Terms */}
       <div style={{ marginBottom: '4mm' }}>
         <h3 style={{ fontSize: '6px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '1mm' }}>Terms & Conditions</h3>
         <p style={{ fontSize: '5px', color: '#94a3b8', lineHeight: '1.2', margin: '0' }}>
@@ -165,14 +165,13 @@ function QuotationTemplate({ quotation, items }) {
         </p>
       </div>
 
-      {/* Notes (if any) */}
       {quotation?.notes && (
         <div style={{ marginBottom: '4mm', padding: '2mm 6mm', backgroundColor: '#f8fafc', borderRadius: '2px' }}>
           <p style={{ fontSize: '5px', color: '#64748b', margin: '0' }}><strong>Notes:</strong> {quotation.notes}</p>
         </div>
       )}
 
-      {/* Footer – pinned to bottom */}
+      {/* Footer */}
       <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '3mm', textAlign: 'center' }}>
         <p style={{ fontSize: '5px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123 | 123 Main Street, Johannesburg
@@ -186,10 +185,16 @@ function QuotationTemplate({ quotation, items }) {
 }
 
 // ═══════════════════════════════════════════════
-// Create Quotation Page (unchanged logic)
+// Create/Edit Quotation Page
 // ═══════════════════════════════════════════════
 export default function CreateQuotation() {
+  // Get ID from URL for edit mode
+  const { id } = useParams()
+  const isEditMode = Boolean(id)
+
   const createQuotation = useSalesStore((state) => state.createQuotation)
+  const updateQuotation = useSalesStore((state) => state.updateQuotation)
+  const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
   const fetchClients = useCRMStore((state) => state.fetchClients)
   const isDark = useThemeStore((state) => state.isDark)
@@ -217,10 +222,68 @@ export default function CreateQuotation() {
   ])
 
   const [savedQuotationId, setSavedQuotationId] = useState(null)
+  const [loadingQuote, setLoadingQuote] = useState(false)
 
   useEffect(() => {
     fetchClients({ status: 'active' })
   }, [fetchClients])
+
+  // ═══════════════════════════════════════════
+  // LOAD EXISTING QUOTATION FOR EDIT MODE
+  // ═══════════════════════════════════════════
+  useEffect(() => {
+    if (id) {
+      loadExistingQuotation(id)
+    }
+  }, [id])
+
+  const loadExistingQuotation = async (quotationId) => {
+    setLoadingQuote(true)
+    try {
+      const result = await fetchQuotation(quotationId)
+      if (result.success && result.data) {
+        const quote = result.data
+        
+        // Populate form fields
+        setQuotationData({
+          client_id: quote.client_id || '',
+          client_name: quote.client_name || quote.clients?.company_name || '',
+          client_email: quote.client_email || quote.clients?.email || '',
+          client_phone: quote.client_phone || quote.clients?.phone || '',
+          client_address: quote.client_address || '',
+          valid_until: quote.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          payment_terms: quote.payment_terms || '50% Deposit, Balance on Completion',
+          tax_rate: quote.tax_rate || 15,
+          discount_type: quote.discount_type || 'none',
+          discount_value: quote.discount_value || 0,
+          notes: quote.notes || '',
+          status: quote.status || 'draft'
+        })
+
+        // Populate items
+        if (quote.quotation_items && quote.quotation_items.length > 0) {
+          setItems(quote.quotation_items.map(item => ({
+            description: item.description || '',
+            quantity: item.quantity || 1,
+            unit: item.unit || 'per_service',
+            unit_price: item.unit_price || 0,
+            tax_percent: item.tax_percent || 15,
+            discount_percent: item.discount_percent || 0
+          })))
+        }
+
+        setSavedQuotationId(quote.id)
+        toast.success('Quotation loaded for editing')
+      } else {
+        toast.error('Failed to load quotation')
+        navigate('/sales/quotations')
+      }
+    } catch (error) {
+      console.error('Error loading quotation:', error)
+      toast.error('Failed to load quotation')
+    }
+    setLoadingQuote(false)
+  }
 
   // Calculator functions
   const calculateLineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
@@ -277,6 +340,9 @@ export default function CreateQuotation() {
     setItems(newItems)
   }
 
+  // ═══════════════════════════════════════════
+  // SAVE - Handles both CREATE and UPDATE
+  // ═══════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) {
       toast.error('Please select a client')
@@ -300,25 +366,34 @@ export default function CreateQuotation() {
         discount_percent: item.discount_percent ?? 0
       }))
 
-    const result = await createQuotation(
-      {
-        ...quotationData,
-        subtotal,
-        tax_amount: vatAmount,
-        discount_amount: 0,
-        total_amount: totalAmount,
-        status
-      },
-      cleanItems
-    )
-
-    if (!result.success) {
-      toast.error('Failed to save quotation: ' + (result.error || 'Unknown error'))
-      return
+    const quotePayload = {
+      ...quotationData,
+      subtotal,
+      tax_amount: vatAmount,
+      discount_amount: 0,
+      total_amount: totalAmount,
+      status
     }
 
-    setSavedQuotationId(result.data.id)
-    toast.success(status === 'sent' ? 'Quotation sent!' : 'Quotation saved as draft!')
+    if (isEditMode) {
+      // UPDATE existing quotation
+      const result = await updateQuotation(id, quotePayload)
+      if (!result.success) {
+        toast.error('Failed to update quotation: ' + (result.error || 'Unknown error'))
+        return
+      }
+      toast.success(status === 'sent' ? 'Quotation updated and sent!' : 'Quotation updated!')
+      navigate(`/sales/quotations/${id}`)
+    } else {
+      // CREATE new quotation
+      const result = await createQuotation(quotePayload, cleanItems)
+      if (!result.success) {
+        toast.error('Failed to save quotation: ' + (result.error || 'Unknown error'))
+        return
+      }
+      setSavedQuotationId(result.data.id)
+      toast.success(status === 'sent' ? 'Quotation sent!' : 'Quotation saved as draft!')
+    }
   }
 
   const downloadPDF = async () => {
@@ -329,7 +404,7 @@ export default function CreateQuotation() {
       tempDiv.style.position = 'absolute'
       tempDiv.style.left = '-9999px'
       tempDiv.style.top = '0'
-      tempDiv.style.width = '794px'   // A4 width in px at 96dpi
+      tempDiv.style.width = '794px'
       document.body.appendChild(tempDiv)
 
       const ReactDOM = (await import('react-dom/client')).default
@@ -337,7 +412,7 @@ export default function CreateQuotation() {
       const root = ReactDOM.createRoot(tempDiv)
       root.render(
         React.createElement(QuotationTemplate, {
-          quotation: { ...quotationData },
+          quotation: { ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' },
           items: items.filter((item) => item.description)
         })
       )
@@ -348,24 +423,13 @@ export default function CreateQuotation() {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 1 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          windowWidth: 794,           // A4 width in pixels
-          windowHeight: 1123          // A4 height in pixels – prevents content from being split across pages
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait'
-        },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794, windowHeight: 1123 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        pagesplit: false               // critical: prevent automatic page breaks
+        pagesplit: false
       }
 
       await html2pdf().set(opt).from(tempDiv).toPdf().get('pdf').then((pdf) => {
-        // Force single page – if somehow a second page is created, delete it
         if (pdf.internal.getNumberOfPages() > 1) {
           for (let i = pdf.internal.getNumberOfPages(); i > 1; i--) {
             pdf.deletePage(i)
@@ -393,6 +457,18 @@ export default function CreateQuotation() {
 
   const serviceCategories = [...new Set(SERVICES.map((s) => s.category))]
 
+  // Loading state for edit mode
+  if (loadingQuote) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading quotation...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -414,14 +490,18 @@ export default function CreateQuotation() {
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
-          <span className="text-slate-800 dark:text-white font-medium">New Quotation</span>
+          <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <span className="text-slate-800 dark:text-white font-medium">
+            {isEditMode ? `Edit Quotation #${id?.slice(0, 8)}` : 'New Quotation'}
+          </span>
         </div>
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <FileText className="w-8 h-8 text-emerald-600" />
-            Create Quotation
+            {isEditMode ? 'Edit Quotation' : 'Create Quotation'}
           </h1>
 
           <div className="flex gap-3">
@@ -431,17 +511,17 @@ export default function CreateQuotation() {
             </button>
             <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700">
               <Save className="w-4 h-4" />
-              <span className="hidden sm:inline">Save Draft</span>
+              <span className="hidden sm:inline">{isEditMode ? 'Update Draft' : 'Save Draft'}</span>
             </button>
             <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
               <Send className="w-4 h-4" />
-              <span className="hidden sm:inline">Save & Send</span>
+              <span className="hidden sm:inline">{isEditMode ? 'Update & Send' : 'Save & Send'}</span>
             </button>
           </div>
         </div>
 
-        {/* Convert to Job Button */}
-        {savedQuotationId && (
+        {/* Convert to Job Button - only for new quotations that have been saved */}
+        {savedQuotationId && !isEditMode && (
           <div className="mb-6 p-4 neu-raised rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Quotation Saved!</p>
@@ -603,7 +683,7 @@ export default function CreateQuotation() {
               <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.45)', transformOrigin: 'top left', width: '222%' }}>
                   <QuotationTemplate
-                    quotation={{ ...quotationData, quotation_number: 'PREVIEW' }}
+                    quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' }}
                     items={items.filter((item) => item.description)}
                   />
                 </div>
@@ -616,7 +696,7 @@ export default function CreateQuotation() {
       {/* Hidden PDF element (for download) */}
       <div ref={pdfRef} style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px' }}>
         <QuotationTemplate
-          quotation={{ ...quotationData, quotation_number: 'DRAFT' }}
+          quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' }}
           items={items.filter((item) => item.description)}
         />
       </div>
