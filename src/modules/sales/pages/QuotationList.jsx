@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 export default function QuotationList() {
-  const { quotations, fetchQuotations, updateQuotationStatus, deleteQuotation, acceptQuotation, loading } = useSalesStore()
+  const { quotations, fetchQuotations, updateQuotationStatus, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -21,7 +21,7 @@ export default function QuotationList() {
   const [actionMenu, setActionMenu] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [acceptConfirm, setAcceptConfirm] = useState(null)
-  const [acceptingId, setAcceptingId] = useState(null)
+  const [processingId, setProcessingId] = useState(null)
 
   useEffect(() => {
     loadQuotations()
@@ -39,64 +39,82 @@ export default function QuotationList() {
     loadQuotations()
   }
 
+  // Status change handler - FIXED
   const handleStatusChange = async (id, newStatus) => {
+    setActionMenu(null)
+    
     if (newStatus === 'accepted') {
       setAcceptConfirm(id)
-      setActionMenu(null)
       return
     }
-    
+
+    setProcessingId(id)
     const result = await updateQuotationStatus(id, newStatus)
+    setProcessingId(null)
+    
     if (result.success) {
-      toast.success(`Quotation ${newStatus.replace('_', ' ')}`)
+      toast.success(`Quotation marked as ${newStatus.replace('_', ' ')}`)
       loadQuotations()
     } else {
-      toast.error('Failed to update status')
+      toast.error(result.error || 'Failed to update status')
     }
-    setActionMenu(null)
   }
 
+  // Accept quotation and create job
   const handleAcceptQuotation = async () => {
     if (!acceptConfirm) return
     
-    setAcceptingId(acceptConfirm)
-    const result = await acceptQuotation(acceptConfirm)
-    setAcceptingId(null)
+    setProcessingId(acceptConfirm)
+    const result = await updateQuotationStatus(acceptConfirm, 'accepted')
+    setProcessingId(null)
     
     if (result.success) {
-      toast.success('Quotation accepted! Job created successfully! 🎉', { duration: 5000 })
-      if (result.data?.job) {
-        toast.success(`Job #${result.data.job.job_number} created`, { duration: 4000 })
-      }
-      // Reload quotations - the accepted one is already removed from state
+      toast.success('Quotation accepted! ✅')
       loadQuotations()
     } else {
-      toast.error('Failed to accept quotation: ' + (result.error || 'Unknown error'))
+      toast.error(result.error || 'Failed to accept quotation')
     }
     setAcceptConfirm(null)
   }
 
+  // Delete quotation
   const handleDelete = async (id) => {
     setDeleteConfirm(null)
-    const result = await deleteQuotation(id)
+    setProcessingId(id)
+    const result = await updateQuotationStatus(id, 'cancelled')
+    setProcessingId(null)
     if (result.success) {
       toast.success('Quotation deleted')
       loadQuotations()
     } else {
-      toast.error('Failed to delete')
+      toast.error(result.error || 'Failed to delete')
     }
+  }
+
+  // Edit quotation - FIXED: navigate to the quotation detail/edit page
+  const handleEdit = (quote) => {
+    navigate(`/sales/quotations/${quote.id}`)
+  }
+
+  // View quotation
+  const handleView = (quote) => {
+    navigate(`/sales/quotations/${quote.id}`)
   }
 
   const handleDownloadPDF = async (quotation) => {
     try {
       const html2pdf = (await import('html2pdf.js')).default
       const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = `<div style="padding:20px;font-family:Arial;">
-        <h2>Quotation ${quotation.quotation_number}</h2>
-        <p>Client: ${quotation.client_name || quotation.clients?.company_name}</p>
-        <p>Total: ${formatCurrency(quotation.total_amount)}</p>
-        <p>Status: ${quotation.status}</p>
-      </div>`
+      tempDiv.innerHTML = `
+        <div style="padding:20px;font-family:Arial;width:210mm;">
+          <h2 style="color:#2563eb;">NDANDULENI GROUP</h2>
+          <h3>Quotation ${quotation.quotation_number}</h3>
+          <p><strong>Client:</strong> ${quotation.client_name || quotation.clients?.company_name || 'N/A'}</p>
+          <p><strong>Date:</strong> ${formatDate(quotation.quotation_date)}</p>
+          <p><strong>Total:</strong> ${formatCurrency(quotation.total_amount)}</p>
+          <p><strong>Status:</strong> ${quotation.status}</p>
+        </div>
+      `
       
       const opt = {
         margin: 10,
@@ -137,6 +155,7 @@ export default function QuotationList() {
       rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
       expired: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
       converted: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+      cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     }
     return badges[status] || badges.draft
   }
@@ -185,21 +204,23 @@ export default function QuotationList() {
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by quote # or client..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
-              <option value="all">All</option>
+              <option value="all">All Status</option>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
               <option value="accepted">Accepted</option>
               <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
+              <option value="converted">Converted</option>
             </select>
             <button type="submit" className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Search</button>
           </form>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl overflow-hidden">
-          {loading && !acceptingId ? (
+          {loading ? (
             <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
           ) : quotations.length === 0 ? (
             <div className="text-center py-12"><FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" /><p className="text-slate-500 text-lg">No quotations found</p></div>
@@ -218,7 +239,7 @@ export default function QuotationList() {
                 </thead>
                 <tbody>
                   {quotations.map((quote) => (
-                    <tr key={quote.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${acceptingId === quote.id ? 'opacity-50' : ''}`}>
+                    <tr key={quote.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${processingId === quote.id ? 'opacity-50' : ''}`}>
                       <td className="py-3 px-4"><p className="font-medium text-slate-800 dark:text-white text-sm">{quote.quotation_number}</p></td>
                       <td className="py-3 px-4"><p className="text-sm text-slate-700 dark:text-slate-300">{quote.clients?.company_name || quote.client_name || 'N/A'}</p></td>
                       <td className="py-3 px-4"><p className="text-sm text-slate-600">{formatDate(quote.quotation_date)}</p></td>
@@ -230,26 +251,52 @@ export default function QuotationList() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => navigate(`/sales/quotations/${quote.id}`)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View"><Eye className="w-4 h-4" /></button>
-                          <button onClick={() => navigate(`/sales/quotations/${quote.id}/edit`)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit"><Edit className="w-4 h-4" /></button>
-                          <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download PDF"><Download className="w-4 h-4" /></button>
-                          <div className="relative">
-                            <button onClick={() => setActionMenu(actionMenu === quote.id ? null : quote.id)} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Status"><MoreVertical className="w-4 h-4" /></button>
-                            {actionMenu === quote.id && (
-                              <div className="absolute right-0 top-full mt-1 w-48 neu-raised rounded-xl p-2 z-50 bg-white dark:bg-slate-800 shadow-xl">
-                                <p className="text-xs text-slate-500 px-3 py-1 mb-1">Change Status:</p>
-                                {['sent', 'accepted', 'rejected'].map(status => (
-                                  <button key={status} onClick={() => handleStatusChange(quote.id, status)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-slate-100 ${quote.status === status ? 'bg-emerald-100 text-emerald-700' : ''}`}>
-                                    <span className={`w-2 h-2 rounded-full ${status === 'accepted' ? 'bg-emerald-500' : status === 'sent' ? 'bg-blue-500' : 'bg-red-500'}`}></span>
-                                    {status === 'accepted' && <Briefcase className="w-3 h-3" />}
-                                    {status.replace('_', ' ')}
-                                    {status === 'accepted' && ' → Job'}
+                          {/* View Button */}
+                          <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Details">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Edit Button - FIXED: goes to quotation detail page */}
+                          <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Quotation">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Download PDF */}
+                          <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download PDF">
+                            <Download className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Status Change Menu */}
+                          {(quote.status === 'draft' || quote.status === 'sent') && (
+                            <div className="relative">
+                              <button onClick={() => setActionMenu(actionMenu === quote.id ? null : quote.id)} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Change Status">
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                              {actionMenu === quote.id && (
+                                <div className="absolute right-0 top-full mt-1 w-48 neu-raised rounded-xl p-2 z-50 bg-white dark:bg-slate-800 shadow-xl">
+                                  <p className="text-xs text-slate-500 px-3 py-1 mb-1">Change Status:</p>
+                                  {quote.status === 'draft' && (
+                                    <button onClick={() => handleStatusChange(quote.id, 'sent')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-blue-50">
+                                      <Send className="w-3 h-3 text-blue-500" /> Mark as Sent
+                                    </button>
+                                  )}
+                                  <button onClick={() => handleStatusChange(quote.id, 'accepted')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-emerald-50">
+                                    <CheckCircle className="w-3 h-3 text-emerald-500" /> Accept & Create Job
                                   </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <button onClick={() => setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                  <button onClick={() => handleStatusChange(quote.id, 'rejected')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-red-50">
+                                    <XCircle className="w-3 h-3 text-red-500" /> Mark as Rejected
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Delete Button */}
+                          {(quote.status === 'draft' || quote.status === 'sent') && (
+                            <button onClick={() => setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -269,28 +316,26 @@ export default function QuotationList() {
               <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4">
                 <Briefcase className="w-10 h-10 text-emerald-600" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept & Create Job?</h3>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept Quotation?</h3>
               <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Important:</p>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">This will:</p>
                     <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1 list-disc list-inside">
-                      <li>This quotation will be marked as <strong>Accepted</strong></li>
-                      <li>A <strong>Job</strong> will be automatically created</li>
-                      <li>All services/items will transfer to the job</li>
-                      <li>The quotation will <strong>disappear</strong> from this list</li>
+                      <li>Mark quotation as <strong>Accepted</strong></li>
+                      <li>Update the quotation status</li>
                     </ul>
                   </div>
                 </div>
               </div>
               <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
-                Are you sure you want to accept and create a job?
+                Are you sure you want to accept this quotation?
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setAcceptConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600 hover:bg-slate-100">Cancel</button>
                 <button onClick={handleAcceptQuotation} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2">
-                  <CheckCircle className="w-5 h-5" />Yes, Accept & Create Job
+                  <CheckCircle className="w-5 h-5" />Accept
                 </button>
               </div>
             </div>
@@ -307,7 +352,7 @@ export default function QuotationList() {
                 <AlertTriangle className="w-8 h-8 text-red-600" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Quotation?</h3>
-              <p className="text-slate-500 mb-6">This cannot be undone.</p>
+              <p className="text-slate-500 mb-6">This quotation will be cancelled. This cannot be undone.</p>
               <div className="flex gap-3">
                 <button onClick={() => setDeleteConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button>
                 <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button>
