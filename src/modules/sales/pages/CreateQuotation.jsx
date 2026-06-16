@@ -48,7 +48,7 @@ const COLORS = {
 }
 
 // ═══════════════════════════════════════════════
-// A4 Quotation Template – COMPACT SINGLE PAGE
+// A4 Quotation Template
 // ═══════════════════════════════════════════════
 function QuotationTemplate({ quotation, items }) {
   const formatCurrency = (amount) =>
@@ -135,16 +135,6 @@ function QuotationTemplate({ quotation, items }) {
               <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'center' }}>{item.quantity}</td>
               <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(item.unit_price)}</td>
               <td style={{ padding: '5px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(calcLineTotal(item))}</td>
-            </tr>
-          ))}
-          {/* Fill empty rows to push content up */}
-          {Array.from({ length: Math.max(0, 15 - (items || []).filter(item => item.description).length) }).map((_, i) => (
-            <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={{ padding: '5px 10px', fontSize: '9px' }}>&nbsp;</td>
-              <td style={{ padding: '5px 10px' }}></td>
-              <td style={{ padding: '5px 10px' }}></td>
-              <td style={{ padding: '5px 10px' }}></td>
-              <td style={{ padding: '5px 10px' }}></td>
             </tr>
           ))}
         </tbody>
@@ -415,44 +405,45 @@ export default function CreateQuotation() {
   }
 
   // ═══════════════════════════════════════════
-  // RELIABLE SINGLE A4 PAGE PDF DOWNLOAD
-  // Uses html2canvas to capture as one image, then places on single PDF page
+  // PDF DOWNLOAD - Captures preview as single A4 page
   // ═══════════════════════════════════════════
   const downloadPDF = async () => {
     try {
-      // Dynamically import html2canvas and jsPDF
+      const previewContainer = document.querySelector('.preview-container')
+      if (!previewContainer) {
+        toast.error('Preview not found. Please refresh the page.')
+        return
+      }
+
       const html2canvas = (await import('html2canvas')).default
       const { default: jsPDF } = await import('jspdf')
 
-      // Create a temporary container at exact A4 proportions
-      const tempDiv = document.createElement('div')
-      tempDiv.style.position = 'absolute'
-      tempDiv.style.left = '-9999px'
-      tempDiv.style.top = '0'
-      tempDiv.style.width = '794px'
-      tempDiv.style.height = '1123px'
-      tempDiv.style.overflow = 'hidden'
-      document.body.appendChild(tempDiv)
+      toast.loading('Generating PDF...')
 
-      // Render the React component into the temp div
-      const ReactDOM = (await import('react-dom/client')).default
-      const React = (await import('react'))
-      const root = ReactDOM.createRoot(tempDiv)
-      root.render(
-        React.createElement(QuotationTemplate, {
-          quotation: { 
-            ...quotationData, 
-            quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'DRAFT' 
-          },
-          items: items.filter((item) => item.description)
-        })
-      )
+      // Clone the preview element at full A4 size
+      const clone = previewContainer.cloneNode(true)
+      clone.style.position = 'absolute'
+      clone.style.left = '-9999px'
+      clone.style.top = '0'
+      clone.style.width = '794px'
+      clone.style.height = '1123px'
+      clone.style.transform = 'none'
+      clone.style.overflow = 'hidden'
+      clone.style.maxHeight = '1123px'
+      
+      // Remove the inner scale transform so it renders at full size
+      const innerDiv = clone.querySelector('div')
+      if (innerDiv) {
+        innerDiv.style.transform = 'none'
+        innerDiv.style.width = '100%'
+      }
+      
+      document.body.appendChild(clone)
 
-      // Wait for images and fonts to load
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Capture the entire div as a single canvas
-      const canvas = await html2canvas(tempDiv, {
+      // Capture as single canvas
+      const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
@@ -464,10 +455,10 @@ export default function CreateQuotation() {
         logging: false
       })
 
-      // Convert to high-quality JPEG
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      document.body.removeChild(clone)
 
-      // Create a single-page A4 PDF
+      // Create single-page A4 PDF
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -475,21 +466,18 @@ export default function CreateQuotation() {
         compress: true
       })
 
-      // Add the image to fill exactly one A4 page
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
-
-      // Save
+      
       const filename = `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`
       pdf.save(filename)
 
-      // Cleanup
-      root.unmount()
-      document.body.removeChild(tempDiv)
-      toast.success('PDF downloaded successfully!')
+      toast.dismiss()
+      toast.success('PDF downloaded! 📄')
       
     } catch (error) {
-      console.error('PDF generation error:', error)
-      toast.error('Failed to generate PDF. Please try again.')
+      console.error('PDF error:', error)
+      toast.dismiss()
+      toast.error('Failed to generate PDF')
     }
   }
 
@@ -648,9 +636,10 @@ export default function CreateQuotation() {
               </div>
             </div>
 
+            {/* Preview with className for PDF capture */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
-              <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
+              <div className="preview-container bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.35)', transformOrigin: 'top left', width: '285%' }}>
                   <QuotationTemplate
                     quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' }}
