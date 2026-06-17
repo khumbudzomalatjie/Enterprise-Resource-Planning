@@ -10,16 +10,14 @@ import {
   Search, ArrowLeft, Sun, Moon, Sparkles, Activity,
   Briefcase, Building2, ShoppingCart, Package, Truck,
   Users, UserCheck, Clock, AlertCircle, CheckCircle2,
-  ChevronRight, Eye, MapPin, Phone, Hash, Barcode,
-  Car, User, Mail, CreditCard, Loader2, X, History,
-  Plus, Edit, Trash2, MoveRight, RefreshCw, Calendar
+  ChevronRight, Eye, MapPin, Phone, Loader2, X, History,
+  Plus, Edit, Trash2, MoveRight, RefreshCw, CreditCard
 } from 'lucide-react'
 
 export default function TrackerDashboard() {
-  const { summary, fetchSummary, loading } = useTrackerStore()
+  const { summary, fetchSummary } = useTrackerStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview')
   
   // Search states
   const [searchType, setSearchType] = useState('job')
@@ -65,7 +63,7 @@ export default function TrackerDashboard() {
       let history = []
       const entityId = item.id
 
-      // Get audit logs from payroll_audit_logs (generic)
+      // Get audit logs
       const { data: auditLogs } = await supabase
         .from('payroll_audit_logs')
         .select('*')
@@ -73,15 +71,16 @@ export default function TrackerDashboard() {
         .order('created_at', { ascending: true })
 
       if (auditLogs?.length > 0) {
-        history = await Promise.all(auditLogs.map(async (log) => ({
+        const auditHistory = await Promise.all(auditLogs.map(async (log) => ({
           ...log,
           user_email: await getUserEmail(log.user_id),
           icon: log.action === 'created' ? Plus : log.action === 'updated' ? Edit : log.action === 'deleted' ? Trash2 : RefreshCw,
-          color: log.action === 'created' ? 'text-emerald-600' : log.action === 'updated' ? 'text-blue-600' : log.action === 'deleted' ? 'text-red-600' : 'text-purple-600'
+          color: log.action === 'created' ? 'text-emerald-600 bg-emerald-100' : log.action === 'updated' ? 'text-blue-600 bg-blue-100' : log.action === 'deleted' ? 'text-red-600 bg-red-100' : 'text-purple-600 bg-purple-100'
         })))
+        history = [...auditHistory]
       }
 
-      // If no audit logs, generate from item timestamps
+      // If no audit logs, create from timestamps
       if (history.length === 0 && item.created_at) {
         history.push({
           id: 'created',
@@ -89,24 +88,12 @@ export default function TrackerDashboard() {
           user_email: await getUserEmail(item.created_by),
           created_at: item.created_at,
           icon: Plus,
-          color: 'text-emerald-600',
+          color: 'text-emerald-600 bg-emerald-100',
           details: `${type} was created`
         })
       }
 
-      if (history.length === 0 && item.updated_at && item.updated_at !== item.created_at) {
-        history.push({
-          id: 'updated',
-          action: 'updated',
-          user_email: await getUserEmail(item.updated_by || item.created_by),
-          created_at: item.updated_at,
-          icon: Edit,
-          color: 'text-blue-600',
-          details: `${type} was last updated`
-        })
-      }
-
-      // Get related movements/transactions
+      // Stock movements for inventory
       if (type === 'Inventory Item') {
         const { data: movements } = await supabase
           .from('stock_movements')
@@ -116,7 +103,7 @@ export default function TrackerDashboard() {
           .limit(20)
 
         if (movements?.length > 0) {
-          const movementHistory = await Promise.all(movements.map(async (m) => ({
+          const moveHistory = await Promise.all(movements.map(async (m) => ({
             id: `mov-${m.id}`,
             action: 'movement',
             movement_type: m.movement_type,
@@ -124,13 +111,14 @@ export default function TrackerDashboard() {
             user_email: await getUserEmail(m.performed_by),
             created_at: m.created_at,
             icon: MoveRight,
-            color: m.movement_type === 'purchase' ? 'text-emerald-600' : 'text-red-600',
-            details: `${m.movement_type}: ${m.quantity > 0 ? '+' : ''}${m.quantity} units (Ref: ${m.reference_number || 'N/A'})`
+            color: m.quantity > 0 ? 'text-emerald-600 bg-emerald-100' : 'text-red-600 bg-red-100',
+            details: `${m.movement_type?.replace('_', ' ')}: ${m.quantity > 0 ? '+' : ''}${m.quantity} units (Ref: ${m.reference_number || 'N/A'})`
           })))
-          history = [...history, ...movementHistory]
+          history = [...history, ...moveHistory]
         }
       }
 
+      // Job assignments
       if (type === 'Job') {
         const { data: assignments } = await supabase
           .from('job_assignments')
@@ -139,19 +127,20 @@ export default function TrackerDashboard() {
           .order('created_at', { ascending: true })
 
         if (assignments?.length > 0) {
-          const assignHistory = await Promise.all(assignments.map(async (a) => ({
+          const assignHistory = assignments.map(a => ({
             id: `assign-${a.id}`,
             action: 'assignment',
             user_email: a.employees ? `${a.employees.first_name} ${a.employees.last_name}` : 'Unknown',
             created_at: a.created_at,
             icon: Users,
-            color: 'text-indigo-600',
-            details: `Assigned to ${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''}`
-          })))
+            color: 'text-indigo-600 bg-indigo-100',
+            details: `Assigned to ${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''} (Status: ${a.status})`
+          }))
           history = [...history, ...assignHistory]
         }
       }
 
+      // Vehicle fuel & expenses
       if (type === 'Vehicle') {
         const { data: fuelLogs } = await supabase
           .from('fuel_records')
@@ -167,8 +156,8 @@ export default function TrackerDashboard() {
             user_email: 'Fuel Record',
             created_at: f.fuel_date,
             icon: Activity,
-            color: 'text-amber-600',
-            details: `Fuel: ${f.quantity}L at ${f.fuel_station || 'Unknown'} - R${f.amount}`
+            color: 'text-amber-600 bg-amber-100',
+            details: `Fuel: ${f.quantity}L at ${f.fuel_station || 'Unknown'} - R${f.amount?.toFixed(2)}`
           }))
           history = [...history, ...fuelHistory]
         }
@@ -184,18 +173,18 @@ export default function TrackerDashboard() {
           const expenseHistory = expenses.map(e => ({
             id: `exp-${e.id}`,
             action: 'expense',
-            user_email: e.vendor || 'Unknown Vendor',
+            user_email: e.vendor || 'Unknown',
             created_at: e.expense_date,
             icon: CreditCard,
-            color: 'text-red-600',
-            details: `${e.expense_type}: R${e.amount} - ${e.vendor || 'N/A'}`
+            color: 'text-red-600 bg-red-100',
+            details: `${e.expense_type}: R${e.amount?.toFixed(2)} - ${e.vendor || 'N/A'}`
           }))
           history = [...history, ...expenseHistory]
         }
       }
 
+      // Employee attendance
       if (type === 'Employee') {
-        const today = new Date().toISOString().split('T')[0]
         const { data: attendance } = await supabase
           .from('attendance_records')
           .select('*')
@@ -210,13 +199,14 @@ export default function TrackerDashboard() {
             user_email: 'Attendance System',
             created_at: a.attendance_date,
             icon: Clock,
-            color: a.clock_out_time ? 'text-emerald-600' : 'text-blue-600',
-            details: `Clock in: ${a.clock_in_time ? new Date(a.clock_in_time).toLocaleTimeString() : 'N/A'} | Clock out: ${a.clock_out_time ? new Date(a.clock_out_time).toLocaleTimeString() : 'Still working'}`
+            color: a.clock_out_time ? 'text-emerald-600 bg-emerald-100' : 'text-blue-600 bg-blue-100',
+            details: `In: ${a.clock_in_time ? new Date(a.clock_in_time).toLocaleTimeString() : 'N/A'} | Out: ${a.clock_out_time ? new Date(a.clock_out_time).toLocaleTimeString() : 'Still working'}`
           }))
           history = [...history, ...attHistory]
         }
       }
 
+      // PO goods receipts
       if (type === 'Purchase Order') {
         const { data: receipts } = await supabase
           .from('goods_receipts')
@@ -231,19 +221,20 @@ export default function TrackerDashboard() {
             user_email: await getUserEmail(r.received_by),
             created_at: r.receipt_date,
             icon: Package,
-            color: 'text-emerald-600',
-            details: `Goods received: GR-${r.gr_number} | Status: ${r.status}`
+            color: 'text-emerald-600 bg-emerald-100',
+            details: `GR-${r.gr_number} | Status: ${r.status} | Quality: ${r.quality_check_passed ? '✅ Passed' : '❌ Failed'}`
           })))
           history = [...history, ...receiptHistory]
         }
       }
 
-      // Sort by date
+      // Sort newest first
       history.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
       setItemHistory(history)
     } catch (error) {
       console.error('Error fetching history:', error)
+      toast.error('Failed to load history')
     }
     setLoadingHistory(false)
   }
@@ -253,6 +244,7 @@ export default function TrackerDashboard() {
   // ═══════════════════════════════════════════
   const handleViewDetails = async (item, type) => {
     setSelectedItem({ ...item, type })
+    setItemHistory([])
     await fetchItemHistory(item, type)
   }
 
@@ -282,8 +274,6 @@ export default function TrackerDashboard() {
             .limit(5)
           if (error) throw error
           if (!jobs?.length) { setSearchError(`No job found with number "${searchValue}"`); break }
-          
-          // Enrich with user emails
           const enriched = await Promise.all(jobs.map(async (job) => ({
             ...job,
             created_by_email: await getUserEmail(job.created_by),
@@ -301,7 +291,6 @@ export default function TrackerDashboard() {
             .limit(10)
           if (error) throw error
           if (!items?.length) { setSearchError(`No inventory item found for "${searchValue}"`); break }
-          
           const enriched = await Promise.all(items.map(async (item) => ({
             ...item,
             created_by_email: await getUserEmail(item.created_by),
@@ -319,7 +308,6 @@ export default function TrackerDashboard() {
             .limit(5)
           if (error) throw error
           if (!vehicles?.length) { setSearchError(`No vehicle found with plate "${searchValue}"`); break }
-          
           const enriched = await Promise.all(vehicles.map(async (v) => ({
             ...v,
             created_by_email: await getUserEmail(v.created_by || v.assigned_to),
@@ -337,13 +325,11 @@ export default function TrackerDashboard() {
             .limit(10)
           if (error) throw error
           if (!employees?.length) { setSearchError(`No employee found for "${searchValue}"`); break }
-          
           const today = new Date().toISOString().split('T')[0]
           const employeeIds = employees.map(e => e.id)
           const { data: attendance } = await supabase.from('attendance_records').select('*').eq('attendance_date', today).in('employee_id', employeeIds)
           const attendanceMap = {}
           attendance?.forEach(a => { attendanceMap[a.employee_id] = a })
-
           const enriched = await Promise.all(employees.map(async (emp) => ({
             ...emp,
             created_by_email: await getUserEmail(emp.created_by),
@@ -362,7 +348,6 @@ export default function TrackerDashboard() {
             .limit(10)
           if (error) throw error
           if (!vendors?.length) { setSearchError(`No vendor found for "${searchValue}"`); break }
-          
           const enriched = await Promise.all(vendors.map(async (v) => ({
             ...v,
             created_by_email: await getUserEmail(v.created_by),
@@ -380,7 +365,6 @@ export default function TrackerDashboard() {
             .limit(10)
           if (error) throw error
           if (!clients?.length) { setSearchError(`No client found for "${searchValue}"`); break }
-          
           const enriched = await Promise.all(clients.map(async (c) => ({
             ...c,
             created_by_email: await getUserEmail(c.created_by),
@@ -398,7 +382,6 @@ export default function TrackerDashboard() {
             .limit(5)
           if (error) throw error
           if (!pos?.length) { setSearchError(`No purchase order found with number "${searchValue}"`); break }
-          
           const enriched = await Promise.all(pos.map(async (po) => ({
             ...po,
             created_by_email: await getUserEmail(po.created_by),
@@ -502,7 +485,7 @@ export default function TrackerDashboard() {
           </form>
         </motion.div>
 
-        {/* SEARCH RESULTS */}
+        {/* SEARCH ERROR */}
         {searchError && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             className="neu-raised rounded-3xl p-8 mb-8 text-center border-2 border-red-200">
@@ -511,6 +494,7 @@ export default function TrackerDashboard() {
           </motion.div>
         )}
 
+        {/* SEARCH RESULTS */}
         {searchResult && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-8">
             <div className="flex justify-between items-center mb-4">
@@ -523,10 +507,8 @@ export default function TrackerDashboard() {
             <div className="space-y-3">
               {searchResult.data.map((item) => (
                 <div key={item.id} className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
-                  {/* ITEM HEADER */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex-1">
-                      {/* Job */}
                       {searchResult.type === 'job' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -537,11 +519,9 @@ export default function TrackerDashboard() {
                           <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
                             <span>👤 Created: {item.created_by_email}</span>
                             {item.assigned_to_email && <span>👷 Assigned: {item.assigned_to_email}</span>}
-                            <span>📅 {formatDate(item.created_at)}</span>
                           </div>
                         </>
                       )}
-                      {/* Inventory */}
                       {searchResult.type === 'inventory' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -555,7 +535,6 @@ export default function TrackerDashboard() {
                           </div>
                         </>
                       )}
-                      {/* Fleet */}
                       {searchResult.type === 'fleet' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -566,11 +545,9 @@ export default function TrackerDashboard() {
                           <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
                             <span>👤 Added by: {item.created_by_email}</span>
                             <span>🚗 Driver: {item.driver_name}</span>
-                            <span>📅 {formatDate(item.created_at)}</span>
                           </div>
                         </>
                       )}
-                      {/* Employee */}
                       {searchResult.type === 'employee' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -585,22 +562,18 @@ export default function TrackerDashboard() {
                           </div>
                         </>
                       )}
-                      {/* Vendor */}
                       {searchResult.type === 'vendor' && (
                         <>
                           <div className="flex items-center gap-2">
                             <Building2 className="w-5 h-5 text-amber-600" />
                             <span className="font-bold">{item.company_name}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusBadge(item.status)}`}>{item.status?.replace('_', ' ')}</span>
                           </div>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
                             <span>👤 Created by: {item.created_by_email}</span>
                             <span>✅ Approved by: {item.approved_by_email}</span>
-                            <span>📅 {formatDate(item.created_at)}</span>
                           </div>
                         </>
                       )}
-                      {/* Client */}
                       {searchResult.type === 'client' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -610,11 +583,9 @@ export default function TrackerDashboard() {
                           <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
                             <span>👤 Created by: {item.created_by_email}</span>
                             <span>👔 Account Mgr: {item.account_manager_email}</span>
-                            <span>📅 {formatDate(item.created_at)}</span>
                           </div>
                         </>
                       )}
-                      {/* PO */}
                       {searchResult.type === 'po' && (
                         <>
                           <div className="flex items-center gap-2">
@@ -624,12 +595,19 @@ export default function TrackerDashboard() {
                           <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-2">
                             <span>👤 Created by: {item.created_by_email}</span>
                             <span>✅ Approved by: {item.approved_by_email}</span>
-                            <span>📅 {formatDate(item.created_at)}</span>
                           </div>
                         </>
                       )}
                     </div>
-                    <button onClick={() => handleViewDetails(item, searchResult.type === 'job' ? 'Job' : searchResult.type === 'inventory' ? 'Inventory Item' : searchResult.type === 'fleet' ? 'Vehicle' : searchResult.type === 'employee' ? 'Employee' : searchResult.type === 'vendor' ? 'Vendor' : searchResult.type === 'client' ? 'Client' : 'Purchase Order')}
+                    <button 
+                      onClick={() => handleViewDetails(item, 
+                        searchResult.type === 'job' ? 'Job' : 
+                        searchResult.type === 'inventory' ? 'Inventory Item' : 
+                        searchResult.type === 'fleet' ? 'Vehicle' : 
+                        searchResult.type === 'employee' ? 'Employee' : 
+                        searchResult.type === 'vendor' ? 'Vendor' : 
+                        searchResult.type === 'client' ? 'Client' : 'Purchase Order'
+                      )}
                       className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 flex items-center gap-2 flex-shrink-0">
                       <History className="w-4 h-4" /> View History
                     </button>
@@ -638,113 +616,6 @@ export default function TrackerDashboard() {
               ))}
             </div>
           </motion.div>
-        )}
-
-        {/* DETAIL MODAL WITH FULL HISTORY */}
-        {selectedItem && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => { setSelectedItem(null); setItemHistory([]) }}>
-            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white dark:bg-slate-800 p-4 border-b flex justify-between items-center z-10">
-                <h3 className="font-bold text-lg">
-                  {selectedItem.type} History
-                  {selectedItem.type === 'Job' && ` - ${selectedItem.job_number}`}
-                  {selectedItem.type === 'Inventory Item' && ` - ${selectedItem.item_code}`}
-                  {selectedItem.type === 'Vehicle' && ` - ${selectedItem.plate_number}`}
-                  {selectedItem.type === 'Employee' && ` - ${selectedItem.first_name} ${selectedItem.last_name}`}
-                  {selectedItem.type === 'Vendor' && ` - ${selectedItem.company_name}`}
-                  {selectedItem.type === 'Client' && ` - ${selectedItem.company_name}`}
-                  {selectedItem.type === 'Purchase Order' && ` - ${selectedItem.po_number}`}
-                </h3>
-                <button onClick={() => { setSelectedItem(null); setItemHistory([]) }} className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300"><X className="w-5 h-5" /></button>
-              </div>
-
-              <div className="p-4">
-                {/* Item Summary */}
-                <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 mb-4">
-                  <p className="text-xs text-slate-500 mb-2">Item Summary</p>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    {selectedItem.type === 'Job' && (
-                      <>
-                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.status}</span></div>
-                        <div><span className="text-slate-500">Client:</span> <span className="font-medium">{selectedItem.clients?.company_name || 'N/A'}</span></div>
-                        <div><span className="text-slate-500">Created:</span> <span className="font-medium">{formatDateTime(selectedItem.created_at)}</span></div>
-                        <div><span className="text-slate-500">Updated:</span> <span className="font-medium">{formatDateTime(selectedItem.updated_at)}</span></div>
-                      </>
-                    )}
-                    {selectedItem.type === 'Inventory Item' && (
-                      <>
-                        <div><span className="text-slate-500">Current Stock:</span> <span className="font-medium">{selectedItem.current_stock} {selectedItem.unit}</span></div>
-                        <div><span className="text-slate-500">Unit Cost:</span> <span className="font-medium">{formatCurrency(selectedItem.unit_cost)}</span></div>
-                        <div><span className="text-slate-500">Created:</span> <span className="font-medium">{formatDateTime(selectedItem.created_at)}</span></div>
-                        <div><span className="text-slate-500">Updated:</span> <span className="font-medium">{formatDateTime(selectedItem.updated_at)}</span></div>
-                      </>
-                    )}
-                    {selectedItem.type === 'Vehicle' && (
-                      <>
-                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.status}</span></div>
-                        <div><span className="text-slate-500">Mileage:</span> <span className="font-medium">{selectedItem.current_mileage?.toLocaleString()} km</span></div>
-                        <div><span className="text-slate-500">Make/Model:</span> <span className="font-medium">{selectedItem.make} {selectedItem.model}</span></div>
-                      </>
-                    )}
-                    {selectedItem.type === 'Employee' && (
-                      <>
-                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.employment_status}</span></div>
-                        <div><span className="text-slate-500">Position:</span> <span className="font-medium">{selectedItem.position || 'N/A'}</span></div>
-                        <div><span className="text-slate-500">Hired:</span> <span className="font-medium">{formatDate(selectedItem.date_of_hire)}</span></div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Timeline */}
-                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                  <History className="w-5 h-5 text-emerald-600" /> Activity Timeline ({itemHistory.length} events)
-                </h4>
-
-                {loadingHistory ? (
-                  <div className="text-center py-8"><Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto" /></div>
-                ) : itemHistory.length > 0 ? (
-                  <div className="relative pl-6 border-l-2 border-emerald-200 dark:border-emerald-800 space-y-4">
-                    {itemHistory.map((event, i) => {
-                      const EventIcon = event.icon || RefreshCw
-                      return (
-                        <div key={event.id || i} className="relative">
-                          <div className={`absolute -left-[25px] w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${event.color.replace('text-', 'bg-')}`}></div>
-                          <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <EventIcon className={`w-4 h-4 ${event.color}`} />
-                              <span className="text-xs font-semibold capitalize">{event.action}</span>
-                              <span className="text-xs text-slate-400 ml-auto">{formatDateTime(event.created_at)}</span>
-                            </div>
-                            {event.details && <p className="text-xs text-slate-600 dark:text-slate-400">{event.details}</p>}
-                            {event.user_email && (
-                              <p className="text-xs text-slate-500 mt-1">
-                                👤 <span className="font-medium">{event.user_email}</span>
-                              </p>
-                            )}
-                            {event.old_values && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-slate-400 cursor-pointer">View changes</summary>
-                                <pre className="text-[10px] bg-slate-100 dark:bg-slate-600 p-2 rounded mt-1 overflow-x-auto">
-                                  {JSON.stringify(event.old_values, null, 2)}
-                                </pre>
-                              </details>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-slate-400">
-                    <History className="w-10 h-10 mx-auto mb-2" />
-                    <p>No detailed history available</p>
-                    <p className="text-xs mt-1">Activity tracking starts from the creation date</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Live Stats Banner */}
@@ -789,6 +660,161 @@ export default function TrackerDashboard() {
           ))}
         </div>
       </main>
+
+      {/* ═══════════════════════════════════════════ */}
+      {/* HISTORY MODAL - FIXED SCROLLING */}
+      {/* ═══════════════════════════════════════════ */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/60 z-50 overflow-y-auto" onClick={() => { setSelectedItem(null); setItemHistory([]) }}>
+          <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              
+              {/* Modal Header - Fixed */}
+              <div className="flex-shrink-0 p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <h3 className="font-bold text-lg">
+                  {selectedItem.type} History
+                  {selectedItem.type === 'Job' && ` - ${selectedItem.job_number}`}
+                  {selectedItem.type === 'Inventory Item' && ` - ${selectedItem.item_code}`}
+                  {selectedItem.type === 'Vehicle' && ` - ${selectedItem.plate_number}`}
+                  {selectedItem.type === 'Employee' && ` - ${selectedItem.first_name} ${selectedItem.last_name}`}
+                  {selectedItem.type === 'Vendor' && ` - ${selectedItem.company_name}`}
+                  {selectedItem.type === 'Client' && ` - ${selectedItem.company_name}`}
+                  {selectedItem.type === 'Purchase Order' && ` - ${selectedItem.po_number}`}
+                </h3>
+                <button onClick={() => { setSelectedItem(null); setItemHistory([]) }} className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: 'calc(85vh - 70px)' }}>
+                {/* Item Summary */}
+                <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 mb-4">
+                  <p className="text-xs text-slate-500 mb-2 font-semibold">📋 Item Summary</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {selectedItem.type === 'Job' && (
+                      <>
+                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.status}</span></div>
+                        <div><span className="text-slate-500">Client:</span> <span className="font-medium">{selectedItem.clients?.company_name || 'N/A'}</span></div>
+                        <div><span className="text-slate-500">Created:</span> <span className="font-medium">{formatDateTime(selectedItem.created_at)}</span></div>
+                        <div><span className="text-slate-500">Updated:</span> <span className="font-medium">{formatDateTime(selectedItem.updated_at)}</span></div>
+                      </>
+                    )}
+                    {selectedItem.type === 'Inventory Item' && (
+                      <>
+                        <div><span className="text-slate-500">Stock:</span> <span className="font-medium">{selectedItem.current_stock} {selectedItem.unit}</span></div>
+                        <div><span className="text-slate-500">Cost:</span> <span className="font-medium">{formatCurrency(selectedItem.unit_cost)}</span></div>
+                        <div><span className="text-slate-500">Created:</span> <span className="font-medium">{formatDateTime(selectedItem.created_at)}</span></div>
+                        <div><span className="text-slate-500">Updated:</span> <span className="font-medium">{formatDateTime(selectedItem.updated_at)}</span></div>
+                      </>
+                    )}
+                    {selectedItem.type === 'Vehicle' && (
+                      <>
+                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.status}</span></div>
+                        <div><span className="text-slate-500">Mileage:</span> <span className="font-medium">{selectedItem.current_mileage?.toLocaleString()} km</span></div>
+                        <div><span className="text-slate-500">Make/Model:</span> <span className="font-medium">{selectedItem.make} {selectedItem.model}</span></div>
+                      </>
+                    )}
+                    {selectedItem.type === 'Employee' && (
+                      <>
+                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.employment_status}</span></div>
+                        <div><span className="text-slate-500">Position:</span> <span className="font-medium">{selectedItem.position || 'N/A'}</span></div>
+                        <div><span className="text-slate-500">Hired:</span> <span className="font-medium">{formatDate(selectedItem.date_of_hire)}</span></div>
+                      </>
+                    )}
+                    {(selectedItem.type === 'Vendor' || selectedItem.type === 'Client' || selectedItem.type === 'Purchase Order') && (
+                      <>
+                        <div><span className="text-slate-500">Status:</span> <span className="font-medium">{selectedItem.status}</span></div>
+                        <div><span className="text-slate-500">Created:</span> <span className="font-medium">{formatDateTime(selectedItem.created_at)}</span></div>
+                        <div><span className="text-slate-500">Updated:</span> <span className="font-medium">{formatDateTime(selectedItem.updated_at)}</span></div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline Header */}
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2 sticky top-0 bg-white dark:bg-slate-800 py-2 z-10">
+                  <History className="w-5 h-5 text-emerald-600" /> Activity Timeline ({itemHistory.length} events)
+                </h4>
+
+                {/* Timeline Content */}
+                {loadingHistory ? (
+                  <div className="text-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+                    <p className="text-slate-500 text-sm">Loading history...</p>
+                  </div>
+                ) : itemHistory.length > 0 ? (
+                  <div className="relative pl-6 border-l-2 border-emerald-200 dark:border-emerald-800 space-y-4 pb-4">
+                    {itemHistory.map((event, i) => {
+                      const EventIcon = event.icon || RefreshCw
+                      return (
+                        <div key={event.id || i} className="relative">
+                          {/* Timeline dot */}
+                          <div className={`absolute -left-[25px] w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 ${event.color.split(' ')[1] || 'bg-slate-400'}`}></div>
+                          
+                          {/* Event Card */}
+                          <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <EventIcon className={`w-4 h-4 ${event.color.split(' ')[0] || 'text-slate-500'}`} />
+                              <span className="text-xs font-semibold capitalize">{event.action?.replace('_', ' ')}</span>
+                              <span className="text-xs text-slate-400 ml-auto">{formatDateTime(event.created_at)}</span>
+                            </div>
+                            
+                            {event.details && (
+                              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{event.details}</p>
+                            )}
+                            
+                            {event.user_email && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                👤 <span className="font-medium">{event.user_email}</span>
+                              </p>
+                            )}
+
+                            {event.movement_type && (
+                              <div className="mt-2 flex gap-2">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                  event.movement_type === 'purchase' || event.movement_type === 'return' || event.movement_type === 'transfer_in' 
+                                    ? 'bg-emerald-100 text-emerald-700' 
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {event.movement_type?.replace('_', ' ')}
+                                </span>
+                                {event.quantity && (
+                                  <span className="text-[10px] text-slate-500">Qty: {event.quantity}</span>
+                                )}
+                              </div>
+                            )}
+
+                            {event.old_values && (
+                              <details className="mt-2">
+                                <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600">View data changes</summary>
+                                <pre className="text-[10px] bg-slate-100 dark:bg-slate-600 p-2 rounded mt-1 overflow-x-auto max-h-[100px] overflow-y-auto">
+                                  {JSON.stringify(event.old_values, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    
+                    {/* End of timeline marker */}
+                    <div className="text-center text-[10px] text-slate-400 pt-2">
+                      ── End of history ──
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No detailed history available</p>
+                    <p className="text-xs mt-1">Activity tracking starts from the creation date</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
