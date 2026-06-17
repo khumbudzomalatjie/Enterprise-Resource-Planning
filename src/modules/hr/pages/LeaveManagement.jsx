@@ -1,81 +1,96 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useAuthStore from '../../../store/authStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
+import html2pdf from 'html2pdf.js'
 import {
-  Calendar, Clock, CheckCircle2, XCircle, Plus,
+  Calendar, Clock, CheckCircle2, XCircle, Plus, Minus,
   ArrowLeft, Sun, Moon, Sparkles, Send, TrendingUp,
   FileText, AlertCircle, Shield, Upload, Eye,
   MessageSquare, History, Users, Filter, Download,
-  Search, Bell, UserCheck, UserX, BarChart3
+  Search, Bell, UserCheck, UserX, BarChart3,
+  Settings, Briefcase, Home, LogOut, ChevronRight,
+  Printer, Mail, Phone, MapPin, Building2, Star,
+  Edit, Trash2, RefreshCw, PieChart, TrendingDown,
+  Activity, BookOpen, Heart, GraduationCap, Plane,
+  HelpCircle, AlertTriangle, Lock, Unlock
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════
-// LEAVE TYPES (SA BCEA Compliant)
+// LEAVE TYPE DEFINITIONS (SA BCEA Compliant)
 // ═══════════════════════════════════════════
-const LEAVE_TYPES = [
-  { id: 'annual', name: 'Annual Leave', days_allowed: 15, color: '#10b981', requires_doc: false },
-  { id: 'sick', name: 'Sick Leave', days_allowed: 30, color: '#ef4444', requires_doc: true },
-  { id: 'family', name: 'Family Responsibility Leave', days_allowed: 3, color: '#f59e0b', requires_doc: false },
-  { id: 'maternity', name: 'Maternity Leave', days_allowed: 120, color: '#ec4899', requires_doc: true },
-  { id: 'paternity', name: 'Paternity Leave', days_allowed: 10, color: '#8b5cf6', requires_doc: false },
-  { id: 'study', name: 'Study Leave', days_allowed: 10, color: '#0ea5e9', requires_doc: true },
-  { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, color: '#78716c', requires_doc: false },
-  { id: 'other', name: 'Other', days_allowed: 5, color: '#64748b', requires_doc: false },
+const LEAVE_TYPE_DEFINITIONS = [
+  { id: 'annual', name: 'Annual Leave', icon: Calendar, days_allowed: 15, cycle: 'annual', paid: true, color: '#10b981', description: '15 working days per annual cycle' },
+  { id: 'sick', name: 'Sick Leave', icon: Heart, days_allowed: 30, cycle: '36_months', paid: true, color: '#ef4444', description: '30 days over 36-month cycle', requires_doc: true },
+  { id: 'family', name: 'Family Responsibility', icon: Users, days_allowed: 3, cycle: 'annual', paid: true, color: '#f59e0b', description: '3 days per annual cycle' },
+  { id: 'maternity', name: 'Maternity Leave', icon: Heart, days_allowed: 120, cycle: 'per_event', paid: false, color: '#ec4899', description: 'Up to 4 consecutive months', requires_doc: true },
+  { id: 'paternity', name: 'Paternity Leave', icon: Users, days_allowed: 10, cycle: 'per_event', paid: false, color: '#8b5cf6', description: '10 consecutive days' },
+  { id: 'parental', name: 'Parental Leave', icon: Users, days_allowed: 10, cycle: 'per_event', paid: false, color: '#6366f1', description: '10 consecutive days' },
+  { id: 'study', name: 'Study Leave', icon: GraduationCap, days_allowed: 10, cycle: 'annual', paid: true, color: '#0ea5e9', description: 'Company policy', requires_doc: true },
+  { id: 'business_travel', name: 'Business Travel', icon: Plane, days_allowed: 0, cycle: 'custom', paid: true, color: '#14b8a6', description: 'Company approved travel' },
+  { id: 'unpaid', name: 'Unpaid Leave', icon: Minus, days_allowed: 30, cycle: 'annual', paid: false, color: '#78716c', description: 'As approved' },
+  { id: 'special', name: 'Special Leave', icon: Star, days_allowed: 5, cycle: 'per_event', paid: true, color: '#a855f7', description: 'Special circumstances' },
+  { id: 'custom', name: 'Custom Leave', icon: Settings, days_allowed: 0, cycle: 'custom', paid: true, color: '#64748b', description: 'Custom leave type' },
 ]
 
 export default function LeaveManagement() {
   const { isDark, toggleTheme } = useThemeStore()
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
+  const reportRef = useRef(null)
   
-  // UI State
-  const [activeTab, setActiveTab] = useState('dashboard')
-  const [showApplyForm, setShowApplyForm] = useState(false)
+  // Core State
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeLeaveType, setActiveLeaveType] = useState(null)
+  const [showApplyForm, setShowApplyForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   
   // Data State
-  const [leaveTypes, setLeaveTypes] = useState(LEAVE_TYPES)
+  const [leaveTypes, setLeaveTypes] = useState(LEAVE_TYPE_DEFINITIONS)
   const [leaveBalances, setLeaveBalances] = useState([])
   const [myRequests, setMyRequests] = useState([])
   const [pendingApprovals, setPendingApprovals] = useState([])
   const [allRequests, setAllRequests] = useState([])
   const [leaveStats, setLeaveStats] = useState({})
-  const [employees, setEmployees] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
   
-  // Filters
+  // UI State
   const [statusFilter, setStatusFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [dateRange, setDateRange] = useState({ from: '', to: '' })
   const [selectedRequest, setSelectedRequest] = useState(null)
+  const [showReportModal, setShowReportModal] = useState(false)
   
   // Form State
-  const [applyForm, setApplyForm] = useState({ 
-    leave_type_id: '', 
-    start_date: '', 
-    end_date: '', 
-    reason: '',
-    document_url: ''
+  const [applyForm, setApplyForm] = useState({
+    leave_type_id: '', start_date: '', end_date: '',
+    reason: '', document_url: '', is_partial: false,
+    partial_start: '', partial_end: ''
   })
   const [calculatedDays, setCalculatedDays] = useState(0)
 
-  // Determine user role
+  // Role checks
   const isSuperAdmin = profile?.role === 'super_admin'
   const isHRManager = profile?.role === 'hr_manager'
   const isApprover = isSuperAdmin || isHRManager
-  const isSupervisor = profile?.role === 'supervisor'
+  const isManager = ['super_admin', 'hr_manager', 'operations_manager'].includes(profile?.role)
 
   useEffect(() => { loadAllData() }, [])
 
+  // ═══════════════════════════════════════════
+  // LOAD ALL DATA
+  // ═══════════════════════════════════════════
   const loadAllData = async () => {
     setLoading(true)
     try {
-      // Load leave types from DB
+      // Load leave types from DB or use defaults
       const { data: types } = await supabase.from('leave_types').select('*').eq('is_active', true).order('display_order')
       if (types?.length > 0) setLeaveTypes(types)
 
@@ -84,10 +99,10 @@ export default function LeaveManagement() {
       const employeeId = employee?.id
 
       if (employeeId) {
-        // My leave balances
+        // Leave balances
         const { data: balances } = await supabase
           .from('employee_leave_balances')
-          .select('*, leave_types(name, code, color, days_allowed)')
+          .select('*, leave_types(name, code, color, days_allowed, cycle_type)')
           .eq('employee_id', employeeId)
         setLeaveBalances(balances || [])
 
@@ -100,31 +115,33 @@ export default function LeaveManagement() {
         setMyRequests(myReqs || [])
       }
 
-      // For approvers - load all pending requests
-      if (isApprover || isSupervisor) {
+      // Approver data
+      if (isApprover) {
         const { data: pending } = await supabase
           .from('leave_requests')
           .select('*, leave_types(name, code, color), employees(first_name, last_name, employee_code, department, position)')
           .eq('status', 'pending')
           .order('submitted_at', { ascending: false })
         setPendingApprovals(pending || [])
-      }
 
-      // For super admin - load ALL requests
-      if (isSuperAdmin) {
         const { data: all } = await supabase
           .from('leave_requests')
           .select('*, leave_types(name, code, color), employees(first_name, last_name, employee_code, department)')
           .order('created_at', { ascending: false })
-          .limit(50)
+          .limit(100)
         setAllRequests(all || [])
+
+        // Audit logs
+        const { data: logs } = await supabase
+          .from('leave_approvals')
+          .select('*, leave_requests(*, employees(first_name, last_name), leave_types(name))')
+          .order('action_date', { ascending: false })
+          .limit(50)
+        setAuditLogs(logs || [])
       }
 
-      // Calculate stats
       await loadStats()
-    } catch (error) {
-      console.error('Error loading leave data:', error)
-    }
+    } catch (error) { console.error('Error:', error) }
     setLoading(false)
   }
 
@@ -132,10 +149,8 @@ export default function LeaveManagement() {
     try {
       const today = new Date().toISOString().split('T')[0]
       const [
-        { count: totalRequests },
-        { count: pendingCount },
-        { count: approvedCount },
-        { count: declinedCount },
+        { count: totalRequests }, { count: pendingCount },
+        { count: approvedCount }, { count: declinedCount },
         { data: onLeave }
       ] = await Promise.all([
         supabase.from('leave_requests').select('*', { count: 'exact', head: true }),
@@ -144,30 +159,45 @@ export default function LeaveManagement() {
         supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
         supabase.from('leave_requests').select('*, employees(first_name, last_name)').eq('status', 'approved').lte('start_date', today).gte('end_date', today)
       ])
-      setLeaveStats({
-        totalRequests: totalRequests || 0,
-        pendingCount: pendingCount || 0,
-        approvedCount: approvedCount || 0,
-        declinedCount: declinedCount || 0,
-        onLeave: onLeave || []
-      })
+      setLeaveStats({ totalRequests, pendingCount, approvedCount, declinedCount, onLeave: onLeave || [] })
     } catch (error) { console.error('Stats error:', error) }
   }
 
-  // Calculate working days
+  // ═══════════════════════════════════════════
+  // CALCULATE WORKING DAYS
+  // ═══════════════════════════════════════════
   useEffect(() => {
     if (applyForm.start_date && applyForm.end_date) {
-      let days = 0
-      const start = new Date(applyForm.start_date)
-      const end = new Date(applyForm.end_date)
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        if (d.getDay() !== 0 && d.getDay() !== 6) days++
+      if (applyForm.is_partial && applyForm.partial_start && applyForm.partial_end) {
+        setCalculatedDays(0.5)
+      } else {
+        let days = 0
+        const start = new Date(applyForm.start_date)
+        const end = new Date(applyForm.end_date)
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          if (d.getDay() !== 0 && d.getDay() !== 6) days++
+        }
+        setCalculatedDays(days)
       }
-      setCalculatedDays(days)
     } else { setCalculatedDays(0) }
-  }, [applyForm.start_date, applyForm.end_date])
+  }, [applyForm.start_date, applyForm.end_date, applyForm.is_partial, applyForm.partial_start, applyForm.partial_end])
 
-  // Upload document
+  // ═══════════════════════════════════════════
+  // OPEN LEAVE APPLICATION FOR SPECIFIC TYPE
+  // ═══════════════════════════════════════════
+  const openLeaveApplication = (leaveTypeId) => {
+    setApplyForm({
+      leave_type_id: leaveTypeId, start_date: '', end_date: '',
+      reason: '', document_url: '', is_partial: false,
+      partial_start: '', partial_end: ''
+    })
+    setShowApplyForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // ═══════════════════════════════════════════
+  // UPLOAD DOCUMENT
+  // ═══════════════════════════════════════════
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -175,23 +205,32 @@ export default function LeaveManagement() {
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `leave-docs/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file)
-      if (uploadError) throw uploadError
+      const { error } = await supabase.storage.from('documents').upload(fileName, file)
+      if (error) throw error
       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
       setApplyForm({...applyForm, document_url: publicUrl})
       toast.success('Document uploaded!')
-    } catch (error) {
-      toast.error('Upload failed')
-    }
+    } catch (error) { toast.error('Upload failed') }
     setUploading(false)
   }
 
-  // Submit leave request
-  const handleApplyLeave = async (e) => {
+  // ═══════════════════════════════════════════
+  // SUBMIT LEAVE REQUEST
+  // ═══════════════════════════════════════════
+  const handleSubmitLeave = async (e) => {
     e.preventDefault()
     if (!applyForm.leave_type_id) { toast.error('Select leave type'); return }
     if (!applyForm.start_date || !applyForm.end_date) { toast.error('Select dates'); return }
     if (calculatedDays <= 0) { toast.error('Invalid dates'); return }
+
+    // Check balance
+    const leaveType = leaveTypes.find(lt => (lt.id || lt.code) === applyForm.leave_type_id)
+    const balance = leaveBalances.find(b => (b.leave_type_id || b.leave_types?.code) === applyForm.leave_type_id)
+    
+    if (leaveType?.paid !== false && balance && balance.remaining_days < calculatedDays) {
+      toast.error(`Insufficient balance. You have ${balance.remaining_days} days remaining.`)
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -206,122 +245,115 @@ export default function LeaveManagement() {
         total_days: calculatedDays,
         reason: applyForm.reason || '',
         document_url: applyForm.document_url || '',
-        status: 'pending'
+        status: 'pending',
+        is_partial: applyForm.is_partial
       }])
 
       if (error) throw error
 
-      // Log audit
+      // Audit log
       await supabase.from('leave_approvals').insert([{
         leave_request_id: null,
         action_by: user.id,
         action: 'submitted',
-        remarks: `Leave request submitted: ${applyForm.leave_type_id} from ${applyForm.start_date} to ${applyForm.end_date}`
+        remarks: `Leave submitted: ${applyForm.leave_type_id} | ${applyForm.start_date} to ${applyForm.end_date} | ${calculatedDays} days`
       }])
 
-      toast.success('Leave request submitted for approval! 🎉')
+      toast.success('Leave request submitted! 🎉')
       setShowApplyForm(false)
-      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '', document_url: '' })
+      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '', document_url: '', is_partial: false, partial_start: '', partial_end: '' })
       loadAllData()
     } catch (error) {
       console.error('Submit error:', error)
-      toast.error('Failed to submit: ' + error.message)
+      toast.error('Failed: ' + error.message)
     }
     setSubmitting(false)
   }
 
-  // Approve leave
-  const handleApprove = async (id, employeeName) => {
-    const comments = prompt(`Approval comments for ${employeeName} (optional):`) || ''
+  // ═══════════════════════════════════════════
+  // APPROVE / DECLINE / REQUEST INFO
+  // ═══════════════════════════════════════════
+  const handleApprove = async (id, name) => {
+    if (!window.confirm(`Approve leave for ${name}?`)) return
     try {
-      await supabase.from('leave_requests').update({ 
-        status: 'approved', 
-        approved_by: user.id, 
-        approved_at: new Date().toISOString(),
-        comments: comments
-      }).eq('id', id)
-
-      // Log audit
-      await supabase.from('leave_approvals').insert([{
-        leave_request_id: id,
-        action_by: user.id,
-        action: 'approved',
-        remarks: comments || 'Leave approved'
-      }])
-
-      toast.success(`Leave approved for ${employeeName}! ✅`)
+      await supabase.from('leave_requests').update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() }).eq('id', id)
+      await supabase.from('leave_approvals').insert([{ leave_request_id: id, action_by: user.id, action: 'approved', remarks: 'Leave approved' }])
+      toast.success(`Approved for ${name}! ✅`)
       loadAllData()
     } catch (error) { toast.error('Failed to approve') }
   }
 
-  // Decline leave
-  const handleReject = async (id, employeeName) => {
-    const reason = prompt(`Decline reason for ${employeeName}:`) || 'No reason provided'
+  const handleDecline = async (id, name) => {
+    const reason = prompt(`Decline reason for ${name}:`) || 'Not specified'
     if (reason === null) return
     try {
-      await supabase.from('leave_requests').update({ 
-        status: 'rejected', 
-        rejection_reason: reason,
-        approved_by: user.id,
-        approved_at: new Date().toISOString()
-      }).eq('id', id)
-
-      // Log audit
-      await supabase.from('leave_approvals').insert([{
-        leave_request_id: id,
-        action_by: user.id,
-        action: 'rejected',
-        remarks: reason
-      }])
-
-      toast.success(`Leave declined for ${employeeName}`)
+      await supabase.from('leave_requests').update({ status: 'rejected', rejection_reason: reason, approved_by: user.id, approved_at: new Date().toISOString() }).eq('id', id)
+      await supabase.from('leave_approvals').insert([{ leave_request_id: id, action_by: user.id, action: 'rejected', remarks: reason }])
+      toast.success(`Declined for ${name}`)
       loadAllData()
     } catch (error) { toast.error('Failed to decline') }
   }
 
-  // Request more info
-  const handleRequestInfo = async (id, employeeName) => {
-    const message = prompt(`What additional information is needed from ${employeeName}?`) || 'Please provide more information'
-    if (message === null) return
+  const handleRequestInfo = async (id, name) => {
+    const msg = prompt(`What info is needed from ${name}?`) || 'Please provide more details'
+    if (msg === null) return
     try {
-      await supabase.from('leave_requests').update({ 
-        status: 'pending',
-        comments: `INFO REQUESTED: ${message}`
-      }).eq('id', id)
-
-      await supabase.from('leave_approvals').insert([{
-        leave_request_id: id,
-        action_by: user.id,
-        action: 'returned',
-        remarks: message
-      }])
-
-      toast.success(`Info requested from ${employeeName}`)
+      await supabase.from('leave_requests').update({ status: 'pending', comments: `INFO REQUESTED: ${msg}` }).eq('id', id)
+      await supabase.from('leave_approvals').insert([{ leave_request_id: id, action_by: user.id, action: 'returned', remarks: msg }])
+      toast.success(`Info requested from ${name}`)
       loadAllData()
-    } catch (error) { toast.error('Failed to send request') }
+    } catch (error) { toast.error('Failed') }
   }
 
-  // Cancel request
   const handleCancel = async (id) => {
-    if (!window.confirm('Cancel this leave request?')) return
+    if (!window.confirm('Cancel this request?')) return
     try {
       await supabase.from('leave_requests').update({ status: 'cancelled' }).eq('id', id)
-      await supabase.from('leave_approvals').insert([{
-        leave_request_id: id, action_by: user.id, action: 'cancelled', remarks: 'Cancelled by employee'
-      }])
-      toast.success('Leave request cancelled')
+      await supabase.from('leave_approvals').insert([{ leave_request_id: id, action_by: user.id, action: 'cancelled', remarks: 'Cancelled by employee' }])
+      toast.success('Cancelled')
       loadAllData()
-    } catch (error) { toast.error('Failed to cancel') }
+    } catch (error) { toast.error('Failed') }
   }
 
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'
+  // ═══════════════════════════════════════════
+  // EXPORT FUNCTIONS
+  // ═══════════════════════════════════════════
+  const handleExportCSV = () => {
+    const data = allRequests.length > 0 ? allRequests : myRequests
+    const csv = ['Employee,Type,Start,End,Days,Status,Submitted'].join(',') + '\n' +
+      data.map(r => `${r.employees?.first_name || 'N/A'} ${r.employees?.last_name || ''},${r.leave_types?.name || r.leave_type_id},${r.start_date},${r.end_date},${r.total_days},${r.status},${r.submitted_at}`).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `Leave_Report_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    toast.success('CSV downloaded!')
+  }
 
+  const handleExportPDF = async () => {
+    try {
+      const element = reportRef.current
+      if (!element) return
+      const opt = { margin: 10, filename: `Leave_Report_${new Date().toISOString().split('T')[0]}.pdf`, image: { type: 'jpeg', quality: 1 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' } }
+      await html2pdf().set(opt).from(element).save()
+      toast.success('PDF downloaded!')
+    } catch (error) { toast.error('PDF failed') }
+  }
+
+  // ═══════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'
+  const formatDateTime = (d) => d ? new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'
+  
   const getStatusBadge = (s) => ({
     pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
     approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   }[s] || 'bg-slate-100')
+
+  const getBalanceForType = (typeId) => {
+    return leaveBalances.find(b => (b.leave_type_id || b.leave_types?.code) === typeId)
+  }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -337,8 +369,9 @@ export default function LeaveManagement() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        <Link to="/hr" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
-          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to HR Dashboard</span>
+        {/* Breadcrumb */}
+        <Link to="/hr" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-4">
+          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">HR Dashboard</span>
         </Link>
 
         {/* Header */}
@@ -347,28 +380,32 @@ export default function LeaveManagement() {
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
               <Calendar className="w-8 h-8 text-emerald-600" />Leave Management
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">SA BCEA Compliant · {isApprover ? 'Administrator View' : 'Employee Self-Service'}</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">
+              SA BCEA Compliant · {isSuperAdmin ? 'Super Administrator' : isHRManager ? 'HR Administrator' : isManager ? 'Manager View' : 'Employee Self-Service'}
+            </p>
           </div>
-          <button onClick={() => setShowApplyForm(!showApplyForm)} className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-medium flex items-center gap-2 hover:bg-emerald-700 shadow-lg">
-            <Plus className="w-5 h-5" /> Apply for Leave
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={handleExportCSV} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-1"><Download className="w-4 h-4" /> CSV</button>
+            <button onClick={handleExportPDF} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm flex items-center gap-1"><FileText className="w-4 h-4" /> PDF</button>
+            {isSuperAdmin && (
+              <button onClick={() => navigate('/hr/settings')} className="px-4 py-2 bg-slate-600 text-white rounded-xl text-sm flex items-center gap-1"><Settings className="w-4 h-4" /> Configure</button>
+            )}
+          </div>
         </motion.div>
 
-        {/* Stats Cards */}
+        {/* Admin Stats Bar */}
         {isApprover && !loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
             {[
-              { icon: FileText, label: 'Total Requests', value: leaveStats.totalRequests, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+              { icon: FileText, label: 'Total', value: leaveStats.totalRequests, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
               { icon: Clock, label: 'Pending', value: leaveStats.pendingCount, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
               { icon: CheckCircle2, label: 'Approved', value: leaveStats.approvedCount, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
               { icon: XCircle, label: 'Declined', value: leaveStats.declinedCount, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-            ].map(stat => (
-              <div key={stat.label} className="neu-raised rounded-2xl p-4 text-center">
-                <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mx-auto mb-2`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                </div>
-                <p className="text-2xl font-bold">{stat.value}</p>
-                <p className="text-xs text-slate-500">{stat.label}</p>
+              { icon: Users, label: 'On Leave Now', value: leaveStats.onLeave?.length || 0, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
+            ].map(s => (
+              <div key={s.label} className="neu-raised rounded-2xl p-3 text-center">
+                <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center mx-auto mb-1`}><s.icon className={`w-4 h-4 ${s.color}`} /></div>
+                <p className="text-xl font-bold">{s.value}</p><p className="text-[10px] text-slate-500">{s.label}</p>
               </div>
             ))}
           </div>
@@ -382,9 +419,8 @@ export default function LeaveManagement() {
             ...(isApprover ? [
               { id: 'approvals', label: `Approvals (${pendingApprovals.length})`, icon: Shield },
               { id: 'all-requests', label: 'All Requests', icon: FileText },
-              { id: 'on-leave', label: `On Leave (${leaveStats.onLeave?.length || 0})`, icon: Users },
+              { id: 'audit', label: 'Audit Trail', icon: History },
             ] : []),
-            { id: 'history', label: 'History', icon: History },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
@@ -395,229 +431,151 @@ export default function LeaveManagement() {
           ))}
         </div>
 
-        {loading && <div className="text-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div><p className="text-slate-500">Loading...</p></div>}
+        {loading && <div className="text-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div><p>Loading leave data...</p></div>}
 
-        {/* APPLY FORM */}
-        {showApplyForm && !loading && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-6 border-2 border-emerald-200 dark:border-emerald-800">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">Apply for Leave</h2>
-              <button onClick={() => setShowApplyForm(false)} className="p-1 rounded-lg hover:bg-slate-100"><XCircle className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleApplyLeave} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-slate-500 font-medium">Leave Type *</label>
-                  <select value={applyForm.leave_type_id} onChange={e => setApplyForm({...applyForm, leave_type_id: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1" required>
-                    <option value="">-- Select Leave Type --</option>
-                    {leaveTypes.map(lt => <option key={lt.id || lt.code} value={lt.id || lt.code}>{lt.name} ({lt.days_allowed} days/year)</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-slate-500 font-medium">Reason</label>
-                  <input type="text" value={applyForm.reason} onChange={e => setApplyForm({...applyForm, reason: e.target.value})}
-                    placeholder="Reason for leave..." className="w-full p-3 neu-inset rounded-xl mt-1" />
-                </div>
-                <div>
-                  <label className="text-sm text-slate-500 font-medium">Start Date *</label>
-                  <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({...applyForm, start_date: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1" required />
-                </div>
-                <div>
-                  <label className="text-sm text-slate-500 font-medium">End Date *</label>
-                  <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({...applyForm, end_date: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1" required />
-                </div>
-              </div>
-              {calculatedDays > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center border border-blue-200">
-                  <p className="text-blue-700 font-semibold">{calculatedDays} working day{calculatedDays > 1 ? 's' : ''} selected (weekends excluded)</p>
-                </div>
-              )}
-              <div>
-                <label className="text-sm text-slate-500 font-medium">Supporting Documents</label>
-                <div className="flex items-center gap-3 mt-1">
-                  <label className="px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-xl cursor-pointer hover:bg-slate-200 flex items-center gap-2 text-sm">
-                    <Upload className="w-4 h-4" /> {uploading ? 'Uploading...' : 'Upload File'}
-                    <input type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.jpg,.png,.doc,.docx" />
-                  </label>
-                  {applyForm.document_url && <span className="text-xs text-emerald-600">✅ File uploaded</span>}
-                </div>
-              </div>
-              <div className="flex gap-3 justify-end pt-2">
-                <button type="button" onClick={() => setShowApplyForm(false)} className="px-5 py-2.5 bg-slate-200 rounded-xl text-sm">Cancel</button>
-                <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50">
-                  {submitting ? 'Submitting...' : <><Send className="w-4 h-4" /> Submit for Approval</>}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-
-        {/* DASHBOARD TAB */}
+        {/* ═══════════════════════════════════════════ */}
+        {/* DASHBOARD TAB - LEAVE BALANCE CARDS */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'dashboard' && !loading && (
-          <div className="space-y-6">
-            <div className="neu-raised rounded-3xl p-6">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-emerald-600" />Leave Overview</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {leaveBalances.slice(0, 8).map(b => (
-                  <div key={b.id} className="rounded-xl p-4 text-center border-2" style={{ borderColor: b.leave_types?.color || '#10b981' }}>
-                    <p className="text-xs text-slate-500 font-medium">{b.leave_types?.name || 'Leave'}</p>
-                    <div className="w-full h-2 bg-slate-200 rounded-full mt-2 mb-1 overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${b.allocated_days > 0 ? Math.min((b.used_days / b.allocated_days) * 100, 100) : 0}%`, backgroundColor: b.leave_types?.color || '#10b981' }}></div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-emerald-600" />Leave Balances
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {leaveTypes.map(type => {
+                const balance = getBalanceForType(type.id || type.code)
+                const Icon = type.icon || Calendar
+                const allocated = balance?.allocated_days || type.days_allowed || 0
+                const used = balance?.used_days || 0
+                const pending = balance?.pending_days || 0
+                const remaining = balance?.remaining_days || allocated
+                const usagePercent = allocated > 0 ? Math.round((used / allocated) * 100) : 0
+
+                return (
+                  <motion.div key={type.id || type.code} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                    className="neu-raised rounded-2xl p-5 hover:scale-[1.02] transition-all cursor-pointer relative overflow-hidden"
+                    onClick={() => openLeaveApplication(type.id || type.code)}>
+                    {/* Top stripe */}
+                    <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: type.color }}></div>
+                    
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: type.color + '20' }}>
+                          <Icon className="w-5 h-5" style={{ color: type.color }} />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm">{type.name}</h3>
+                          <p className="text-[10px] text-slate-400">{type.description}</p>
+                        </div>
+                      </div>
+                      <button className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 transition-colors" title="Apply for this leave">
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                      </button>
                     </div>
-                    <p className="text-2xl font-bold mt-1" style={{ color: b.leave_types?.color }}>{b.remaining_days || 0}</p>
-                    <p className="text-[10px] text-slate-400">of {b.allocated_days} days remaining</p>
-                  </div>
-                ))}
-              </div>
+
+                    {/* Progress bar */}
+                    <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full mb-3 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500 flex" style={{ width: `${Math.min(usagePercent, 100)}%` }}>
+                        <div className="h-full flex-1" style={{ backgroundColor: type.color }}></div>
+                      </div>
+                    </div>
+
+                    {/* Stats grid */}
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2">
+                        <p className="text-lg font-bold" style={{ color: type.color }}>{remaining}</p>
+                        <p className="text-[9px] text-slate-400">Available</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2">
+                        <p className="text-lg font-bold text-slate-600">{allocated}</p>
+                        <p className="text-[9px] text-slate-400">Entitlement</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2">
+                        <p className="text-sm font-bold text-amber-600">{pending}</p>
+                        <p className="text-[9px] text-slate-400">Pending</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2">
+                        <p className="text-sm font-bold text-red-500">{used}</p>
+                        <p className="text-[9px] text-slate-400">Taken</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
-            {isApprover && leaveStats.onLeave?.length > 0 && (
-              <div className="neu-raised rounded-3xl p-6">
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" />Currently on Leave ({leaveStats.onLeave.length})</h2>
-                <div className="flex flex-wrap gap-3">
-                  {leaveStats.onLeave.map(l => (
-                    <div key={l.id} className="bg-blue-50 dark:bg-blue-900/20 rounded-xl px-4 py-2 border border-blue-200">
-                      <span className="font-medium text-sm">{l.employees?.first_name} {l.employees?.last_name}</span>
-                      <span className="text-xs text-slate-500 ml-2">{formatDate(l.start_date)} - {formatDate(l.end_date)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════ */}
+        {/* APPLY FORM (Shown when showApplyForm is true) */}
+        {/* ═══════════════════════════════════════════ */}
+        <AnimatePresence>
+          {showApplyForm && (
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowApplyForm(false)}>
+              <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">Apply for Leave</h2>
+                    <button onClick={() => setShowApplyForm(false)} className="p-1 rounded-lg hover:bg-slate-100"><XCircle className="w-5 h-5" /></button>
+                  </div>
+                  <form onSubmit={handleSubmitLeave} className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium">Leave Type *</label>
+                      <select value={applyForm.leave_type_id} onChange={e => setApplyForm({...applyForm, leave_type_id: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" required>
+                        <option value="">Select type...</option>
+                        {leaveTypes.map(lt => <option key={lt.id || lt.code} value={lt.id || lt.code}>{lt.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><label className="text-sm font-medium">Start Date *</label><input type="date" value={applyForm.start_date} onChange={e => setApplyForm({...applyForm, start_date: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" required /></div>
+                      <div><label className="text-sm font-medium">End Date *</label><input type="date" value={applyForm.end_date} onChange={e => setApplyForm({...applyForm, end_date: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" required /></div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="partial" checked={applyForm.is_partial} onChange={e => setApplyForm({...applyForm, is_partial: e.target.checked})} />
+                      <label htmlFor="partial" className="text-sm">Partial day leave</label>
+                    </div>
+                    {calculatedDays > 0 && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center">
+                        <p className="font-semibold text-blue-700">{calculatedDays} day{calculatedDays !== 1 ? 's' : ''} selected</p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-sm font-medium">Reason</label>
+                      <textarea value={applyForm.reason} onChange={e => setApplyForm({...applyForm, reason: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl mt-1" placeholder="Reason for leave..." />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Supporting Document</label>
+                      <div className="mt-1">
+                        <label className="px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-xl cursor-pointer hover:bg-slate-200 inline-flex items-center gap-2 text-sm">
+                          <Upload className="w-4 h-4" /> {uploading ? 'Uploading...' : 'Upload File'}
+                          <input type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.jpg,.png,.doc,.docx" />
+                        </label>
+                        {applyForm.document_url && <span className="ml-2 text-xs text-emerald-600">✅ Uploaded</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-3 justify-end pt-2">
+                      <button type="button" onClick={() => setShowApplyForm(false)} className="px-5 py-2.5 bg-slate-200 rounded-xl text-sm">Cancel</button>
+                      <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50">
+                        {submitting ? 'Submitting...' : <><Send className="w-4 h-4" /> Submit</>}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════════ */}
         {/* MY LEAVE TAB */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'my-leave' && !loading && (
-          <div className="neu-raised rounded-3xl p-6">
-            <h2 className="text-lg font-bold mb-4">My Leave Balances</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {leaveBalances.map(b => (
-                <div key={b.id} className="rounded-xl p-4 text-center border-2" style={{ borderColor: b.leave_types?.color }}>
-                  <p className="text-xs text-slate-500">{b.leave_types?.name}</p>
-                  <div className="w-full h-2 bg-slate-200 rounded-full mt-2 mb-1 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${b.allocated_days > 0 ? Math.min((b.used_days / b.allocated_days) * 100, 100) : 0}%`, backgroundColor: b.leave_types?.color }}></div>
-                  </div>
-                  <p className="text-2xl font-bold mt-1" style={{ color: b.leave_types?.color }}>{b.remaining_days || 0}</p>
-                  <p className="text-[10px] text-slate-400">Used: {b.used_days} | Remaining: {b.remaining_days}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* APPROVALS TAB */}
-        {activeTab === 'approvals' && isApprover && !loading && (
-          <div className="neu-raised rounded-3xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Shield className="w-6 h-6 text-amber-600" />
-              <h2 className="text-lg font-bold">Pending Leave Approvals ({pendingApprovals.length})</h2>
-            </div>
-            {pendingApprovals.length > 0 ? (
-              <div className="space-y-4">
-                {pendingApprovals.map(req => (
-                  <div key={req.id} className="bg-white dark:bg-slate-700/30 border border-amber-200 rounded-xl p-5">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: req.leave_types?.color }}></span>
-                          <span className="font-bold text-lg">{req.employees?.first_name} {req.employees?.last_name}</span>
-                          <span className="text-xs text-slate-500">{req.employees?.employee_code} · {req.employees?.department}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm ml-5">
-                          <div><span className="text-slate-500">Type:</span> <span className="font-semibold">{req.leave_types?.name}</span></div>
-                          <div><span className="text-slate-500">Days:</span> <span className="font-semibold">{req.total_days} working days</span></div>
-                          <div><span className="text-slate-500">Dates:</span> <span>{formatDate(req.start_date)} - {formatDate(req.end_date)}</span></div>
-                          <div><span className="text-slate-500">Position:</span> <span>{req.employees?.position || 'N/A'}</span></div>
-                        </div>
-                        {req.reason && <p className="text-sm text-slate-600 mt-2 ml-5">📝 {req.reason}</p>}
-                        {req.document_url && (
-                          <a href={req.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline ml-5 mt-1 inline-block">📎 View attached document</a>
-                        )}
-                      </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button onClick={() => handleApprove(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} 
-                          className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4" /> Approve
-                        </button>
-                        <button onClick={() => handleReject(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} 
-                          className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 flex items-center gap-2">
-                          <XCircle className="w-4 h-4" /> Decline
-                        </button>
-                        <button onClick={() => handleRequestInfo(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} 
-                          className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4" /> Request Info
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16"><CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-4" /><p className="text-xl font-semibold">All Clear! 🎉</p><p className="text-sm text-slate-500 mt-2">No pending leave requests to review</p></div>
-            )}
-          </div>
-        )}
-
-        {/* ALL REQUESTS TAB */}
-        {activeTab === 'all-requests' && isApprover && !loading && (
-          <div className="neu-raised rounded-3xl p-6">
-            <div className="flex justify-between mb-4">
-              <h2 className="text-lg font-bold">All Leave Requests</h2>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 neu-inset rounded-lg text-sm">
-                <option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Declined</option>
-              </select>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b bg-slate-50"><th className="text-left py-3 px-4">Employee</th><th className="text-left py-3 px-4">Type</th><th className="text-left py-3 px-4">Dates</th><th className="text-right py-3 px-4">Days</th><th className="text-center py-3 px-4">Status</th><th className="text-left py-3 px-4">Submitted</th></tr></thead>
-                <tbody>
-                  {(allRequests.length > 0 ? allRequests : myRequests).filter(r => statusFilter === 'all' || r.status === statusFilter).map(r => (
-                    <tr key={r.id} className="border-b hover:bg-slate-50">
-                      <td className="py-3 px-4 font-medium">{r.employees?.first_name || profile?.full_name || 'N/A'} {r.employees?.last_name || ''}</td>
-                      <td className="py-3 px-4">{r.leave_types?.name || r.leave_type_id}</td>
-                      <td className="py-3 px-4 text-xs">{formatDate(r.start_date)} - {formatDate(r.end_date)}</td>
-                      <td className="py-3 px-4 text-right font-semibold">{r.total_days}</td>
-                      <td className="py-3 px-4 text-center"><span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(r.status)}`}>{r.status}</span></td>
-                      <td className="py-3 px-4 text-xs">{formatDate(r.submitted_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ON LEAVE TAB */}
-        {activeTab === 'on-leave' && isApprover && !loading && (
-          <div className="neu-raised rounded-3xl p-6">
-            <h2 className="text-lg font-bold mb-4">Employees Currently on Leave ({leaveStats.onLeave?.length || 0})</h2>
-            {leaveStats.onLeave?.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {leaveStats.onLeave.map(l => (
-                  <div key={l.id} className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span className="font-bold">{l.employees?.first_name} {l.employees?.last_name}</span>
-                    </div>
-                    <p className="text-sm">{l.leave_types?.name || 'Leave'}</p>
-                    <p className="text-xs text-slate-500 mt-1">{formatDate(l.start_date)} - {formatDate(l.end_date)} ({l.total_days} days)</p>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="text-center py-8 text-slate-500">No employees currently on leave</p>}
-          </div>
-        )}
-
-        {/* HISTORY TAB */}
-        {activeTab === 'history' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-lg font-bold">My Leave History</h2>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 neu-inset rounded-lg text-sm">
-                <option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Declined</option><option value="cancelled">Cancelled</option>
+                <option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Declined</option>
               </select>
             </div>
             {myRequests.length > 0 ? (
@@ -627,21 +585,120 @@ export default function LeaveManagement() {
                   <tbody>
                     {myRequests.filter(r => statusFilter === 'all' || r.status === statusFilter).map(r => (
                       <tr key={r.id} className="border-b hover:bg-slate-50">
-                        <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.leave_types?.color }}></span><span>{r.leave_types?.name || r.leave_type_id}</span></div></td>
+                        <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.leave_types?.color || '#10b981' }}></span><span>{r.leave_types?.name || r.leave_type_id}</span></div></td>
                         <td className="py-3 px-4 text-xs">{formatDate(r.start_date)} - {formatDate(r.end_date)}</td>
                         <td className="py-3 px-4 text-right font-semibold">{r.total_days}</td>
                         <td className="py-3 px-4 text-xs truncate max-w-[150px]">{r.reason || '-'}</td>
                         <td className="py-3 px-4 text-center"><span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(r.status)}`}>{r.status}</span></td>
-                        <td className="py-3 px-4 text-center">
-                          {r.status === 'pending' && <button onClick={() => handleCancel(r.id)} className="text-xs text-red-600 hover:underline">Cancel</button>}
-                          {r.status !== 'pending' && <span className="text-xs text-slate-400">-</span>}
-                        </td>
+                        <td className="py-3 px-4 text-center">{r.status === 'pending' ? <button onClick={() => handleCancel(r.id)} className="text-xs text-red-600 hover:underline">Cancel</button> : <span className="text-xs text-slate-400">-</span>}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : <p className="text-center py-8 text-slate-500">No leave history</p>}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* APPROVALS TAB */}
+        {/* ═══════════════════════════════════════════ */}
+        {activeTab === 'approvals' && isApprover && !loading && (
+          <div className="neu-raised rounded-3xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield className="w-6 h-6 text-amber-600" />
+              <h2 className="text-lg font-bold">Pending Approvals ({pendingApprovals.length})</h2>
+            </div>
+            {pendingApprovals.length > 0 ? (
+              <div className="space-y-4">
+                {pendingApprovals.map(req => (
+                  <div key={req.id} className="bg-white dark:bg-slate-700/30 border border-amber-200 rounded-xl p-5">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: req.leave_types?.color }}></span><span className="font-bold text-lg">{req.employees?.first_name} {req.employees?.last_name}</span><span className="text-xs text-slate-500">{req.employees?.employee_code} · {req.employees?.department}</span></div>
+                        <div className="grid grid-cols-2 gap-2 text-sm ml-5">
+                          <div><span className="text-slate-500">Type:</span> <span className="font-semibold">{req.leave_types?.name}</span></div>
+                          <div><span className="text-slate-500">Days:</span> <span className="font-semibold">{req.total_days} days</span></div>
+                          <div><span className="text-slate-500">Dates:</span> <span>{formatDate(req.start_date)} - {formatDate(req.end_date)}</span></div>
+                          <div><span className="text-slate-500">Position:</span> <span>{req.employees?.position || 'N/A'}</span></div>
+                        </div>
+                        {req.reason && <p className="text-sm text-slate-600 mt-2 ml-5">📝 {req.reason}</p>}
+                        {req.document_url && <a href={req.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline ml-5 mt-1 inline-block">📎 View document</a>}
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button onClick={() => handleApprove(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />Approve</button>
+                        <button onClick={() => handleDecline(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 flex items-center gap-2"><XCircle className="w-4 h-4" />Decline</button>
+                        <button onClick={() => handleRequestInfo(req.id, `${req.employees?.first_name} ${req.employees?.last_name}`)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 flex items-center gap-2"><MessageSquare className="w-4 h-4" />Request Info</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16"><CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-4" /><p className="text-xl font-semibold">All Clear! 🎉</p><p className="text-sm text-slate-500">No pending requests</p></div>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* ALL REQUESTS TAB */}
+        {/* ═══════════════════════════════════════════ */}
+        {activeTab === 'all-requests' && isApprover && !loading && (
+          <div className="neu-raised rounded-3xl p-6">
+            <div className="flex flex-wrap justify-between gap-3 mb-4">
+              <h2 className="text-lg font-bold">All Leave Requests</h2>
+              <div className="flex gap-2 flex-wrap">
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 neu-inset rounded-lg text-sm"><option value="all">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Declined</option></select>
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." className="px-3 py-1.5 neu-inset rounded-lg text-sm w-40" />
+              </div>
+            </div>
+            <div ref={reportRef} className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b bg-slate-50"><th className="text-left py-3 px-3">Employee</th><th className="text-left py-3 px-3">Type</th><th className="text-left py-3 px-3">Dates</th><th className="text-right py-3 px-3">Days</th><th className="text-left py-3 px-3">Dept</th><th className="text-center py-3 px-3">Status</th><th className="text-left py-3 px-3">Submitted</th><th className="text-left py-3 px-3">Approved By</th></tr></thead>
+                <tbody>
+                  {allRequests.filter(r => {
+                    if (statusFilter !== 'all' && r.status !== statusFilter) return false
+                    if (searchTerm && !(`${r.employees?.first_name} ${r.employees?.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()))) return false
+                    return true
+                  }).map(r => (
+                    <tr key={r.id} className="border-b hover:bg-slate-50">
+                      <td className="py-2 px-3 font-medium text-xs">{r.employees?.first_name} {r.employees?.last_name}</td>
+                      <td className="py-2 px-3 text-xs">{r.leave_types?.name || r.leave_type_id}</td>
+                      <td className="py-2 px-3 text-xs">{formatDate(r.start_date)} - {formatDate(r.end_date)}</td>
+                      <td className="py-2 px-3 text-right text-xs font-semibold">{r.total_days}</td>
+                      <td className="py-2 px-3 text-xs">{r.employees?.department || 'N/A'}</td>
+                      <td className="py-2 px-3 text-center"><span className={`px-2 py-1 rounded-full text-[10px] ${getStatusBadge(r.status)}`}>{r.status}</span></td>
+                      <td className="py-2 px-3 text-[10px]">{formatDate(r.submitted_at)}</td>
+                      <td className="py-2 px-3 text-[10px]">{r.approved_by ? 'Approved' : r.status === 'rejected' ? 'Declined' : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* AUDIT TRAIL TAB */}
+        {/* ═══════════════════════════════════════════ */}
+        {activeTab === 'audit' && isApprover && !loading && (
+          <div className="neu-raised rounded-3xl p-6">
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><History className="w-5 h-5 text-purple-600" />Audit Trail</h2>
+            {auditLogs.length > 0 ? (
+              <div className="space-y-2">
+                {auditLogs.slice(0, 30).map(log => (
+                  <div key={log.id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-700/30 text-xs">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      log.action === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                      log.action === 'rejected' ? 'bg-red-100 text-red-700' :
+                      log.action === 'submitted' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                    }`}>{log.action}</span>
+                    <span className="text-slate-500 flex-1">{log.remarks}</span>
+                    <span className="text-slate-400 whitespace-nowrap">{formatDateTime(log.action_date)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-center py-8 text-slate-500">No audit records</p>}
           </div>
         )}
       </main>
