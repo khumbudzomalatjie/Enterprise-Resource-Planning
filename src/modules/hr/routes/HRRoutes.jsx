@@ -5,6 +5,7 @@ import HRDashboard from '../pages/HRDashboard'
 import EmployeeList from '../pages/EmployeeList'
 import EmployeeDetail from '../pages/EmployeeDetail'
 import CreateEmployee from '../pages/CreateEmployee'
+import LeaveManagement from '../pages/LeaveManagement'
 import AttendanceDashboard from '../attendance/pages/AttendanceDashboard'
 import { USER_ROLES } from '../../../types/authTypes'
 
@@ -184,9 +185,11 @@ export default function HRRoutes() {
             <RoleBasedRoute requiredRoles={[
               USER_ROLES.SUPER_ADMIN, 
               USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER
+              USER_ROLES.OPERATIONS_MANAGER,
+              USER_ROLES.SUPERVISOR,
+              USER_ROLES.CLEANER
             ]}>
-              <HRDashboard />
+              <LeaveManagement />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
@@ -203,7 +206,7 @@ export default function HRRoutes() {
               USER_ROLES.SUPERVISOR,
               USER_ROLES.CLEANER
             ]}>
-              <HRDashboard />
+              <LeaveManagement />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
