@@ -12,19 +12,42 @@ import {
   FileText, AlertCircle
 } from 'lucide-react'
 
+// ═══════════════════════════════════════════
+// FALLBACK LEAVE TYPES (SA BCEA Compliant)
+// Used if database table doesn't exist or is empty
+// ═══════════════════════════════════════════
+const FALLBACK_LEAVE_TYPES = [
+  { id: 'annual', name: 'Annual Leave', days_allowed: 15, paid: true, code: 'ANNUAL', color: '#10b981', cycle_type: 'annual' },
+  { id: 'sick', name: 'Sick Leave', days_allowed: 30, paid: true, code: 'SICK', color: '#ef4444', cycle_type: '36_months' },
+  { id: 'family', name: 'Family Responsibility Leave', days_allowed: 3, paid: true, code: 'FAMILY', color: '#f59e0b', cycle_type: 'annual' },
+  { id: 'maternity', name: 'Maternity Leave', days_allowed: 120, paid: false, code: 'MATERNITY', color: '#ec4899', cycle_type: 'per_event' },
+  { id: 'parental', name: 'Parental Leave', days_allowed: 10, paid: false, code: 'PARENTAL', color: '#8b5cf6', cycle_type: 'per_event' },
+  { id: 'adoption', name: 'Adoption Leave', days_allowed: 70, paid: false, code: 'ADOPTION', color: '#6366f1', cycle_type: 'per_event' },
+  { id: 'commissioning', name: 'Commissioning Parental Leave', days_allowed: 70, paid: false, code: 'COMMISSIONING', color: '#14b8a6', cycle_type: 'per_event' },
+  { id: 'study', name: 'Study Leave', days_allowed: 10, paid: true, code: 'STUDY', color: '#0ea5e9', cycle_type: 'annual' },
+  { id: 'compassionate', name: 'Compassionate Leave', days_allowed: 5, paid: true, code: 'COMPASSIONATE', color: '#64748b', cycle_type: 'per_event' },
+  { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, paid: false, code: 'UNPAID', color: '#78716c', cycle_type: 'annual' },
+]
+
 export default function LeaveManagement() {
   const { isDark, toggleTheme } = useThemeStore()
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
+  
+  // Tab & UI State
   const [activeTab, setActiveTab] = useState('my-leave')
+  const [showApplyForm, setShowApplyForm] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  
+  // Data State
+  const [leaveTypes, setLeaveTypes] = useState(FALLBACK_LEAVE_TYPES) // Start with fallback
   const [leaveBalances, setLeaveBalances] = useState([])
   const [leaveRequests, setLeaveRequests] = useState([])
   const [pendingApprovals, setPendingApprovals] = useState([])
-  const [leaveTypes, setLeaveTypes] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showApplyForm, setShowApplyForm] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('all')
+  
+  // Apply Form State
   const [applyForm, setApplyForm] = useState({ 
     leave_type_id: '', 
     start_date: '', 
@@ -37,10 +60,13 @@ export default function LeaveManagement() {
     loadAllData() 
   }, [])
 
+  // ═══════════════════════════════════════════
+  // LOAD ALL LEAVE DATA
+  // ═══════════════════════════════════════════
   const loadAllData = async () => {
     setLoading(true)
     try {
-      // 1. Load leave types directly from database
+      // 1. Load leave types from database
       const { data: types, error: typeError } = await supabase
         .from('leave_types')
         .select('*')
@@ -48,11 +74,13 @@ export default function LeaveManagement() {
         .order('display_order')
       
       if (typeError) {
-        console.error('Error loading leave types:', typeError)
-        toast.error('Failed to load leave types. Please check database.')
+        console.warn('Could not load leave types from DB, using fallback:', typeError.message)
+        setLeaveTypes(FALLBACK_LEAVE_TYPES)
+      } else if (!types || types.length === 0) {
+        console.warn('No leave types in DB, using fallback')
+        setLeaveTypes(FALLBACK_LEAVE_TYPES)
       } else {
-        console.log('Leave types loaded:', types?.length)
-        setLeaveTypes(types || [])
+        setLeaveTypes(types)
       }
 
       // 2. Get employee record
@@ -93,17 +121,18 @@ export default function LeaveManagement() {
           setPendingApprovals(pending || [])
         }
       } else {
-        // If no employee record found, show message
-        console.log('No employee record found for user:', user?.id)
+        console.log('No employee record found for user:', user?.email)
       }
     } catch (error) {
       console.error('Error loading leave data:', error)
-      toast.error('Failed to load leave data')
+      setLeaveTypes(FALLBACK_LEAVE_TYPES)
     }
     setLoading(false)
   }
 
-  // Calculate working days when dates change
+  // ═══════════════════════════════════════════
+  // CALCULATE WORKING DAYS
+  // ═══════════════════════════════════════════
   useEffect(() => {
     if (applyForm.start_date && applyForm.end_date) {
       let days = 0
@@ -118,6 +147,9 @@ export default function LeaveManagement() {
     }
   }, [applyForm.start_date, applyForm.end_date])
 
+  // ═══════════════════════════════════════════
+  // SUBMIT LEAVE REQUEST
+  // ═══════════════════════════════════════════
   const handleApplyLeave = async (e) => {
     e.preventDefault()
     
@@ -143,7 +175,7 @@ export default function LeaveManagement() {
         .single()
 
       if (!employee) {
-        toast.error('Employee record not found')
+        toast.error('Employee record not found. Please contact HR.')
         setSubmitting(false)
         return
       }
@@ -156,7 +188,7 @@ export default function LeaveManagement() {
           start_date: applyForm.start_date,
           end_date: applyForm.end_date,
           total_days: calculatedDays,
-          reason: applyForm.reason,
+          reason: applyForm.reason || '',
           status: 'pending'
         }])
 
@@ -173,17 +205,15 @@ export default function LeaveManagement() {
     setSubmitting(false)
   }
 
+  // ═══════════════════════════════════════════
+  // APPROVE / REJECT LEAVE
+  // ═══════════════════════════════════════════
   const handleApprove = async (id) => {
     try {
       await supabase
         .from('leave_requests')
-        .update({ 
-          status: 'approved', 
-          approved_by: user.id, 
-          approved_at: new Date().toISOString() 
-        })
+        .update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() })
         .eq('id', id)
-      
       toast.success('Leave approved! ✅')
       loadAllData()
     } catch (error) {
@@ -194,16 +224,11 @@ export default function LeaveManagement() {
   const handleReject = async (id) => {
     const reason = prompt('Rejection reason (optional):')
     if (reason === null) return
-    
     try {
       await supabase
         .from('leave_requests')
-        .update({ 
-          status: 'rejected', 
-          rejection_reason: reason 
-        })
+        .update({ status: 'rejected', rejection_reason: reason || '' })
         .eq('id', id)
-      
       toast.success('Leave rejected')
       loadAllData()
     } catch (error) {
@@ -211,13 +236,12 @@ export default function LeaveManagement() {
     }
   }
 
+  // ═══════════════════════════════════════════
+  // HELPER FUNCTIONS
+  // ═══════════════════════════════════════════
   const formatDate = (d) => {
     if (!d) return 'N/A'
-    return new Date(d).toLocaleDateString('en-ZA', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
-    })
+    return new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
   const getStatusBadge = (status) => {
@@ -236,6 +260,7 @@ export default function LeaveManagement() {
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       
+      {/* Theme Toggle */}
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -250,7 +275,7 @@ export default function LeaveManagement() {
         {/* Breadcrumb */}
         <Link to="/hr" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
           <ArrowLeft className="w-4 h-4 mr-1" />
-          <span className="text-sm">Back to HR</span>
+          <span className="text-sm">Back to HR Dashboard</span>
         </Link>
 
         {/* Header */}
@@ -270,7 +295,7 @@ export default function LeaveManagement() {
           </div>
           <button 
             onClick={() => setShowApplyForm(!showApplyForm)}
-            className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-medium flex items-center gap-2 hover:bg-emerald-700 transition-colors"
+            className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-medium flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg"
           >
             <Plus className="w-5 h-5" /> Apply Leave
           </button>
@@ -303,11 +328,13 @@ export default function LeaveManagement() {
         {loading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div>
-            <p className="text-slate-500">Loading leave data...</p>
+            <p className="text-slate-500 dark:text-slate-400">Loading leave data...</p>
           </div>
         )}
 
-        {/* Apply Form */}
+        {/* ═══════════════════════════════════════════ */}
+        {/* APPLY LEAVE FORM */}
+        {/* ═══════════════════════════════════════════ */}
         {showApplyForm && !loading && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }} 
@@ -316,68 +343,68 @@ export default function LeaveManagement() {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-800 dark:text-white">Apply for Leave</h2>
-              <button onClick={() => setShowApplyForm(false)} className="text-slate-400 hover:text-slate-600">
-                ✕
+              <button onClick={() => setShowApplyForm(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
+                <XCircle className="w-5 h-5" />
               </button>
             </div>
             
             <form onSubmit={handleApplyLeave} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Leave Type Dropdown */}
+                {/* Leave Type Dropdown - NOW WITH FALLBACK */}
                 <div>
-                  <label className="text-sm text-slate-500 dark:text-slate-400">Leave Type *</label>
+                  <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Leave Type *</label>
                   <select 
                     value={applyForm.leave_type_id} 
                     onChange={e => setApplyForm({...applyForm, leave_type_id: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300"
+                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
                     required
                   >
                     <option value="">-- Select Leave Type --</option>
                     {leaveTypes.map(lt => (
-                      <option key={lt.id} value={lt.id}>
-                        {lt.name} ({lt.days_allowed} days - {lt.paid ? 'Paid' : 'Unpaid'})
+                      <option key={lt.id || lt.code} value={lt.id || lt.code}>
+                        {lt.name} ({lt.days_allowed} days - {lt.paid ? 'Paid' : 'Unpaid/UIF'})
                       </option>
                     ))}
                   </select>
                   {leaveTypes.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">
-                      No leave types available. Please run the database setup SQL.
+                    <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> No leave types loaded. Please refresh or contact support.
                     </p>
                   )}
                 </div>
 
                 {/* Reason */}
                 <div>
-                  <label className="text-sm text-slate-500 dark:text-slate-400">Reason</label>
+                  <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Reason</label>
                   <input 
                     type="text" 
                     value={applyForm.reason} 
                     onChange={e => setApplyForm({...applyForm, reason: e.target.value})}
                     placeholder="Reason for leave..."
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300" 
+                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" 
                   />
                 </div>
 
                 {/* Start Date */}
                 <div>
-                  <label className="text-sm text-slate-500 dark:text-slate-400">Start Date *</label>
+                  <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Start Date *</label>
                   <input 
                     type="date" 
                     value={applyForm.start_date} 
                     onChange={e => setApplyForm({...applyForm, start_date: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300" 
+                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" 
                     required 
                   />
                 </div>
 
                 {/* End Date */}
                 <div>
-                  <label className="text-sm text-slate-500 dark:text-slate-400">End Date *</label>
+                  <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">End Date *</label>
                   <input 
                     type="date" 
                     value={applyForm.end_date} 
                     onChange={e => setApplyForm({...applyForm, end_date: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300" 
+                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" 
                     required 
                   />
                 </div>
@@ -389,7 +416,7 @@ export default function LeaveManagement() {
                   <p className="text-blue-700 dark:text-blue-400 font-semibold">
                     {calculatedDays} working day{calculatedDays > 1 ? 's' : ''} selected
                   </p>
-                  <p className="text-xs text-blue-500 mt-1">Weekends excluded</p>
+                  <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">Weekends are automatically excluded</p>
                 </div>
               )}
 
@@ -398,17 +425,17 @@ export default function LeaveManagement() {
                 <button 
                   type="button" 
                   onClick={() => setShowApplyForm(false)} 
-                  className="px-5 py-2.5 bg-slate-200 dark:bg-slate-600 rounded-xl text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-500"
+                  className="px-5 py-2.5 bg-slate-200 dark:bg-slate-600 rounded-xl text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={submitting}
-                  className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                  className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-lg"
                 >
                   {submitting ? (
-                    <>Submitting...</>
+                    'Submitting...'
                   ) : (
                     <><Send className="w-4 h-4" /> Submit Request</>
                   )}
@@ -418,7 +445,9 @@ export default function LeaveManagement() {
           </motion.div>
         )}
 
+        {/* ═══════════════════════════════════════════ */}
         {/* MY LEAVE TAB */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'my-leave' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
@@ -430,7 +459,7 @@ export default function LeaveManagement() {
                 {leaveBalances.slice(0, 8).map(balance => (
                   <div 
                     key={balance.id} 
-                    className="rounded-xl p-4 text-center border-2 transition-all hover:shadow-md"
+                    className="rounded-xl p-4 text-center border-2 transition-all hover:shadow-md bg-white dark:bg-slate-700/30"
                     style={{ borderColor: balance.leave_types?.color || '#10b981' }}
                   >
                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -456,15 +485,19 @@ export default function LeaveManagement() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <AlertCircle className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No leave balances found</p>
-                <p className="text-xs text-slate-400 mt-1">Contact HR to set up your leave balances</p>
+                <AlertCircle className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-slate-500 dark:text-slate-400">No leave balances found</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  Contact HR to set up your leave balances
+                </p>
               </div>
             )}
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════ */}
         {/* BALANCES TAB */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'balances' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
@@ -507,13 +540,15 @@ export default function LeaveManagement() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-slate-500">No leave balances found</p>
+                <p className="text-slate-500 dark:text-slate-400">No leave balances found</p>
               </div>
             )}
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════ */}
         {/* HISTORY TAB */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'history' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between items-center mb-4">
@@ -521,7 +556,7 @@ export default function LeaveManagement() {
               <select 
                 value={statusFilter} 
                 onChange={e => setStatusFilter(e.target.value)} 
-                className="px-3 py-1.5 neu-inset rounded-lg text-sm text-slate-600 dark:text-slate-300"
+                className="px-3 py-1.5 neu-inset rounded-lg text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -579,14 +614,16 @@ export default function LeaveManagement() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-500">No leave requests found</p>
+                <FileText className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-slate-500 dark:text-slate-400">No leave requests found</p>
               </div>
             )}
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════ */}
         {/* APPROVALS TAB (HR/Manager only) */}
+        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'approvals' && isHR && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
@@ -620,7 +657,7 @@ export default function LeaveManagement() {
                             Reason: {req.reason}
                           </p>
                         )}
-                        <p className="text-xs text-slate-400 mt-1">
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Submitted: {formatDate(req.submitted_at)}
                         </p>
                       </div>
