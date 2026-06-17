@@ -11,7 +11,7 @@ import {
   ShoppingCart, Landmark, Database, Smartphone,
   FileText, Calendar, FolderOpen, Truck, Clock,
   DollarSign, BarChart3, CheckCircle2, Sparkles,
-  Sun, Moon, Shield, Workflow
+  Sun, Moon, Shield, Workflow, Activity
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -116,6 +116,13 @@ export default function Dashboard() {
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.OPERATIONS_MANAGER]
     },
     { 
+      icon: Activity, 
+      label: 'Tracker', 
+      description: 'Track jobs, vendors, POs, inventory, vehicles, staff',
+      path: '/tracker',
+      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER, USER_ROLES.SUPERVISOR]
+    },
+    { 
       icon: Smartphone, 
       label: 'Field Operations', 
       description: 'Monitor cleaners, photos, incidents, supplies',
@@ -142,7 +149,7 @@ export default function Dashboard() {
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
       '/inventory', '/procurement', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
-      '/mobile/field', '/mobile'
+      '/tracker', '/mobile/field', '/mobile'
     ]
     return builtModules.includes(module.path)
   }
@@ -152,7 +159,7 @@ export default function Dashboard() {
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
       '/inventory', '/procurement', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
-      '/mobile/field', '/mobile', '/dashboard', '/users'
+      '/tracker', '/mobile/field', '/mobile', '/dashboard', '/users'
     ]
     
     if (availableModules.includes(module.path)) {
