@@ -12,7 +12,9 @@ import { USER_ROLES } from '../../../types/authTypes'
 export default function HRRoutes() {
   return (
     <Routes>
-      {/* HR Main Dashboard */}
+      {/* ============================================ */}
+      {/* HR MAIN DASHBOARD                            */}
+      {/* ============================================ */}
       <Route
         path="/"
         element={
@@ -291,6 +293,10 @@ export default function HRRoutes() {
         }
       />
 
+      {/* ============================================ */}
+      {/* REDIRECTS                                    */}
+      {/* ============================================ */}
+      
       {/* Redirect to Operations Module */}
       <Route
         path="/jobs"
