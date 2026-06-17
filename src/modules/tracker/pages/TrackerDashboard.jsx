@@ -52,10 +52,8 @@ export default function TrackerDashboard() {
 
       // ═══ JOB HISTORY ═══
       if (type === 'Job') {
-        // Get job data to see status changes
         const { data: jobData } = await supabase.from('jobs').select('*').eq('id', entityId).single()
         if (jobData) {
-          // Job created
           history.push({
             id: 'created',
             action: 'created',
@@ -65,7 +63,6 @@ export default function TrackerDashboard() {
             color: 'text-emerald-600 bg-emerald-100',
             details: `Job "${jobData.title}" was created with status "${jobData.status}"`
           })
-          // If status changed from original
           if (jobData.status !== 'pending' && jobData.updated_at !== jobData.created_at) {
             history.push({
               id: 'status-change',
@@ -77,7 +74,6 @@ export default function TrackerDashboard() {
               details: `Status changed to "${jobData.status}"`
             })
           }
-          // If actual start/end times exist
           if (jobData.actual_start_time) {
             history.push({
               id: 'started',
@@ -102,10 +98,10 @@ export default function TrackerDashboard() {
           }
         }
 
-        // Get assignments
+        // Assignments
         const { data: assignments } = await supabase.from('job_assignments').select('*, employees(first_name, last_name)').eq('job_id', entityId).order('created_at', { ascending: true })
         if (assignments?.length > 0) {
-          assignments.forEach(a => {
+          for (const a of assignments) {
             history.push({
               id: `assign-${a.id}`,
               action: 'assignment',
@@ -115,13 +111,13 @@ export default function TrackerDashboard() {
               color: 'text-indigo-600 bg-indigo-100',
               details: `Assigned to ${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''} (Status: ${a.status})`
             })
-          })
+          }
         }
 
-        // Get checklist completions
+        // Checklist completions
         const { data: checklists } = await supabase.from('job_checklist_items').select('*').eq('job_id', entityId).eq('is_completed', true).order('completed_at', { ascending: true })
         if (checklists?.length > 0) {
-          checklists.forEach(c => {
+          for (const c of checklists) {
             history.push({
               id: `check-${c.id}`,
               action: 'task_completed',
@@ -131,13 +127,13 @@ export default function TrackerDashboard() {
               color: 'text-emerald-600 bg-emerald-100',
               details: `Task completed: "${c.description}"`
             })
-          })
+          }
         }
 
-        // Get photos
+        // Photos
         const { data: photos } = await supabase.from('job_photos').select('*, employees(first_name, last_name)').eq('job_id', entityId).order('taken_at', { ascending: true })
         if (photos?.length > 0) {
-          photos.forEach(p => {
+          for (const p of photos) {
             history.push({
               id: `photo-${p.id}`,
               action: 'photo_uploaded',
@@ -147,13 +143,13 @@ export default function TrackerDashboard() {
               color: 'text-purple-600 bg-purple-100',
               details: `${p.photo_type} photo uploaded: ${p.caption || 'No caption'}`
             })
-          })
+          }
         }
 
-        // Get client signature
+        // Client signatures
         const { data: signatures } = await supabase.from('client_signatures').select('*').eq('job_id', entityId)
         if (signatures?.length > 0) {
-          signatures.forEach(s => {
+          for (const s of signatures) {
             history.push({
               id: `sig-${s.id}`,
               action: 'client_signoff',
@@ -163,7 +159,7 @@ export default function TrackerDashboard() {
               color: 'text-emerald-600 bg-emerald-100',
               details: `Signed by: ${s.signed_by || 'Client'} | Rating: ${s.satisfaction_rating || 'N/A'}/5`
             })
-          })
+          }
         }
       }
 
@@ -217,7 +213,7 @@ export default function TrackerDashboard() {
 
         const { data: fuelLogs } = await supabase.from('fuel_records').select('*').eq('vehicle_id', entityId).order('fuel_date', { ascending: true }).limit(20)
         if (fuelLogs?.length > 0) {
-          fuelLogs.forEach(f => {
+          for (const f of fuelLogs) {
             history.push({
               id: `fuel-${f.id}`,
               action: 'fuel_log',
@@ -227,12 +223,12 @@ export default function TrackerDashboard() {
               color: 'text-amber-600 bg-amber-100',
               details: `Fuel: ${f.quantity}L at ${f.fuel_station || 'Unknown'} - R${f.amount?.toFixed(2)} (Odometer: ${f.odometer_reading?.toLocaleString() || 'N/A'} km)`
             })
-          })
+          }
         }
 
         const { data: expenses } = await supabase.from('vehicle_expenses').select('*').eq('vehicle_id', entityId).order('expense_date', { ascending: true }).limit(20)
         if (expenses?.length > 0) {
-          expenses.forEach(e => {
+          for (const e of expenses) {
             history.push({
               id: `exp-${e.id}`,
               action: 'expense',
@@ -242,12 +238,12 @@ export default function TrackerDashboard() {
               color: 'text-red-600 bg-red-100',
               details: `${e.expense_type}: R${e.amount?.toFixed(2)} - ${e.vendor || 'N/A'} (Odometer: ${e.odometer_reading?.toLocaleString() || 'N/A'})`
             })
-          })
+          }
         }
 
         const { data: meterReadings } = await supabase.from('meter_readings').select('*').eq('vehicle_id', entityId).order('reading_date', { ascending: true }).limit(20)
         if (meterReadings?.length > 0) {
-          meterReadings.forEach(m => {
+          for (const m of meterReadings) {
             history.push({
               id: `meter-${m.id}`,
               action: 'meter_reading',
@@ -257,12 +253,12 @@ export default function TrackerDashboard() {
               color: 'text-blue-600 bg-blue-100',
               details: `Odometer reading: ${m.odometer_reading?.toLocaleString()} km | Notes: ${m.notes || 'N/A'}`
             })
-          })
+          }
         }
 
         const { data: reminders } = await supabase.from('fleet_reminders').select('*').eq('vehicle_id', entityId).order('created_at', { ascending: true })
         if (reminders?.length > 0) {
-          reminders.forEach(r => {
+          for (const r of reminders) {
             history.push({
               id: `rem-${r.id}`,
               action: 'reminder',
@@ -272,7 +268,7 @@ export default function TrackerDashboard() {
               color: 'text-orange-600 bg-orange-100',
               details: `Reminder: ${r.reminder_name} | Next: ${r.next_date} | Status: ${r.status}`
             })
-          })
+          }
         }
       }
 
@@ -304,7 +300,7 @@ export default function TrackerDashboard() {
 
         const { data: attendance } = await supabase.from('attendance_records').select('*').eq('employee_id', entityId).order('attendance_date', { ascending: false }).limit(30)
         if (attendance?.length > 0) {
-          attendance.forEach(a => {
+          for (const a of attendance) {
             const clockIn = a.clock_in_time ? new Date(a.clock_in_time).toLocaleTimeString() : 'N/A'
             const clockOut = a.clock_out_time ? new Date(a.clock_out_time).toLocaleTimeString() : 'Not clocked out'
             history.push({
@@ -316,12 +312,12 @@ export default function TrackerDashboard() {
               color: a.clock_out_time ? 'text-emerald-600 bg-emerald-100' : 'text-amber-600 bg-amber-100',
               details: `Date: ${a.attendance_date} | In: ${clockIn} | Out: ${clockOut} | Status: ${a.status} | Hours: ${a.total_hours?.toFixed(1) || 'N/A'}`
             })
-          })
+          }
         }
 
         const { data: leaveRequests } = await supabase.from('leave_requests').select('*, leave_types(name)').eq('employee_id', entityId).order('created_at', { ascending: false }).limit(10)
         if (leaveRequests?.length > 0) {
-          leaveRequests.forEach(l => {
+          for (const l of leaveRequests) {
             history.push({
               id: `leave-${l.id}`,
               action: 'leave_request',
@@ -331,7 +327,7 @@ export default function TrackerDashboard() {
               color: l.status === 'approved' ? 'text-emerald-600 bg-emerald-100' : l.status === 'rejected' ? 'text-red-600 bg-red-100' : 'text-amber-600 bg-amber-100',
               details: `${l.leave_types?.name || 'Leave'}: ${l.start_date} to ${l.end_date} (${l.total_days} days) | Status: ${l.status}`
             })
-          })
+          }
         }
       }
 
@@ -359,22 +355,11 @@ export default function TrackerDashboard() {
               details: `Vendor approved`
             })
           }
-          if (vendData.status === 'active' && vendData.updated_at !== vendData.created_at && vendData.updated_at !== vendData.approved_at) {
-            history.push({
-              id: 'updated',
-              action: 'updated',
-              user_email: 'System',
-              created_at: vendData.updated_at,
-              icon: Edit,
-              color: 'text-blue-600 bg-blue-100',
-              details: `Vendor details updated`
-            })
-          }
         }
 
         const { data: vendorPOs } = await supabase.from('purchase_orders').select('*').eq('vendor_id', entityId).order('created_at', { ascending: true }).limit(20)
         if (vendorPOs?.length > 0) {
-          vendorPOs.forEach(po => {
+          for (const po of vendorPOs) {
             history.push({
               id: `vpo-${po.id}`,
               action: 'purchase_order',
@@ -384,7 +369,7 @@ export default function TrackerDashboard() {
               color: 'text-purple-600 bg-purple-100',
               details: `PO ${po.po_number} created | Amount: R${po.total_amount?.toFixed(2)} | Status: ${po.status}`
             })
-          })
+          }
         }
       }
 
@@ -405,7 +390,7 @@ export default function TrackerDashboard() {
 
         const { data: interactions } = await supabase.from('client_interactions').select('*').eq('client_id', entityId).order('scheduled_date', { ascending: false }).limit(20)
         if (interactions?.length > 0) {
-          interactions.forEach(inter => {
+          for (const inter of interactions) {
             history.push({
               id: `inter-${inter.id}`,
               action: 'interaction',
@@ -415,12 +400,12 @@ export default function TrackerDashboard() {
               color: 'text-blue-600 bg-blue-100',
               details: `${inter.interaction_type?.replace('_', ' ')}: ${inter.subject} | Status: ${inter.status}`
             })
-          })
+          }
         }
 
-        const { data: jobs } = await supabase.from('jobs').select('*').eq('client_id', entityId).order('created_at', { ascending: true }).limit(20)
-        if (jobs?.length > 0) {
-          jobs.forEach(job => {
+        const { data: clientJobs } = await supabase.from('jobs').select('*').eq('client_id', entityId).order('created_at', { ascending: true }).limit(20)
+        if (clientJobs?.length > 0) {
+          for (const job of clientJobs) {
             history.push({
               id: `cjob-${job.id}`,
               action: 'job_created',
@@ -430,12 +415,12 @@ export default function TrackerDashboard() {
               color: 'text-indigo-600 bg-indigo-100',
               details: `Job ${job.job_number}: "${job.title}" | Status: ${job.status}`
             })
-          })
+          }
         }
 
         const { data: invoices } = await supabase.from('invoices').select('*').eq('client_id', entityId).order('created_at', { ascending: true }).limit(20)
         if (invoices?.length > 0) {
-          invoices.forEach(inv => {
+          for (const inv of invoices) {
             history.push({
               id: `cinv-${inv.id}`,
               action: 'invoice',
@@ -445,7 +430,7 @@ export default function TrackerDashboard() {
               color: inv.status === 'paid' ? 'text-emerald-600 bg-emerald-100' : 'text-amber-600 bg-amber-100',
               details: `Invoice ${inv.invoice_number}: R${inv.total_amount?.toFixed(2)} | Status: ${inv.status}`
             })
-          })
+          }
         }
       }
 
@@ -592,8 +577,15 @@ export default function TrackerDashboard() {
   const formatDateTime = (d) => d ? new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'
   const getStatusBadge = (s) => ({ active: 'bg-emerald-100 text-emerald-700', in_use: 'bg-blue-100 text-blue-700', pending: 'bg-amber-100 text-amber-700', completed: 'bg-emerald-100 text-emerald-700', sent: 'bg-blue-100 text-blue-700', confirmed: 'bg-purple-100 text-purple-700', received: 'bg-emerald-100 text-emerald-700', pending_approval: 'bg-amber-100 text-amber-700', in_progress: 'bg-amber-100 text-amber-700', scheduled: 'bg-blue-100 text-blue-700', in_service: 'bg-orange-100 text-orange-700', draft: 'bg-slate-100 text-slate-600' }[s] || 'bg-slate-100 text-slate-600')
 
-  // Import Calendar icon
-  const Calendar = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+  // Calendar icon component
+  const Calendar = ({ className }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+      <line x1="16" x2="16" y1="2" y2="6"/>
+      <line x1="8" x2="8" y1="2" y2="6"/>
+      <line x1="3" x2="21" y1="10" y2="10"/>
+    </svg>
+  )
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
