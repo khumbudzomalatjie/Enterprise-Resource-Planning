@@ -16,16 +16,16 @@ import {
 // FALLBACK LEAVE TYPES (SA BCEA Compliant)
 // ═══════════════════════════════════════════
 const FALLBACK_LEAVE_TYPES = [
-  { id: 'annual', name: 'Annual Leave', days_allowed: 15, paid: true, code: 'ANNUAL', color: '#10b981', cycle_type: 'annual' },
-  { id: 'sick', name: 'Sick Leave', days_allowed: 30, paid: true, code: 'SICK', color: '#ef4444', cycle_type: '36_months' },
-  { id: 'family', name: 'Family Responsibility Leave', days_allowed: 3, paid: true, code: 'FAMILY', color: '#f59e0b', cycle_type: 'annual' },
-  { id: 'maternity', name: 'Maternity Leave', days_allowed: 120, paid: false, code: 'MATERNITY', color: '#ec4899', cycle_type: 'per_event' },
-  { id: 'parental', name: 'Parental Leave', days_allowed: 10, paid: false, code: 'PARENTAL', color: '#8b5cf6', cycle_type: 'per_event' },
-  { id: 'adoption', name: 'Adoption Leave', days_allowed: 70, paid: false, code: 'ADOPTION', color: '#6366f1', cycle_type: 'per_event' },
-  { id: 'commissioning', name: 'Commissioning Parental Leave', days_allowed: 70, paid: false, code: 'COMMISSIONING', color: '#14b8a6', cycle_type: 'per_event' },
-  { id: 'study', name: 'Study Leave', days_allowed: 10, paid: true, code: 'STUDY', color: '#0ea5e9', cycle_type: 'annual' },
-  { id: 'compassionate', name: 'Compassionate Leave', days_allowed: 5, paid: true, code: 'COMPASSIONATE', color: '#64748b', cycle_type: 'per_event' },
-  { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, paid: false, code: 'UNPAID', color: '#78716c', cycle_type: 'annual' },
+  { id: 'annual', name: 'Annual Leave', days_allowed: 15, code: 'ANNUAL', color: '#10b981' },
+  { id: 'sick', name: 'Sick Leave', days_allowed: 30, code: 'SICK', color: '#ef4444' },
+  { id: 'family', name: 'Family Responsibility Leave', days_allowed: 3, code: 'FAMILY', color: '#f59e0b' },
+  { id: 'maternity', name: 'Maternity Leave', days_allowed: 120, code: 'MATERNITY', color: '#ec4899' },
+  { id: 'parental', name: 'Parental Leave', days_allowed: 10, code: 'PARENTAL', color: '#8b5cf6' },
+  { id: 'adoption', name: 'Adoption Leave', days_allowed: 70, code: 'ADOPTION', color: '#6366f1' },
+  { id: 'commissioning', name: 'Commissioning Parental Leave', days_allowed: 70, code: 'COMMISSIONING', color: '#14b8a6' },
+  { id: 'study', name: 'Study Leave', days_allowed: 10, code: 'STUDY', color: '#0ea5e9' },
+  { id: 'compassionate', name: 'Compassionate Leave', days_allowed: 5, code: 'COMPASSIONATE', color: '#64748b' },
+  { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, code: 'UNPAID', color: '#78716c' },
 ]
 
 export default function LeaveManagement() {
@@ -57,20 +57,20 @@ export default function LeaveManagement() {
   const loadAllData = async () => {
     setLoading(true)
     try {
+      // Load leave types
       const { data: types, error: typeError } = await supabase
         .from('leave_types')
         .select('*')
         .eq('is_active', true)
         .order('display_order')
       
-      if (typeError) {
-        setLeaveTypes(FALLBACK_LEAVE_TYPES)
-      } else if (!types || types.length === 0) {
+      if (typeError || !types || types.length === 0) {
         setLeaveTypes(FALLBACK_LEAVE_TYPES)
       } else {
         setLeaveTypes(types)
       }
 
+      // Get employee record
       const { data: employee } = await supabase
         .from('employees')
         .select('id')
@@ -80,12 +80,14 @@ export default function LeaveManagement() {
       const employeeId = employee?.id
 
       if (employeeId) {
+        // Load balances
         const { data: balances } = await supabase
           .from('employee_leave_balances')
           .select('*, leave_types(name, code, color, days_allowed)')
           .eq('employee_id', employeeId)
         setLeaveBalances(balances || [])
 
+        // Load requests
         const { data: requests } = await supabase
           .from('leave_requests')
           .select('*, leave_types(name, code, color)')
@@ -93,6 +95,7 @@ export default function LeaveManagement() {
           .order('created_at', { ascending: false })
         setLeaveRequests(requests || [])
 
+        // Load pending approvals for HR
         if (['super_admin', 'hr_manager', 'operations_manager'].includes(profile?.role)) {
           const { data: pending } = await supabase
             .from('leave_requests')
@@ -103,11 +106,13 @@ export default function LeaveManagement() {
         }
       }
     } catch (error) {
+      console.error('Error:', error)
       setLeaveTypes(FALLBACK_LEAVE_TYPES)
     }
     setLoading(false)
   }
 
+  // Calculate working days
   useEffect(() => {
     if (applyForm.start_date && applyForm.end_date) {
       let days = 0
@@ -122,53 +127,120 @@ export default function LeaveManagement() {
     }
   }, [applyForm.start_date, applyForm.end_date])
 
+  // ═══════════════════════════════════════════
+  // SUBMIT LEAVE REQUEST - FIXED
+  // ═══════════════════════════════════════════
   const handleApplyLeave = async (e) => {
     e.preventDefault()
+    
     if (!applyForm.leave_type_id) { toast.error('Please select a leave type'); return }
     if (!applyForm.start_date || !applyForm.end_date) { toast.error('Please select dates'); return }
     if (calculatedDays <= 0) { toast.error('Invalid date range'); return }
 
     setSubmitting(true)
+    
     try {
-      const { data: employee } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
-      if (!employee) { toast.error('Employee record not found'); setSubmitting(false); return }
+      // Get employee record
+      const { data: employee, error: empError } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single()
 
-      const { error } = await supabase.from('leave_requests').insert([{
-        employee_id: employee.id, leave_type_id: applyForm.leave_type_id,
-        start_date: applyForm.start_date, end_date: applyForm.end_date,
-        total_days: calculatedDays, reason: applyForm.reason || '', status: 'pending'
-      }])
-      if (error) throw error
+      if (empError) {
+        console.error('Employee lookup error:', empError)
+        toast.error('Employee profile not found. Please contact HR.')
+        setSubmitting(false)
+        return
+      }
+
+      if (!employee) {
+        toast.error('No employee record linked to your account. Contact HR.')
+        setSubmitting(false)
+        return
+      }
+
+      // Insert leave request
+      const { error: insertError } = await supabase
+        .from('leave_requests')
+        .insert([{
+          employee_id: employee.id,
+          leave_type_id: applyForm.leave_type_id,
+          start_date: applyForm.start_date,
+          end_date: applyForm.end_date,
+          total_days: calculatedDays,
+          reason: applyForm.reason || '',
+          status: 'pending'
+        }])
+
+      if (insertError) {
+        console.error('Insert error:', insertError)
+        
+        if (insertError.code === '42P01') {
+          toast.error('Leave system table not found. Please run database setup.')
+        } else if (insertError.code === '23503') {
+          toast.error('Employee record issue. Please contact HR.')
+        } else if (insertError.code === '42501') {
+          toast.error('Permission denied. Check database policies.')
+        } else if (insertError.message?.includes('duplicate')) {
+          toast.error('A similar leave request already exists.')
+        } else {
+          toast.error('Failed to submit: ' + insertError.message)
+        }
+        setSubmitting(false)
+        return
+      }
 
       toast.success('Leave request submitted! 🎉')
       setShowApplyForm(false)
       setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
       loadAllData()
     } catch (error) {
-      toast.error('Failed to submit')
+      console.error('Submit error:', error)
+      toast.error('Something went wrong. Please try again.')
     }
     setSubmitting(false)
   }
 
   const handleApprove = async (id) => {
-    await supabase.from('leave_requests').update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() }).eq('id', id)
-    toast.success('Approved! ✅')
-    loadAllData()
+    try {
+      await supabase.from('leave_requests').update({ 
+        status: 'approved', 
+        approved_by: user.id, 
+        approved_at: new Date().toISOString() 
+      }).eq('id', id)
+      toast.success('Leave approved! ✅')
+      loadAllData()
+    } catch (error) {
+      toast.error('Failed to approve')
+    }
   }
 
   const handleReject = async (id) => {
     const reason = prompt('Rejection reason (optional):')
     if (reason === null) return
-    await supabase.from('leave_requests').update({ status: 'rejected', rejection_reason: reason || '' }).eq('id', id)
-    toast.success('Rejected')
-    loadAllData()
+    try {
+      await supabase.from('leave_requests').update({ 
+        status: 'rejected', 
+        rejection_reason: reason || '' 
+      }).eq('id', id)
+      toast.success('Leave rejected')
+      loadAllData()
+    } catch (error) {
+      toast.error('Failed to reject')
+    }
   }
 
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'
+  const formatDate = (d) => {
+    if (!d) return 'N/A'
+    return new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
 
   const getStatusBadge = (s) => ({
-    pending: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700',
-    rejected: 'bg-red-100 text-red-700', cancelled: 'bg-slate-100 text-slate-600'
+    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
   }[s] || 'bg-slate-100')
 
   const isHR = ['super_admin', 'hr_manager'].includes(profile?.role)
@@ -223,11 +295,11 @@ export default function LeaveManagement() {
         {loading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div>
-            <p className="text-slate-500 dark:text-slate-400">Loading leave data...</p>
+            <p className="text-slate-500 dark:text-slate-400">Loading...</p>
           </div>
         )}
 
-        {/* APPLY LEAVE FORM */}
+        {/* APPLY FORM */}
         {showApplyForm && !loading && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-6 border-2 border-emerald-200 dark:border-emerald-800">
             <div className="flex items-center justify-between mb-4">
@@ -239,34 +311,26 @@ export default function LeaveManagement() {
             
             <form onSubmit={handleApplyLeave} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Leave Type - NAME ONLY */}
                 <div>
                   <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Leave Type *</label>
-                  <select 
-                    value={applyForm.leave_type_id} 
-                    onChange={e => setApplyForm({...applyForm, leave_type_id: e.target.value})}
-                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                    required
-                  >
+                  <select value={applyForm.leave_type_id} onChange={e => setApplyForm({...applyForm, leave_type_id: e.target.value})}
+                    className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" required>
                     <option value="">-- Select Leave Type --</option>
                     {leaveTypes.map(lt => (
                       <option key={lt.id || lt.code} value={lt.id || lt.code}>{lt.name}</option>
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Reason</label>
                   <input type="text" value={applyForm.reason} onChange={e => setApplyForm({...applyForm, reason: e.target.value})}
                     placeholder="Reason for leave..." className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" />
                 </div>
-
                 <div>
                   <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">Start Date *</label>
                   <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({...applyForm, start_date: e.target.value})}
                     className="w-full p-3 neu-inset rounded-xl mt-1 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600" required />
                 </div>
-
                 <div>
                   <label className="text-sm text-slate-500 dark:text-slate-400 font-medium">End Date *</label>
                   <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({...applyForm, end_date: e.target.value})}
@@ -317,14 +381,14 @@ export default function LeaveManagement() {
         {/* BALANCES */}
         {activeTab === 'balances' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Leave Balances</h2>
+            <h2 className="text-lg font-bold mb-4">Leave Balances</h2>
             {leaveBalances.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b bg-slate-50 dark:bg-slate-700/30"><th className="text-left py-3 px-4">Type</th><th className="text-right py-3 px-4">Allocated</th><th className="text-right py-3 px-4">Used</th><th className="text-right py-3 px-4">Pending</th><th className="text-right py-3 px-4">Remaining</th><th className="text-left py-3 px-4">Cycle</th></tr></thead>
                   <tbody>
                     {leaveBalances.map(b => (
-                      <tr key={b.id} className="border-b hover:bg-slate-50 dark:hover:bg-slate-700/20">
+                      <tr key={b.id} className="border-b hover:bg-slate-50">
                         <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: b.leave_types?.color }}></span><span className="font-medium">{b.leave_types?.name}</span></div></td>
                         <td className="py-3 px-4 text-right">{b.allocated_days}</td>
                         <td className="py-3 px-4 text-right text-red-600">{b.used_days}</td>
@@ -352,7 +416,7 @@ export default function LeaveManagement() {
             {leaveRequests.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="border-b bg-slate-50 dark:bg-slate-700/30"><th className="text-left py-3 px-4">Type</th><th className="text-left py-3 px-4">Dates</th><th className="text-right py-3 px-4">Days</th><th className="text-left py-3 px-4">Reason</th><th className="text-center py-3 px-4">Status</th><th className="text-left py-3 px-4">Submitted</th></tr></thead>
+                  <thead><tr className="border-b bg-slate-50"><th className="text-left py-3 px-4">Type</th><th className="text-left py-3 px-4">Dates</th><th className="text-right py-3 px-4">Days</th><th className="text-left py-3 px-4">Reason</th><th className="text-center py-3 px-4">Status</th><th className="text-left py-3 px-4">Submitted</th></tr></thead>
                   <tbody>
                     {leaveRequests.filter(lr => statusFilter === 'all' || lr.status === statusFilter).map(lr => (
                       <tr key={lr.id} className="border-b hover:bg-slate-50">
