@@ -23,6 +23,7 @@ import WorkflowRoutes from '../modules/workflow/routes/WorkflowRoutes'
 import DocumentsRoutes from '../modules/documents/routes/DocumentsRoutes'
 import AssetsRoutes from '../modules/assets/routes/AssetsRoutes'
 import MobileRoutes from '../modules/mobile/routes/MobileRoutes'
+import TrackerRoutes from '../modules/tracker/routes/TrackerRoutes'
 
 import { USER_ROLES } from '../types/authTypes'
 
@@ -288,14 +289,24 @@ export default function AppRoutes() {
 
       {/* ============================================ */}
       {/* MODULE 14 - MOBILE WORKFORCE                 */}
-      {/* FIXED: Only ProtectedRoute, NO RoleBasedRoute */}
-      {/* This allows cleaners to access /mobile       */}
       {/* ============================================ */}
       <Route 
         path="/mobile/*" 
         element={
           <ProtectedRoute>
             <MobileRoutes />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* ============================================ */}
+      {/* TRACKER - Unified ERP Tracking               */}
+      {/* ============================================ */}
+      <Route 
+        path="/tracker/*" 
+        element={
+          <ProtectedRoute>
+            <TrackerRoutes />
           </ProtectedRoute>
         } 
       />
