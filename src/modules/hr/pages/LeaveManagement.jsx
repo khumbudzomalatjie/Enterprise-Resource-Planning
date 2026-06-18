@@ -46,7 +46,6 @@ export default function LeaveManagement() {
   // Core State
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [activeLeaveType, setActiveLeaveType] = useState(null)
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -62,11 +61,7 @@ export default function LeaveManagement() {
   
   // UI State
   const [statusFilter, setStatusFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
-  const [dateRange, setDateRange] = useState({ from: '', to: '' })
-  const [selectedRequest, setSelectedRequest] = useState(null)
-  const [showReportModal, setShowReportModal] = useState(false)
   
   // Form State
   const [applyForm, setApplyForm] = useState({
@@ -90,23 +85,19 @@ export default function LeaveManagement() {
   const loadAllData = async () => {
     setLoading(true)
     try {
-      // Load leave types from DB or use defaults
       const { data: types } = await supabase.from('leave_types').select('*').eq('is_active', true).order('display_order')
       if (types?.length > 0) setLeaveTypes(types)
 
-      // Get employee record
       const { data: employee } = await supabase.from('employees').select('*').eq('user_id', user?.id).single()
       const employeeId = employee?.id
 
       if (employeeId) {
-        // Leave balances
         const { data: balances } = await supabase
           .from('employee_leave_balances')
           .select('*, leave_types(name, code, color, days_allowed, cycle_type)')
           .eq('employee_id', employeeId)
         setLeaveBalances(balances || [])
 
-        // My requests
         const { data: myReqs } = await supabase
           .from('leave_requests')
           .select('*, leave_types(name, code, color)')
@@ -115,7 +106,6 @@ export default function LeaveManagement() {
         setMyRequests(myReqs || [])
       }
 
-      // Approver data
       if (isApprover) {
         const { data: pending } = await supabase
           .from('leave_requests')
@@ -131,7 +121,6 @@ export default function LeaveManagement() {
           .limit(100)
         setAllRequests(all || [])
 
-        // Audit logs
         const { data: logs } = await supabase
           .from('leave_approvals')
           .select('*, leave_requests(*, employees(first_name, last_name), leave_types(name))')
@@ -223,7 +212,6 @@ export default function LeaveManagement() {
     if (!applyForm.start_date || !applyForm.end_date) { toast.error('Select dates'); return }
     if (calculatedDays <= 0) { toast.error('Invalid dates'); return }
 
-    // Check balance
     const leaveType = leaveTypes.find(lt => (lt.id || lt.code) === applyForm.leave_type_id)
     const balance = leaveBalances.find(b => (b.leave_type_id || b.leave_types?.code) === applyForm.leave_type_id)
     
@@ -251,7 +239,6 @@ export default function LeaveManagement() {
 
       if (error) throw error
 
-      // Audit log
       await supabase.from('leave_approvals').insert([{
         leave_request_id: null,
         action_by: user.id,
@@ -344,13 +331,6 @@ export default function LeaveManagement() {
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'
   const formatDateTime = (d) => d ? new Date(d).toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'
   
-  const getStatusBadge = (s) => ({
-    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-    cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-  }[s] || 'bg-slate-100')
-
   const getBalanceForType = (typeId) => {
     return leaveBalances.find(b => (b.leave_type_id || b.leave_types?.code) === typeId)
   }
@@ -369,12 +349,10 @@ export default function LeaveManagement() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <Link to="/hr" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-4">
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">HR Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
@@ -434,7 +412,7 @@ export default function LeaveManagement() {
         {loading && <div className="text-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div><p>Loading leave data...</p></div>}
 
         {/* ═══════════════════════════════════════════ */}
-        {/* DASHBOARD TAB - LEAVE BALANCE CARDS */}
+        {/* DASHBOARD TAB */}
         {/* ═══════════════════════════════════════════ */}
         {activeTab === 'dashboard' && !loading && (
           <div>
@@ -455,9 +433,7 @@ export default function LeaveManagement() {
                   <motion.div key={type.id || type.code} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                     className="neu-raised rounded-2xl p-5 hover:scale-[1.02] transition-all cursor-pointer relative overflow-hidden"
                     onClick={() => openLeaveApplication(type.id || type.code)}>
-                    {/* Top stripe */}
                     <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: type.color }}></div>
-                    
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: type.color + '20' }}>
@@ -468,19 +444,13 @@ export default function LeaveManagement() {
                           <p className="text-[10px] text-slate-400">{type.description}</p>
                         </div>
                       </div>
-                      <button className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 transition-colors" title="Apply for this leave">
+                      <button className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 transition-colors">
                         <Plus className="w-4 h-4 text-emerald-600" />
                       </button>
                     </div>
-
-                    {/* Progress bar */}
                     <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full mb-3 overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500 flex" style={{ width: `${Math.min(usagePercent, 100)}%` }}>
-                        <div className="h-full flex-1" style={{ backgroundColor: type.color }}></div>
-                      </div>
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(usagePercent, 100)}%`, backgroundColor: type.color }}></div>
                     </div>
-
-                    {/* Stats grid */}
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-2">
                         <p className="text-lg font-bold" style={{ color: type.color }}>{remaining}</p>
@@ -507,7 +477,142 @@ export default function LeaveManagement() {
         )}
 
         {/* ═══════════════════════════════════════════ */}
-        {/* APPLY FORM (Shown when showApplyForm is true) */}
+        {/* MY LEAVE TAB - CARD GRID DESIGN */}
+        {/* ═══════════════════════════════════════════ */}
+        {activeTab === 'my-leave' && !loading && (
+          <div>
+            {/* Leave Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+              {leaveTypes.map(type => {
+                const balance = getBalanceForType(type.id || type.code)
+                const Icon = type.icon || Calendar
+                const available = balance?.remaining_days || type.days_allowed || 0
+                const pending = balance?.pending_days || 0
+
+                return (
+                  <motion.div 
+                    key={type.id || type.code}
+                    initial={{ opacity: 0, y: 20 }} 
+                    animate={{ opacity: 1, y: 0 }}
+                    className="neu-raised rounded-2xl p-5 relative min-h-[180px] transition-all hover:scale-[1.02] cursor-pointer"
+                    style={{ 
+                      background: isDark 
+                        ? 'linear-gradient(145deg, #1e293b, #0f172a)' 
+                        : 'linear-gradient(145deg, #394150, #2d3543)'
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ backgroundColor: type.color }}></div>
+                    
+                    <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                      <Icon className="w-5 h-5" style={{ color: type.color }} />
+                      {type.name}
+                    </h3>
+
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="text-center flex-1">
+                        <p className="text-slate-300 text-[10px] uppercase tracking-wide mb-1">Available</p>
+                        <p className="text-2xl font-bold" style={{ color: type.color }}>
+                          {available.toFixed(4)}
+                        </p>
+                        <p className="text-slate-400 text-[10px]">Days</p>
+                      </div>
+
+                      <div className="w-px h-16 bg-white/20 mx-2"></div>
+
+                      <div className="text-center flex-1">
+                        <p className="text-slate-300 text-[10px] uppercase tracking-wide mb-1">Pending</p>
+                        <p className="text-2xl font-bold text-amber-400">
+                          {pending.toFixed(4)}
+                        </p>
+                        <p className="text-slate-400 text-[10px]">Days</p>
+                      </div>
+                    </div>
+
+                    <p className="text-slate-400 text-[11px] mt-2">{type.description}</p>
+
+                    <button 
+                      onClick={() => openLeaveApplication(type.id || type.code)}
+                      className="absolute bottom-3 right-4 text-white/70 hover:text-white transition-colors"
+                      title={`Apply for ${type.name}`}
+                    >
+                      <Plus className="w-7 h-7" />
+                    </button>
+                  </motion.div>
+                )
+              })}
+            </div>
+
+            {/* Recent Applications Section */}
+            <div className="neu-raised rounded-3xl p-6">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+                  <Clock className="w-6 h-6 text-blue-500" />
+                  Recent Applications
+                </h2>
+                <button 
+                  onClick={() => setActiveTab('history')}
+                  className="text-blue-500 hover:text-blue-600 font-semibold text-sm flex items-center gap-1 transition-colors"
+                >
+                  View All <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {myRequests.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-700/30">
+                        <th className="text-left py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">Leave Type</th>
+                        <th className="text-left py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">From</th>
+                        <th className="text-left py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">To</th>
+                        <th className="text-right py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">Days</th>
+                        <th className="text-center py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">Status</th>
+                        <th className="text-left py-3 px-4 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider">Applied On</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {myRequests.slice(0, 10).map(r => (
+                        <tr key={r.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.leave_types?.color || '#10b981' }}></span>
+                              <span className="font-medium text-slate-700 dark:text-slate-300">{r.leave_types?.name || r.leave_type_id}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400 text-xs">{formatDate(r.start_date)}</td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400 text-xs">{formatDate(r.end_date)}</td>
+                          <td className="py-3 px-4 text-right font-semibold text-slate-700 dark:text-slate-300">{r.total_days}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              r.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                              r.status === 'pending' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                              r.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                              'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                            }`}>
+                              {r.status?.charAt(0).toUpperCase() + r.status?.slice(1)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">{formatDate(r.submitted_at || r.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
+                    <Clock className="w-8 h-8 text-slate-300 dark:text-slate-500" />
+                  </div>
+                  <p className="text-slate-500 dark:text-slate-400 text-lg font-medium">No recent applications</p>
+                  <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Click the + button on any leave card to apply</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════ */}
+        {/* APPLY FORM MODAL */}
         {/* ═══════════════════════════════════════════ */}
         <AnimatePresence>
           {showApplyForm && (
@@ -566,39 +671,6 @@ export default function LeaveManagement() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* ═══════════════════════════════════════════ */}
-        {/* MY LEAVE TAB */}
-        {/* ═══════════════════════════════════════════ */}
-        {activeTab === 'my-leave' && !loading && (
-          <div className="neu-raised rounded-3xl p-6">
-            <div className="flex justify-between mb-4">
-              <h2 className="text-lg font-bold">My Leave History</h2>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 neu-inset rounded-lg text-sm">
-                <option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Declined</option>
-              </select>
-            </div>
-            {myRequests.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b bg-slate-50"><th className="text-left py-3 px-4">Type</th><th className="text-left py-3 px-4">Dates</th><th className="text-right py-3 px-4">Days</th><th className="text-left py-3 px-4">Reason</th><th className="text-center py-3 px-4">Status</th><th className="text-center py-3 px-4">Action</th></tr></thead>
-                  <tbody>
-                    {myRequests.filter(r => statusFilter === 'all' || r.status === statusFilter).map(r => (
-                      <tr key={r.id} className="border-b hover:bg-slate-50">
-                        <td className="py-3 px-4"><div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.leave_types?.color || '#10b981' }}></span><span>{r.leave_types?.name || r.leave_type_id}</span></div></td>
-                        <td className="py-3 px-4 text-xs">{formatDate(r.start_date)} - {formatDate(r.end_date)}</td>
-                        <td className="py-3 px-4 text-right font-semibold">{r.total_days}</td>
-                        <td className="py-3 px-4 text-xs truncate max-w-[150px]">{r.reason || '-'}</td>
-                        <td className="py-3 px-4 text-center"><span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(r.status)}`}>{r.status}</span></td>
-                        <td className="py-3 px-4 text-center">{r.status === 'pending' ? <button onClick={() => handleCancel(r.id)} className="text-xs text-red-600 hover:underline">Cancel</button> : <span className="text-xs text-slate-400">-</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : <p className="text-center py-8 text-slate-500">No leave history</p>}
-          </div>
-        )}
 
         {/* ═══════════════════════════════════════════ */}
         {/* APPROVALS TAB */}
@@ -701,7 +773,26 @@ export default function LeaveManagement() {
             ) : <p className="text-center py-8 text-slate-500">No audit records</p>}
           </div>
         )}
+
+        {/* Missing getStatusBadge function - adding here */}
+        {(() => {
+          window.getStatusBadge = (s) => ({
+            pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+            approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+            rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+            cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+          }[s] || 'bg-slate-100')
+          return null
+        })()}
       </main>
     </div>
   )
 }
+
+// Helper function for status badges
+const getStatusBadge = (s) => ({
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+}[s] || 'bg-slate-100')
