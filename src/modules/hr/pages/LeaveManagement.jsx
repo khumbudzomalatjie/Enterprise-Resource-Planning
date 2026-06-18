@@ -1,4 +1,3 @@
-
 import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -364,6 +363,13 @@ export default function LeaveManagement() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
+            {/* GLOBAL APPLY BUTTON - ADDED HERE */}
+            <button 
+              onClick={() => openLeaveApplication('')}
+              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 shadow-lg transition-colors"
+            >
+              <Plus className="w-5 h-5" /> Apply Leave
+            </button>
             <button onClick={handleExportCSV} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-1"><Download className="w-4 h-4" /> CSV</button>
             <button onClick={handleExportPDF} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm flex items-center gap-1"><FileText className="w-4 h-4" /> PDF</button>
             {isSuperAdmin && (
@@ -445,8 +451,13 @@ export default function LeaveManagement() {
                           <p className="text-[10px] text-slate-400">{type.description}</p>
                         </div>
                       </div>
-                      <button className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 transition-colors">
-                        <Plus className="w-4 h-4 text-emerald-600" />
+                      {/* APPLY BUTTON ON EACH CARD */}
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); openLeaveApplication(type.id || type.code) }}
+                        className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
+                        title={`Apply for ${type.name}`}
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       </button>
                     </div>
                     <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full mb-3 overflow-hidden">
@@ -531,12 +542,13 @@ export default function LeaveManagement() {
 
                     <p className="text-slate-400 text-[11px] mt-2">{type.description}</p>
 
+                    {/* APPLY BUTTON ON MY LEAVE CARDS */}
                     <button 
-                      onClick={() => openLeaveApplication(type.id || type.code)}
-                      className="absolute bottom-3 right-4 text-white/70 hover:text-white transition-colors"
+                      onClick={(e) => { e.stopPropagation(); openLeaveApplication(type.id || type.code) }}
+                      className="absolute bottom-3 right-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
                       title={`Apply for ${type.name}`}
                     >
-                      <Plus className="w-7 h-7" />
+                      <Plus className="w-6 h-6" />
                     </button>
                   </motion.div>
                 )
