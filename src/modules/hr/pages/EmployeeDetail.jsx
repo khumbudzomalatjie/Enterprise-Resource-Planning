@@ -14,6 +14,18 @@ import {
   Building2, BookOpen, Star, RefreshCw
 } from 'lucide-react'
 
+// Leave type definitions for color coding
+const LEAVE_TYPE_DEFINITIONS = [
+  { id: 'annual', name: 'Annual Leave', days_allowed: 15, color: '#10b981' },
+  { id: 'sick', name: 'Sick Leave', days_allowed: 30, color: '#ef4444' },
+  { id: 'family', name: 'Family Responsibility', days_allowed: 3, color: '#f59e0b' },
+  { id: 'maternity', name: 'Maternity Leave', days_allowed: 120, color: '#ec4899' },
+  { id: 'parental', name: 'Parental Leave', days_allowed: 10, color: '#8b5cf6' },
+  { id: 'study', name: 'Study Leave', days_allowed: 10, color: '#0ea5e9' },
+  { id: 'compassionate', name: 'Compassionate Leave', days_allowed: 5, color: '#64748b' },
+  { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, color: '#78716c' },
+]
+
 export default function EmployeeDetail() {
   const { id } = useParams()
   const { selectedEmployee, fetchEmployee, updateEmployee, deleteEmployee, loading } = useHRStore()
@@ -33,6 +45,8 @@ export default function EmployeeDetail() {
   const [payrollDetails, setPayrollDetails] = useState(null)
   const [schedules, setSchedules] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
+  const [leaveBalances, setLeaveBalances] = useState([]) // NEW: Leave balances
+  const [leaveSubTab, setLeaveSubTab] = useState('history') // NEW: Sub-tab for leave
   const [events, setEvents] = useState([])
   const [attachments, setAttachments] = useState([])
   const [tabLoading, setTabLoading] = useState(false)
@@ -90,6 +104,7 @@ export default function EmployeeDetail() {
       loadPayrollDetails(),
       loadSchedules(),
       loadLeaveRecords(),
+      loadLeaveBalances(), // NEW
       loadEvents(),
       loadAttachments(),
       loadStats()
@@ -97,7 +112,6 @@ export default function EmployeeDetail() {
     setTabLoading(false)
   }
 
-  // Refresh specific tab
   const refreshTab = async (tabName) => {
     setRefreshingTab(tabName)
     switch(tabName) {
@@ -105,14 +119,14 @@ export default function EmployeeDetail() {
       case 'payroll': await loadPayrollHistory(); break
       case 'details': await loadPayrollDetails(); break
       case 'schedule': await loadSchedules(); break
-      case 'leave': await loadLeaveRecords(); break
+      case 'leave': await loadLeaveRecords(); await loadLeaveBalances(); break // Updated
       case 'events': await loadEvents(); break
     }
     await loadStats()
     setRefreshingTab(null)
   }
 
-  // 1. Time Clock History - Synced with Mobile App (FIXED)
+  // 1. Time Clock History
   const loadAttendanceRecords = async () => {
     if (!id) return
     try {
@@ -122,17 +136,9 @@ export default function EmployeeDetail() {
         .eq('employee_id', id)
         .order('attendance_date', { ascending: false })
         .limit(50)
-
-      if (error) {
-        console.error('Attendance query error:', error.message)
-      } else {
-        console.log('📊 Attendance records loaded:', data?.length || 0)
-        setAttendanceRecords(data || [])
-      }
-    } catch (e) {
-      console.error('Attendance load error:', e)
-      setAttendanceRecords([])
-    }
+      if (error) { console.error('Attendance query error:', error.message) }
+      else { setAttendanceRecords(data || []) }
+    } catch (e) { setAttendanceRecords([]) }
   }
 
   // 2. Payroll History
@@ -184,6 +190,32 @@ export default function EmployeeDetail() {
     setLeaveRecords(data || [])
   }
 
+  // NEW: 5b. Leave Balances - Sync with Leave Management
+  const loadLeaveBalances = async () => {
+    if (!id) return
+    try {
+      const { data, error } = await supabase
+        .from('employee_leave_balances')
+        .select('*, leave_types(name, code, color, days_allowed)')
+        .eq('employee_id', id)
+      
+      if (error) {
+        console.error('Leave balances error:', error.message)
+        setLeaveBalances([])
+      } else {
+        console.log('📊 Leave balances loaded:', data?.length || 0)
+        setLeaveBalances(data || [])
+        
+        // Update leave balance stat
+        const totalRemaining = (data || []).reduce((sum, b) => sum + (b.remaining_days || 0), 0)
+        setStats(prev => ({ ...prev, leaveBalance: totalRemaining }))
+      }
+    } catch (e) {
+      console.error('Leave balances load error:', e)
+      setLeaveBalances([])
+    }
+  }
+
   // 6. Events
   const loadEvents = async () => {
     if (!id) return
@@ -208,7 +240,7 @@ export default function EmployeeDetail() {
     setAttachments(data || [])
   }
 
-  // Stats - FIXED with error handling for missing tables
+  // Stats
   const loadStats = async () => {
     if (!id) return
     try {
@@ -216,7 +248,6 @@ export default function EmployeeDetail() {
       weekStart.setDate(weekStart.getDate() - weekStart.getDay())
       const weekStartStr = weekStart.toISOString().split('T')[0]
       
-      // Get this week's hours
       let totalHours = 0
       try {
         const { data: weekAttendance } = await supabase
@@ -226,27 +257,8 @@ export default function EmployeeDetail() {
           .gte('attendance_date', weekStartStr)
           .not('total_hours', 'is', null)
         totalHours = weekAttendance?.reduce((s, a) => s + (a.total_hours || 0), 0) || 0
-      } catch (e) {
-        console.log('Week attendance query issue:', e.message)
-      }
+      } catch (e) { console.log('Week attendance query issue:', e.message) }
 
-      // Get leave balance - handle if table doesn't exist
-      let leaveBal = 0
-      try {
-        const { data: leaveData, error: leaveError } = await supabase
-          .from('leave_balances')
-          .select('remaining_days')
-          .eq('employee_id', id)
-          .maybeSingle()
-        
-        if (!leaveError && leaveData) {
-          leaveBal = leaveData.remaining_days || 0
-        }
-      } catch (e) {
-        console.log('Leave balance query (table may not exist):', e.message)
-      }
-
-      // Get active jobs
       let activeJobsCount = 0
       try {
         const { count } = await supabase
@@ -255,27 +267,23 @@ export default function EmployeeDetail() {
           .eq('employee_id', id)
           .eq('status', 'assigned')
         activeJobsCount = count || 0
-      } catch (e) {
-        console.log('Job assignments query issue:', e.message)
-      }
+      } catch (e) { console.log('Job assignments query issue:', e.message) }
 
       const presentCount = attendanceRecords?.filter(a => a.status === 'present').length || 0
       const totalRecords = attendanceRecords?.length || 0
       const attendanceRate = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0
 
-      setStats({
+      setStats(prev => ({
+        ...prev,
         totalHoursThisWeek: totalHours,
         totalHoursThisMonth: totalHours * 4,
         overtimeHours: Math.max(0, totalHours - 40),
-        leaveBalance: leaveBal,
         upcomingLeave: leaveRecords.filter(l => l.status === 'approved' && l.start_date > new Date().toISOString().split('T')[0]).length,
         completedJobs: presentCount,
         activeJobs: activeJobsCount,
         attendanceRate: attendanceRate,
-      })
-    } catch (e) {
-      console.error('Stats error:', e.message)
-    }
+      }))
+    } catch (e) { console.error('Stats error:', e.message) }
   }
 
   // Save Employee
@@ -284,22 +292,13 @@ export default function EmployeeDetail() {
       toast.error('Name and email are required')
       return
     }
-
     const safeEditData = {}
     allowedFields.forEach(field => {
-      if (editData[field] !== undefined) {
-        safeEditData[field] = editData[field] || null
-      }
+      if (editData[field] !== undefined) { safeEditData[field] = editData[field] || null }
     })
-
     const result = await updateEmployee(id, safeEditData)
-    if (result.success) {
-      toast.success('Employee updated!')
-      setIsEditing(false)
-      fetchEmployee(id)
-    } else {
-      toast.error(result.error || 'Failed to update')
-    }
+    if (result.success) { toast.success('Employee updated!'); setIsEditing(false); fetchEmployee(id) }
+    else { toast.error(result.error || 'Failed to update') }
   }
 
   const handleCancelEdit = () => {
@@ -307,9 +306,7 @@ export default function EmployeeDetail() {
     if (selectedEmployee) {
       const cleanEmployee = {}
       allowedFields.forEach(field => {
-        if (selectedEmployee[field] !== undefined) {
-          cleanEmployee[field] = selectedEmployee[field]
-        }
+        if (selectedEmployee[field] !== undefined) { cleanEmployee[field] = selectedEmployee[field] }
       })
       setEditData(cleanEmployee)
     }
@@ -323,10 +320,8 @@ export default function EmployeeDetail() {
     }
   }
 
-  // Photo Upload
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0]; if (!file) return
     setUploading(true)
     try {
       const fileExt = file.name.split('.').pop()
@@ -335,32 +330,22 @@ export default function EmployeeDetail() {
       if (uploadError) throw uploadError
       const { data: { publicUrl } } = supabase.storage.from('fleet').getPublicUrl(fileName)
       await updateEmployee(id, { profile_photo_url: publicUrl })
-      fetchEmployee(id)
-      toast.success('Photo updated!')
-    } catch (error) {
-      toast.error('Failed to upload photo')
-    }
+      fetchEmployee(id); toast.success('Photo updated!')
+    } catch (error) { toast.error('Failed to upload photo') }
     setUploading(false)
   }
 
-  // Attachment Upload
   const handleAttachmentUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0]; if (!file) return
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `employee-docs/${id}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('documents').upload(fileName, file, { upsert: true })
       if (error) throw error
       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
-      await supabase.from('employee_documents').insert([{
-        employee_id: id, document_type: 'other', document_name: file.name, document_url: publicUrl
-      }])
-      toast.success('Document attached!')
-      loadAttachments()
-    } catch (error) {
-      toast.error('Failed to upload')
-    }
+      await supabase.from('employee_documents').insert([{ employee_id: id, document_type: 'other', document_name: file.name, document_url: publicUrl }])
+      toast.success('Document attached!'); loadAttachments()
+    } catch (error) { toast.error('Failed to upload') }
   }
 
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -381,7 +366,6 @@ export default function EmployeeDetail() {
     { id: 'events', label: 'Events', icon: '📢' },
   ]
 
-  // Loading state
   if (loading || !selectedEmployee) {
     return (
       <div className="min-h-screen bg-[#d8d8d8] dark:bg-slate-900 flex items-center justify-center">
@@ -419,10 +403,7 @@ export default function EmployeeDetail() {
           <input 
             value={`${editData?.first_name || employee.first_name} ${editData?.last_name || employee.last_name}`} 
             readOnly={!isEditing}
-            onChange={e => { 
-              const [first, ...last] = e.target.value.split(' '); 
-              setEditData({...editData, first_name: first || '', last_name: last.join(' ') || ''}) 
-            }}
+            onChange={e => { const [first, ...last] = e.target.value.split(' '); setEditData({...editData, first_name: first || '', last_name: last.join(' ') || ''}) }}
             className="border border-[#2c73b6] bg-white dark:bg-slate-700 h-7 px-2 outline-none w-[340px] text-sm" 
           />
           {isEditing ? (
@@ -532,15 +513,14 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* TIME CLOCK HISTORY TAB - Synced with Mobile App */}
+          {/* TIME CLOCK HISTORY TAB */}
           {activeTab === 'attendance' && (
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">⏰ Time Clock History (Synced with Mobile App)</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{attendanceRecords.length} records</span>
-                  <button onClick={() => refreshTab('attendance')} disabled={refreshingTab === 'attendance'}
-                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
+                  <button onClick={() => refreshTab('attendance')} disabled={refreshingTab === 'attendance'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'attendance' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
@@ -573,8 +553,7 @@ export default function EmployeeDetail() {
                         </td>
                         <td className="p-2 border border-[#b8ccdc] text-xs">
                           {record.check_in_latitude ? (
-                            <a href={`https://www.google.com/maps?q=${record.check_in_latitude},${record.check_in_longitude}`} target="_blank" rel="noopener noreferrer" 
-                              className="text-blue-600 hover:underline">
+                            <a href={`https://www.google.com/maps?q=${record.check_in_latitude},${record.check_in_longitude}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                               {record.check_in_latitude.toFixed(4)}, {record.check_in_longitude.toFixed(4)}
                             </a>
                           ) : '-'}
@@ -601,8 +580,7 @@ export default function EmployeeDetail() {
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">💰 Payroll History</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{payrollHistory.length} payslips</span>
-                  <button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'}
-                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                  <button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'payroll' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
@@ -646,8 +624,7 @@ export default function EmployeeDetail() {
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">💳 Payroll Details</h3>
-                <button onClick={() => refreshTab('details')} disabled={refreshingTab === 'details'}
-                  className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                <button onClick={() => refreshTab('details')} disabled={refreshingTab === 'details'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                   <RefreshCw className={`w-4 h-4 ${refreshingTab === 'details' ? 'animate-spin' : ''}`} />
                 </button>
               </div>
@@ -689,8 +666,7 @@ export default function EmployeeDetail() {
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">📅 Upcoming Schedule</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{schedules.length} shifts</span>
-                  <button onClick={() => refreshTab('schedule')} disabled={refreshingTab === 'schedule'}
-                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                  <button onClick={() => refreshTab('schedule')} disabled={refreshingTab === 'schedule'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'schedule' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
@@ -728,49 +704,106 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB */}
+          {/* LEAVE TAB - ENHANCED with Balances + History Sub-tabs */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records</h3>
+                <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records (Synced with Leave Management)</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days</span>
-                  <button onClick={() => refreshTab('leave')} disabled={refreshingTab === 'leave'}
-                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                  <button onClick={() => refreshTab('leave')} disabled={refreshingTab === 'leave'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'leave' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
-              {leaveRecords.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-[#2e75b6] text-white">
-                        <th className="p-2 text-left border border-[#1a5fa0]">Type</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Start</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">End</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Days</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaveRecords.map(leave => (
-                        <tr key={leave.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                          <td className="p-2 border border-[#b8ccdc]">{leave.leave_types?.name || 'N/A'}</td>
-                          <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.start_date)}</td>
-                          <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.end_date)}</td>
-                          <td className="p-2 border border-[#b8ccdc] font-bold">{leave.total_days}</td>
-                          <td className="p-2 border border-[#b8ccdc]">
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{leave.status}</span>
-                          </td>
-                          <td className="p-2 border border-[#b8ccdc] text-xs">{leave.reason?.slice(0, 40) || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+              {/* Leave Sub-Tabs */}
+              <div className="flex gap-2 mb-4">
+                <button onClick={() => setLeaveSubTab('history')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${leaveSubTab === 'history' ? 'bg-[#2e75b6] text-white' : 'bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
+                  📋 Leave History
+                </button>
+                <button onClick={() => setLeaveSubTab('balances')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${leaveSubTab === 'balances' ? 'bg-[#2e75b6] text-white' : 'bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
+                  📊 Leave Balances
+                </button>
+              </div>
+
+              {/* LEAVE HISTORY SUB-TAB */}
+              {leaveSubTab === 'history' && (
+                <div>
+                  {leaveRecords.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-[#2e75b6] text-white">
+                            <th className="p-2 text-left border border-[#1a5fa0]">Type</th>
+                            <th className="p-2 text-left border border-[#1a5fa0]">Start</th>
+                            <th className="p-2 text-left border border-[#1a5fa0]">End</th>
+                            <th className="p-2 text-left border border-[#1a5fa0]">Days</th>
+                            <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
+                            <th className="p-2 text-left border border-[#1a5fa0]">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {leaveRecords.map(leave => (
+                            <tr key={leave.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
+                              <td className="p-2 border border-[#b8ccdc]">{leave.leave_types?.name || 'N/A'}</td>
+                              <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.start_date)}</td>
+                              <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.end_date)}</td>
+                              <td className="p-2 border border-[#b8ccdc] font-bold">{leave.total_days}</td>
+                              <td className="p-2 border border-[#b8ccdc]">
+                                <span className={`px-2 py-0.5 rounded-full text-xs ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{leave.status}</span>
+                              </td>
+                              <td className="p-2 border border-[#b8ccdc] text-xs">{leave.reason?.slice(0, 40) || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : <p className="text-center text-slate-400 py-8">No leave records found</p>}
                 </div>
-              ) : <p className="text-center text-slate-400 py-8">No leave records</p>}
+              )}
+
+              {/* LEAVE BALANCES SUB-TAB */}
+              {leaveSubTab === 'balances' && (
+                <div>
+                  {leaveBalances.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {leaveBalances.map(balance => {
+                        const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.id === (balance.leave_types?.code?.toLowerCase() || balance.leave_type_id)) || {}
+                        const color = balance.leave_types?.color || typeDef.color || '#10b981'
+                        const name = balance.leave_types?.name || typeDef.name || 'Leave'
+                        const allocated = balance.allocated_days || 0
+                        const used = balance.used_days || 0
+                        const pending = balance.pending_days || 0
+                        const remaining = balance.remaining_days || 0
+                        
+                        return (
+                          <div key={balance.id} className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded-xl p-4" style={{ borderLeftColor: color, borderLeftWidth: '4px' }}>
+                            <p className="font-bold text-slate-800 dark:text-white text-sm mb-2">{name}</p>
+                            <div className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-full mb-2 overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0}%`, backgroundColor: color }}></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="text-center"><p className="text-slate-500">Remaining</p><p className="text-lg font-bold" style={{ color }}>{remaining}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Allocated</p><p className="text-lg font-bold text-slate-600">{allocated}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Used</p><p className="text-sm font-bold text-red-500">{used}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Pending</p><p className="text-sm font-bold text-amber-500">{pending}</p></div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500">No leave balances found</p>
+                      <p className="text-slate-400 text-xs mt-1">Run the leave sync SQL to create balances for all employees</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -781,8 +814,7 @@ export default function EmployeeDetail() {
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">📢 Upcoming Events / Jobs</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{events.length} events</span>
-                  <button onClick={() => refreshTab('events')} disabled={refreshingTab === 'events'}
-                    className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                  <button onClick={() => refreshTab('events')} disabled={refreshingTab === 'events'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'events' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
