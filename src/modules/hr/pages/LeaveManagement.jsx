@@ -106,6 +106,14 @@ export default function LeaveManagement() {
         setMyRequests(myReqs || [])
       }
 
+      // ═══ LOAD ALL REQUESTS FOR EVERYONE ═══
+      const { data: all } = await supabase
+        .from('leave_requests')
+        .select('*, leave_types(name, code, color), employees(first_name, last_name, employee_code, department)')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      setAllRequests(all || [])
+
       if (isApprover) {
         const { data: pending } = await supabase
           .from('leave_requests')
@@ -113,13 +121,6 @@ export default function LeaveManagement() {
           .eq('status', 'pending')
           .order('submitted_at', { ascending: false })
         setPendingApprovals(pending || [])
-
-        const { data: all } = await supabase
-          .from('leave_requests')
-          .select('*, leave_types(name, code, color), employees(first_name, last_name, employee_code, department)')
-          .order('created_at', { ascending: false })
-          .limit(100)
-        setAllRequests(all || [])
 
         const { data: logs } = await supabase
           .from('leave_approvals')
@@ -363,7 +364,6 @@ export default function LeaveManagement() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {/* GLOBAL APPLY BUTTON - ADDED HERE */}
             <button 
               onClick={() => openLeaveApplication('')}
               className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 shadow-lg transition-colors"
@@ -396,14 +396,14 @@ export default function LeaveManagement() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs - All Requests now visible to everyone */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'my-leave', label: 'My Leave', icon: Calendar },
+            { id: 'all-requests', label: 'All Requests', icon: FileText },
             ...(isApprover ? [
               { id: 'approvals', label: `Approvals (${pendingApprovals.length})`, icon: Shield },
-              { id: 'all-requests', label: 'All Requests', icon: FileText },
               { id: 'audit', label: 'Audit Trail', icon: History },
             ] : []),
           ].map(tab => (
@@ -418,9 +418,7 @@ export default function LeaveManagement() {
 
         {loading && <div className="text-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto mb-3"></div><p>Loading leave data...</p></div>}
 
-        {/* ═══════════════════════════════════════════ */}
         {/* DASHBOARD TAB */}
-        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'dashboard' && !loading && (
           <div>
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
@@ -451,7 +449,6 @@ export default function LeaveManagement() {
                           <p className="text-[10px] text-slate-400">{type.description}</p>
                         </div>
                       </div>
-                      {/* APPLY BUTTON ON EACH CARD */}
                       <button 
                         onClick={(e) => { e.stopPropagation(); openLeaveApplication(type.id || type.code) }}
                         className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors"
@@ -488,12 +485,9 @@ export default function LeaveManagement() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════ */}
-        {/* MY LEAVE TAB - CARD GRID DESIGN */}
-        {/* ═══════════════════════════════════════════ */}
+        {/* MY LEAVE TAB */}
         {activeTab === 'my-leave' && !loading && (
           <div>
-            {/* Leave Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
               {leaveTypes.map(type => {
                 const balance = getBalanceForType(type.id || type.code)
@@ -542,7 +536,6 @@ export default function LeaveManagement() {
 
                     <p className="text-slate-400 text-[11px] mt-2">{type.description}</p>
 
-                    {/* APPLY BUTTON ON MY LEAVE CARDS */}
                     <button 
                       onClick={(e) => { e.stopPropagation(); openLeaveApplication(type.id || type.code) }}
                       className="absolute bottom-3 right-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
@@ -555,19 +548,12 @@ export default function LeaveManagement() {
               })}
             </div>
 
-            {/* Recent Applications Section */}
             <div className="neu-raised rounded-3xl p-6">
               <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200 dark:border-slate-700">
                 <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
                   <Clock className="w-6 h-6 text-blue-500" />
                   Recent Applications
                 </h2>
-                <button 
-                  onClick={() => setActiveTab('history')}
-                  className="text-blue-500 hover:text-blue-600 font-semibold text-sm flex items-center gap-1 transition-colors"
-                >
-                  View All <ChevronRight className="w-4 h-4" />
-                </button>
               </div>
 
               {myRequests.length > 0 ? (
@@ -624,9 +610,7 @@ export default function LeaveManagement() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════ */}
         {/* APPLY FORM MODAL */}
-        {/* ═══════════════════════════════════════════ */}
         <AnimatePresence>
           {showApplyForm && (
             <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -685,9 +669,7 @@ export default function LeaveManagement() {
           )}
         </AnimatePresence>
 
-        {/* ═══════════════════════════════════════════ */}
         {/* APPROVALS TAB */}
-        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'approvals' && isApprover && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -725,10 +707,8 @@ export default function LeaveManagement() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════ */}
-        {/* ALL REQUESTS TAB */}
-        {/* ═══════════════════════════════════════════ */}
-        {activeTab === 'all-requests' && isApprover && !loading && (
+        {/* ALL REQUESTS TAB - Now visible to everyone */}
+        {activeTab === 'all-requests' && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <div className="flex flex-wrap justify-between gap-3 mb-4">
               <h2 className="text-lg font-bold">All Leave Requests</h2>
@@ -760,12 +740,16 @@ export default function LeaveManagement() {
                 </tbody>
               </table>
             </div>
+            {allRequests.length === 0 && (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">No leave requests found</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════ */}
         {/* AUDIT TRAIL TAB */}
-        {/* ═══════════════════════════════════════════ */}
         {activeTab === 'audit' && isApprover && !loading && (
           <div className="neu-raised rounded-3xl p-6">
             <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><History className="w-5 h-5 text-purple-600" />Audit Trail</h2>
@@ -786,17 +770,6 @@ export default function LeaveManagement() {
             ) : <p className="text-center py-8 text-slate-500">No audit records</p>}
           </div>
         )}
-
-        {/* Missing getStatusBadge function - adding here */}
-        {(() => {
-          window.getStatusBadge = (s) => ({
-            pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-            approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-            rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-            cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-          }[s] || 'bg-slate-100')
-          return null
-        })()}
       </main>
     </div>
   )
