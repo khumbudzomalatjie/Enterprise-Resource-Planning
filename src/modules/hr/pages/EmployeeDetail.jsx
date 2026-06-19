@@ -39,7 +39,6 @@ export default function EmployeeDetail() {
   const [activeTab, setActiveTab] = useState('general')
   const [uploading, setUploading] = useState(false)
   
-  // Live data states for each tab
   const [attendanceRecords, setAttendanceRecords] = useState([])
   const [payrollHistory, setPayrollHistory] = useState([])
   const [payrollDetails, setPayrollDetails] = useState(null)
@@ -52,7 +51,6 @@ export default function EmployeeDetail() {
   const [tabLoading, setTabLoading] = useState(false)
   const [refreshingTab, setRefreshingTab] = useState(null)
 
-  // Dashboard stats
   const [stats, setStats] = useState({
     totalHoursThisWeek: 0,
     totalHoursThisMonth: 0,
@@ -66,7 +64,6 @@ export default function EmployeeDetail() {
     nextSchedule: null
   })
 
-  // Allowed fields for employee table
   const allowedFields = [
     'first_name', 'last_name', 'email', 'phone', 'alternative_phone',
     'address_line1', 'address_line2', 'city', 'state', 'postal_code',
@@ -126,7 +123,6 @@ export default function EmployeeDetail() {
     setRefreshingTab(null)
   }
 
-  // 1. Time Clock History
   const loadAttendanceRecords = async () => {
     if (!id) return
     try {
@@ -141,7 +137,6 @@ export default function EmployeeDetail() {
     } catch (e) { setAttendanceRecords([]) }
   }
 
-  // 2. Payroll History
   const loadPayrollHistory = async () => {
     if (!id) return
     try {
@@ -155,7 +150,6 @@ export default function EmployeeDetail() {
     } catch (e) { setPayrollHistory([]) }
   }
 
-  // 3. Payroll Details
   const loadPayrollDetails = async () => {
     if (!id) return
     try {
@@ -169,7 +163,6 @@ export default function EmployeeDetail() {
     } catch (e) { setPayrollDetails(null) }
   }
 
-  // 4. Schedules
   const loadSchedules = async () => {
     if (!id) return
     try {
@@ -184,7 +177,6 @@ export default function EmployeeDetail() {
     } catch (e) { setSchedules([]) }
   }
 
-  // 5. Leave Records
   const loadLeaveRecords = async () => {
     if (!id) return
     try {
@@ -198,17 +190,17 @@ export default function EmployeeDetail() {
     } catch (e) { setLeaveRecords([]) }
   }
 
-  // 5b. Leave Balances
+  // FIXED: Leave Balances - uses simple query without joins
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
-      // First try to sync balances
+      // Sync balances first
       await supabase.rpc('sync_leave_balances', { p_employee_id: id })
       
-      // Then fetch them
+      // Fetch balances with simple query
       const { data, error } = await supabase
         .from('employee_leave_balances')
-        .select('*, leave_types(id, name, days_per_year)')
+        .select('*')
         .eq('employee_id', id)
       
       if (error) {
@@ -227,7 +219,6 @@ export default function EmployeeDetail() {
     }
   }
 
-  // 6. Events
   const loadEvents = async () => {
     if (!id) return
     try {
@@ -242,7 +233,6 @@ export default function EmployeeDetail() {
     } catch (e) { setEvents([]) }
   }
 
-  // 7. Attachments
   const loadAttachments = async () => {
     if (!id) return
     try {
@@ -255,7 +245,6 @@ export default function EmployeeDetail() {
     } catch (e) { setAttachments([]) }
   }
 
-  // Stats
   const loadStats = async () => {
     if (!id) return
     try {
@@ -301,7 +290,6 @@ export default function EmployeeDetail() {
     } catch (e) {}
   }
 
-  // Save Employee
   const handleSave = async () => {
     if (!editData.first_name || !editData.last_name || !editData.email) {
       toast.error('Name and email are required')
@@ -718,20 +706,19 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB */}
+          {/* LEAVE TAB - FIXED */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records</h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days remaining</span>
+                  <span className="text-xs text-slate-500">Balance: {stats.leaveBalance}d</span>
                   <button onClick={() => refreshTab('leave')} disabled={refreshingTab === 'leave'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'leave' ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
 
-              {/* Leave Sub-Tabs */}
               <div className="flex gap-2 mb-4">
                 <button onClick={() => setLeaveSubTab('history')}
                   className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${leaveSubTab === 'history' ? 'bg-[#2e75b6] text-white' : 'bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
@@ -743,7 +730,7 @@ export default function EmployeeDetail() {
                 </button>
               </div>
 
-              {/* LEAVE HISTORY SUB-TAB */}
+              {/* LEAVE HISTORY */}
               {leaveSubTab === 'history' && (
                 <div>
                   {leaveRecords.length > 0 ? (
@@ -791,22 +778,22 @@ export default function EmployeeDetail() {
                 </div>
               )}
 
-              {/* LEAVE BALANCES SUB-TAB */}
+              {/* LEAVE BALANCES - FIXED */}
               {leaveSubTab === 'balances' && (
                 <div>
                   {leaveBalances.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {leaveBalances.map(balance => {
-                        const typeName = balance.leave_types?.name || 'Leave'
+                      {leaveBalances.map((balance, i) => {
+                        const typeName = balance.leave_type || balance.leave_type_id || 'Leave'
                         const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.name === typeName)
                         const color = typeDef?.color || '#10b981'
-                        const allocated = balance.allocated_days || 0
-                        const used = balance.used_days || 0
-                        const pending = balance.pending_days || 0
-                        const remaining = balance.remaining_days || 0
+                        const allocated = Number(balance.allocated_days) || 0
+                        const used = Number(balance.used_days) || 0
+                        const pending = Number(balance.pending_days) || 0
+                        const remaining = Number(balance.remaining_days) || (allocated - used - pending)
                         
                         return (
-                          <div key={balance.id} 
+                          <div key={balance.id || i} 
                             className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded-xl p-4" 
                             style={{ borderLeftColor: color, borderLeftWidth: '4px' }}>
                             <p className="font-bold text-slate-800 dark:text-white text-sm mb-2">{typeName}</p>
@@ -840,8 +827,8 @@ export default function EmployeeDetail() {
                   ) : (
                     <div className="text-center py-8">
                       <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                      <p className="text-slate-500">No leave balances found</p>
-                      <p className="text-slate-400 text-xs mt-1">Click the button below to sync leave balances</p>
+                      <p className="text-slate-500">No leave balances yet</p>
+                      <p className="text-slate-400 text-xs mt-1">Click below to create leave balances</p>
                       <button 
                         onClick={async () => {
                           try {
@@ -850,10 +837,10 @@ export default function EmployeeDetail() {
                               toast.success('Leave balances synced!')
                               await loadLeaveBalances()
                             } else {
-                              toast.error('Failed to sync: ' + error.message)
+                              toast.error('Failed: ' + error.message)
                             }
                           } catch (e) {
-                            toast.error('Sync failed. Run the SQL setup first.')
+                            toast.error('Run the SQL setup in Supabase first')
                           }
                         }}
                         className="mt-3 px-4 py-2 bg-[#2e75b6] text-white rounded-lg text-sm hover:bg-[#1a5fa0] transition-colors"
