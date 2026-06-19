@@ -190,7 +190,7 @@ export default function EmployeeDetail() {
     } catch (e) { setLeaveRecords([]) }
   }
 
-  // FIXED: Leave Balances - uses simple query without joins
+  // AMENDED: Leave Balances - uses simple query
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
@@ -210,7 +210,7 @@ export default function EmployeeDetail() {
         console.log('Leave balances loaded:', data?.length || 0)
         setLeaveBalances(data || [])
         
-        const totalRemaining = (data || []).reduce((sum, b) => sum + (b.remaining_days || 0), 0)
+        const totalRemaining = (data || []).reduce((sum, b) => sum + (Number(b.remaining_days) || 0), 0)
         setStats(prev => ({ ...prev, leaveBalance: totalRemaining }))
       }
     } catch (e) {
@@ -706,7 +706,7 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB - FIXED */}
+          {/* LEAVE TAB */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -778,7 +778,7 @@ export default function EmployeeDetail() {
                 </div>
               )}
 
-              {/* LEAVE BALANCES - FIXED */}
+              {/* LEAVE BALANCES */}
               {leaveSubTab === 'balances' && (
                 <div>
                   {leaveBalances.length > 0 ? (
@@ -803,22 +803,10 @@ export default function EmployeeDetail() {
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="text-center">
-                                <p className="text-slate-500">Remaining</p>
-                                <p className="text-lg font-bold" style={{ color }}>{remaining}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-slate-500">Allocated</p>
-                                <p className="text-lg font-bold text-slate-600">{allocated}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-slate-500">Used</p>
-                                <p className="text-sm font-bold text-red-500">{used}</p>
-                              </div>
-                              <div className="text-center">
-                                <p className="text-slate-500">Pending</p>
-                                <p className="text-sm font-bold text-amber-500">{pending}</p>
-                              </div>
+                              <div className="text-center"><p className="text-slate-500">Remaining</p><p className="text-lg font-bold" style={{ color }}>{remaining}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Allocated</p><p className="text-lg font-bold text-slate-600">{allocated}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Used</p><p className="text-sm font-bold text-red-500">{used}</p></div>
+                              <div className="text-center"><p className="text-slate-500">Pending</p><p className="text-sm font-bold text-amber-500">{pending}</p></div>
                             </div>
                           </div>
                         )
