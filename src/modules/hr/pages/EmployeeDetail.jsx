@@ -785,7 +785,7 @@ export default function EmployeeDetail() {
                   {leaveBalances.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {leaveBalances.map((balance, i) => {
-                        const typeName = balance.leave_type || balance.leave_type_id || 'Leave'
+                        const typeName = balance.leave_type || 'Leave'
                         const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.name === typeName)
                         const color = typeDef?.color || '#10b981'
                         const allocated = Number(balance.allocated_days) || 0
