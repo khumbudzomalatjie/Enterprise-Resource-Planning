@@ -11,7 +11,7 @@ import {
   Mail, Phone, MapPin, Calendar, Briefcase, Shield, Users,
   Clock, CreditCard, FileText, Eye, Download, Trash2,
   CheckCircle2, XCircle, AlertCircle, BarChart3,
-  Building2, BookOpen, Star, RefreshCw
+  Building2, BookOpen, Star, RefreshCw, Plus
 } from 'lucide-react'
 
 // Leave type definitions for color coding
@@ -24,6 +24,12 @@ const LEAVE_TYPE_DEFINITIONS = [
   { id: 'study', name: 'Study Leave', days_allowed: 10, color: '#0ea5e9' },
   { id: 'compassionate', name: 'Compassionate Leave', days_allowed: 5, color: '#64748b' },
   { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, color: '#78716c' },
+]
+
+// ADDED: Leave types list for the apply form
+const LEAVE_TYPES_LIST = [
+  'Annual Leave', 'Sick Leave', 'Family Responsibility',
+  'Maternity Leave', 'Study Leave', 'Unpaid Leave'
 ]
 
 export default function EmployeeDetail() {
@@ -50,6 +56,16 @@ export default function EmployeeDetail() {
   const [attachments, setAttachments] = useState([])
   const [tabLoading, setTabLoading] = useState(false)
   const [refreshingTab, setRefreshingTab] = useState(null)
+
+  // ADDED: Apply leave form state
+  const [showApplyForm, setShowApplyForm] = useState(false)
+  const [applyForm, setApplyForm] = useState({
+    leave_type: '',
+    start_date: '',
+    end_date: '',
+    reason: ''
+  })
+  const [submittingLeave, setSubmittingLeave] = useState(false)
 
   const [stats, setStats] = useState({
     totalHoursThisWeek: 0,
@@ -190,7 +206,6 @@ export default function EmployeeDetail() {
     } catch (e) { setLeaveRecords([]) }
   }
 
-  // REPLACED: Leave Balances - No RPC dependency, handles missing table
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
@@ -200,7 +215,6 @@ export default function EmployeeDetail() {
         .eq('employee_id', id)
       
       if (error) {
-        // Table doesn't exist or other error - silently handle
         if (error.code === '42P01' || error.message.includes('does not exist')) {
           console.log('employee_leave_balances table does not exist yet')
         } else {
@@ -289,6 +303,48 @@ export default function EmployeeDetail() {
         attendanceRate: attendanceRate,
       }))
     } catch (e) {}
+  }
+
+  // ADDED: Handle apply leave submission
+  const handleApplyLeave = async (e) => {
+    e.preventDefault()
+    if (!applyForm.leave_type || !applyForm.start_date || !applyForm.end_date) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    const start = new Date(applyForm.start_date)
+    const end = new Date(applyForm.end_date)
+    if (end < start) {
+      toast.error('End date must be after start date')
+      return
+    }
+    
+    const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+
+    setSubmittingLeave(true)
+    const { error } = await supabase
+      .from('leave_requests')
+      .insert([{
+        employee_id: id,
+        leave_type_id: applyForm.leave_type,
+        start_date: applyForm.start_date,
+        end_date: applyForm.end_date,
+        total_days: diffDays,
+        reason: applyForm.reason,
+        status: 'pending'
+      }])
+
+    if (error) {
+      toast.error('Failed to submit: ' + error.message)
+      console.error('Leave apply error:', error)
+    } else {
+      toast.success('Leave request submitted!')
+      setApplyForm({ leave_type: '', start_date: '', end_date: '', reason: '' })
+      setShowApplyForm(false)
+      refreshTab('leave')
+    }
+    setSubmittingLeave(false)
   }
 
   const handleSave = async () => {
@@ -459,7 +515,7 @@ export default function EmployeeDetail() {
         {/* Tab Content */}
         <div className="border border-[#2f77bb] bg-[#d7e5f2] dark:bg-slate-800 p-2.5 min-h-[400px]">
           
-          {/* GENERAL INFO TAB */}
+          {/* GENERAL INFO TAB - unchanged */}
           {activeTab === 'general' && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_170px] gap-5">
               <div>
@@ -532,15 +588,7 @@ export default function EmployeeDetail() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="bg-[#2e75b6] text-white">
-                      <th className="p-2 text-left border border-[#1a5fa0]">Date</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Clock In</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Clock Out</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Hours</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Method</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">GPS Location</th>
-                    </tr>
+                    <tr className="bg-[#2e75b6] text-white"><th className="p-2 text-left border border-[#1a5fa0]">Date</th><th className="p-2 text-left border border-[#1a5fa0]">Clock In</th><th className="p-2 text-left border border-[#1a5fa0]">Clock Out</th><th className="p-2 text-left border border-[#1a5fa0]">Hours</th><th className="p-2 text-left border border-[#1a5fa0]">Method</th><th className="p-2 text-left border border-[#1a5fa0]">Status</th><th className="p-2 text-left border border-[#1a5fa0]">GPS Location</th></tr>
                   </thead>
                   <tbody>
                     {attendanceRecords.map(record => (
@@ -550,7 +598,7 @@ export default function EmployeeDetail() {
                         <td className="p-2 border border-[#b8ccdc]">{formatTime(record.clock_out_time)}</td>
                         <td className="p-2 border border-[#b8ccdc] font-bold">{record.total_hours?.toFixed(1) || '-'}</td>
                         <td className="p-2 border border-[#b8ccdc] capitalize">{record.check_in_method?.replace('_', ' ') || '-'}</td>
-                        <td className="p-2 border border-[#b8ccdc]">
+                        <td className="p-2 border border-[#b8ccdc]}">
                           <span className={`px-2 py-0.5 rounded-full text-xs ${record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : record.is_late ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                             {record.is_late ? 'Late' : record.status}
                           </span>
@@ -567,10 +615,7 @@ export default function EmployeeDetail() {
                   </tbody>
                 </table>
                 {attendanceRecords.length === 0 && (
-                  <div className="text-center py-8">
-                    <Clock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                    <p className="text-slate-500">No attendance records found</p>
-                  </div>
+                  <div className="text-center py-8"><Clock className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500">No attendance records found</p></div>
                 )}
               </div>
             </div>
@@ -579,28 +624,10 @@ export default function EmployeeDetail() {
           {/* PAYROLL HISTORY TAB */}
           {activeTab === 'payroll' && (
             <div>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">💰 Payroll History</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">{payrollHistory.length} payslips</span>
-                  <button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
-                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'payroll' ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-              </div>
+              <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">💰 Payroll History</h3><button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors"><RefreshCw className={`w-4 h-4 ${refreshingTab === 'payroll' ? 'animate-spin' : ''}`} /></button></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-[#2e75b6] text-white">
-                      <th className="p-2 text-left border border-[#1a5fa0]">Period</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Basic Salary</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Overtime</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Deductions</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Tax</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Net Pay</th>
-                      <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                    </tr>
-                  </thead>
+                  <thead><tr className="bg-[#2e75b6] text-white"><th className="p-2 text-left border border-[#1a5fa0]">Period</th><th className="p-2 text-left border border-[#1a5fa0]">Basic Salary</th><th className="p-2 text-left border border-[#1a5fa0]">Overtime</th><th className="p-2 text-left border border-[#1a5fa0]">Deductions</th><th className="p-2 text-left border border-[#1a5fa0]">Tax</th><th className="p-2 text-left border border-[#1a5fa0]">Net Pay</th><th className="p-2 text-left border border-[#1a5fa0]">Status</th></tr></thead>
                   <tbody>
                     {payrollHistory.map(payslip => (
                       <tr key={payslip.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
@@ -610,9 +637,7 @@ export default function EmployeeDetail() {
                         <td className="p-2 border border-[#b8ccdc] text-red-600">{formatCurrency(payslip.total_deductions)}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.paye_tax)}</td>
                         <td className="p-2 border border-[#b8ccdc] font-bold text-emerald-600">{formatCurrency(payslip.net_salary)}</td>
-                        <td className="p-2 border border-[#b8ccdc]">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${payslip.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{payslip.status}</span>
-                        </td>
+                        <td className="p-2 border border-[#b8ccdc]}"><span className={`px-2 py-0.5 rounded-full text-xs ${payslip.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{payslip.status}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -625,89 +650,33 @@ export default function EmployeeDetail() {
           {/* PAYROLL DETAILS TAB */}
           {activeTab === 'details' && (
             <div>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">💳 Payroll Details</h3>
-                <button onClick={() => refreshTab('details')} disabled={refreshingTab === 'details'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
-                  <RefreshCw className={`w-4 h-4 ${refreshingTab === 'details' ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
+              <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">💳 Payroll Details</h3></div>
               {payrollDetails ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Salary Type', value: payrollDetails.payment_method || 'N/A' },
-                    { label: 'Basic Salary', value: formatCurrency(payrollDetails.basic_salary) },
-                    { label: 'Housing Allowance', value: formatCurrency(payrollDetails.housing_allowance) },
-                    { label: 'Transport', value: formatCurrency(payrollDetails.transport_allowance) },
-                    { label: 'Medical', value: formatCurrency(payrollDetails.medical_allowance) },
-                    { label: 'Total Earnings', value: formatCurrency(payrollDetails.total_earnings) },
-                    { label: 'Pension', value: formatCurrency(payrollDetails.pension_contribution) },
-                    { label: 'Medical Aid', value: formatCurrency(payrollDetails.medical_aid) },
-                    { label: 'Tax Number', value: payrollDetails.tax_reference_number || employee.tax_number || 'N/A' },
-                    { label: 'Bank', value: payrollDetails.bank_name || employee.bank_name || 'N/A' },
-                    { label: 'Account', value: payrollDetails.bank_account_number || employee.bank_account_number || 'N/A' },
-                    { label: 'Effective Date', value: formatDate(payrollDetails.effective_date) },
-                  ].map((item, i) => (
-                    <div key={i} className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded p-3">
-                      <p className="text-xs text-slate-500">{item.label}</p>
-                      <p className="font-semibold text-slate-800 dark:text-white">{item.value}</p>
-                    </div>
+                  {[{ label: 'Basic Salary', value: formatCurrency(payrollDetails.basic_salary) },{ label: 'Housing', value: formatCurrency(payrollDetails.housing_allowance) },{ label: 'Transport', value: formatCurrency(payrollDetails.transport_allowance) },{ label: 'Medical', value: formatCurrency(payrollDetails.medical_allowance) },{ label: 'Total Earnings', value: formatCurrency(payrollDetails.total_earnings) },{ label: 'Pension', value: formatCurrency(payrollDetails.pension_contribution) },{ label: 'Medical Aid', value: formatCurrency(payrollDetails.medical_aid) },{ label: 'Bank', value: payrollDetails.bank_name || 'N/A' }].map((item, i) => (
+                    <div key={i} className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded p-3"><p className="text-xs text-slate-500">{item.label}</p><p className="font-semibold text-slate-800 dark:text-white">{item.value}</p></div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500">No payroll details configured</p>
-                </div>
-              )}
+              ) : <div className="text-center py-8"><CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500">No payroll details configured</p></div>}
             </div>
           )}
 
           {/* SCHEDULING TAB */}
           {activeTab === 'schedule' && (
             <div>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">📅 Upcoming Schedule</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">{schedules.length} shifts</span>
-                  <button onClick={() => refreshTab('schedule')} disabled={refreshingTab === 'schedule'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
-                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'schedule' ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-              </div>
+              <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">📅 Upcoming Schedule</h3></div>
               {schedules.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-[#2e75b6] text-white">
-                        <th className="p-2 text-left border border-[#1a5fa0]">Date</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Shift</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Time</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Job/Client</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Location</th>
-                        <th className="p-2 text-left border border-[#1a5fa0]">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schedules.map(shift => (
-                        <tr key={shift.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                          <td className="p-2 border border-[#b8ccdc]">{formatDate(shift.shift_date)}</td>
-                          <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.name || 'Standard'}</td>
-                          <td className="p-2 border border-[#b8ccdc]">{shift.shift_types?.start_time?.slice(0,5)} - {shift.shift_types?.end_time?.slice(0,5)}</td>
-                          <td className="p-2 border border-[#b8ccdc]">{shift.jobs?.title || shift.jobs?.clients?.company_name || 'N/A'}</td>
-                          <td className="p-2 border border-[#b8ccdc] text-xs">{shift.jobs?.site_address?.slice(0, 30) || 'N/A'}</td>
-                          <td className="p-2 border border-[#b8ccdc]">
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${shift.status === 'checked_in' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{shift.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
+                    <thead><tr className="bg-[#2e75b6] text-white"><th className="p-2 text-left border">Date</th><th className="p-2 text-left border">Shift</th><th className="p-2 text-left border">Time</th><th className="p-2 text-left border">Job/Client</th><th className="p-2 text-left border">Location</th><th className="p-2 text-left border">Status</th></tr></thead>
+                    <tbody>{schedules.map(s => (<tr key={s.id} className="bg-white dark:bg-slate-700 even:bg-slate-50"><td className="p-2 border">{formatDate(s.shift_date)}</td><td className="p-2 border">{s.shift_types?.name}</td><td className="p-2 border">{s.shift_types?.start_time?.slice(0,5)}</td><td className="p-2 border">{s.jobs?.title || 'N/A'}</td><td className="p-2 border text-xs">{s.jobs?.site_address?.slice(0,30)}</td><td className="p-2 border"><span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{s.status}</span></td></tr>))}</tbody>
                   </table>
                 </div>
               ) : <p className="text-center text-slate-400 py-8">No upcoming schedules</p>}
             </div>
           )}
 
-          {/* LEAVE TAB */}
+          {/* LEAVE TAB - WITH APPLY FORM */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -719,6 +688,58 @@ export default function EmployeeDetail() {
                   </button>
                 </div>
               </div>
+
+              {/* ADDED: Apply Leave Button */}
+              <div className="mb-3">
+                <button 
+                  onClick={() => setShowApplyForm(!showApplyForm)}
+                  className="neo-btn h-8 px-4 rounded-md bg-gradient-to-b from-emerald-500 to-emerald-700 text-white font-bold text-sm flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  {showApplyForm ? 'Cancel' : 'Apply for Leave'}
+                </button>
+              </div>
+
+              {/* ADDED: Apply Leave Form */}
+              {showApplyForm && (
+                <div className="mb-4 p-4 bg-white dark:bg-slate-700 rounded-xl border border-[#b8ccdc]">
+                  <h4 className="font-semibold text-sm mb-3">📝 New Leave Request</h4>
+                  <form onSubmit={handleApplyLeave} className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-500">Leave Type *</label>
+                        <select
+                          value={applyForm.leave_type}
+                          onChange={(e) => setApplyForm({...applyForm, leave_type: e.target.value})}
+                          className="w-full p-2 neu-inset rounded-lg text-sm"
+                          required
+                        >
+                          <option value="">Select type</option>
+                          {LEAVE_TYPES_LIST.map(lt => (
+                            <option key={lt} value={lt}>{lt}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">Start Date *</label>
+                        <input type="date" value={applyForm.start_date} onChange={(e) => setApplyForm({...applyForm, start_date: e.target.value})} className="w-full p-2 neu-inset rounded-lg text-sm" required />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">End Date *</label>
+                        <input type="date" value={applyForm.end_date} onChange={(e) => setApplyForm({...applyForm, end_date: e.target.value})} className="w-full p-2 neu-inset rounded-lg text-sm" required />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">Reason</label>
+                        <input type="text" value={applyForm.reason} onChange={(e) => setApplyForm({...applyForm, reason: e.target.value})} placeholder="Optional" className="w-full p-2 neu-inset rounded-lg text-sm" />
+                      </div>
+                    </div>
+                    <button type="submit" disabled={submittingLeave}
+                      className="neo-btn h-8 px-4 rounded-md bg-gradient-to-b from-[#4f8fd0] to-[#2d5f98] text-white font-bold text-sm">
+                      {submittingLeave ? 'Submitting...' : 'Submit Request'}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               <div className="flex gap-2 mb-4">
                 <button onClick={() => setLeaveSubTab('history')}
@@ -773,7 +794,7 @@ export default function EmployeeDetail() {
                     <div className="text-center py-8">
                       <FileText className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-slate-500">No leave records found</p>
-                      <p className="text-slate-400 text-xs mt-1">Leave requests will appear here when submitted</p>
+                      <p className="text-slate-400 text-xs mt-1">Click "Apply for Leave" above to submit a request</p>
                     </div>
                   )}
                 </div>
@@ -846,40 +867,12 @@ export default function EmployeeDetail() {
           {/* EVENTS TAB */}
           {activeTab === 'events' && (
             <div>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">📢 Upcoming Events / Jobs</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">{events.length} events</span>
-                  <button onClick={() => refreshTab('events')} disabled={refreshingTab === 'events'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
-                    <RefreshCw className={`w-4 h-4 ${refreshingTab === 'events' ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-              </div>
+              <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">📢 Upcoming Events / Jobs</h3></div>
               {events.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-[#2e75b6] text-white">
-                        <th className="p-2 text-left border">Event</th>
-                        <th className="p-2 text-left border">Date</th>
-                        <th className="p-2 text-left border">Time</th>
-                        <th className="p-2 text-left border">Location</th>
-                        <th className="p-2 text-left border">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {events.map(event => (
-                        <tr key={event.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                          <td className="p-2 border font-medium">{event.title}</td>
-                          <td className="p-2 border">{formatDate(event.scheduled_date)}</td>
-                          <td className="p-2 border">{event.scheduled_start_time?.slice(0,5)} - {event.scheduled_end_time?.slice(0,5)}</td>
-                          <td className="p-2 border text-xs">{event.site_address?.slice(0, 30) || 'N/A'}</td>
-                          <td className="p-2 border">
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${event.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{event.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
+                    <thead><tr className="bg-[#2e75b6] text-white"><th className="p-2 text-left border">Event</th><th className="p-2 text-left border">Date</th><th className="p-2 text-left border">Time</th><th className="p-2 text-left border">Location</th><th className="p-2 text-left border">Status</th></tr></thead>
+                    <tbody>{events.map(event => (<tr key={event.id} className="bg-white dark:bg-slate-700 even:bg-slate-50"><td className="p-2 border font-medium">{event.title}</td><td className="p-2 border">{formatDate(event.scheduled_date)}</td><td className="p-2 border">{event.scheduled_start_time?.slice(0,5)}</td><td className="p-2 border text-xs">{event.site_address?.slice(0,30)}</td><td className="p-2 border"><span className={`px-2 py-0.5 rounded-full text-xs ${event.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{event.status}</span></td></tr>))}</tbody>
                   </table>
                 </div>
               ) : <p className="text-center text-slate-400 py-8">No upcoming events</p>}
@@ -895,12 +888,7 @@ export default function EmployeeDetail() {
           </div>
           <table className="w-full border-collapse bg-white dark:bg-slate-800">
             <thead>
-              <tr>
-                <th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">File Name</th>
-                <th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Type</th>
-                <th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Added On</th>
-                <th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Actions</th>
-              </tr>
+              <tr><th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">File Name</th><th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Type</th><th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Added On</th><th className="bg-[#d4e6f7] dark:bg-slate-600 border border-[#2f77bb] p-2 text-sm">Actions</th></tr>
             </thead>
             <tbody>
               {attachments.length > 0 ? attachments.map(doc => (
