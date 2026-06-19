@@ -16,6 +16,7 @@ import SalesRoutes from '../modules/sales/routes/SalesRoutes'
 import OperationsRoutes from '../modules/operations/routes/OperationsRoutes'
 import InventoryRoutes from '../modules/inventory/routes/InventoryRoutes'
 import ProcurementRoutes from '../modules/procurement/routes/ProcurementRoutes'
+import AuditRoutes from '../modules/audit/routes/AuditRoutes'
 import FinanceRoutes from '../modules/finance/routes/FinanceRoutes'
 import FleetRoutes from '../modules/fleet/routes/FleetRoutes'
 import ReportsRoutes from '../modules/reports/routes/ReportsRoutes'
@@ -178,6 +179,24 @@ export default function AppRoutes() {
         } 
       />
 
+      {/* ============================================ */}
+{/* AUDIT TRAIL - System Activity Log            */}
+{/* ============================================ */}
+<Route 
+  path="/audit/*" 
+  element={
+    <ProtectedRoute>
+      <RoleBasedRoute requiredRoles={[
+        USER_ROLES.SUPER_ADMIN, 
+        USER_ROLES.OPERATIONS_MANAGER, 
+        USER_ROLES.HR_MANAGER,
+        USER_ROLES.FINANCE_OFFICER
+      ]}>
+        <AuditRoutes />
+      </RoleBasedRoute>
+    </ProtectedRoute>
+  } 
+/>
       {/* ============================================ */}
       {/* MODULE 9 - FINANCE & ACCOUNTING              */}
       {/* ============================================ */}
