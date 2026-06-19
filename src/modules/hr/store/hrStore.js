@@ -80,6 +80,21 @@ const useHRStore = create((set, get) => ({
         return { success: false, error: error.message }
       }
       set(state => ({ employees: [data, ...(state.employees || [])], loading: false }))
+      
+      // AUDIT: Log employee creation
+      try {
+        const { supabase } = await import('../lib/supabaseClient')
+        await supabase.rpc('log_audit', {
+          p_module: 'HR Management',
+          p_action: 'Created',
+          p_entity_type: 'Employee',
+          p_entity_name: data.first_name + ' ' + data.last_name,
+          p_description: 'Employee created: ' + data.first_name + ' ' + data.last_name
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true, data }
     } catch (err) {
       console.error('Create employee exception:', err)
@@ -129,6 +144,21 @@ const useHRStore = create((set, get) => ({
         selectedEmployee: state.selectedEmployee?.id === id ? data : state.selectedEmployee,
         loading: false
       }))
+      
+      // AUDIT: Log employee update
+      try {
+        const { supabase } = await import('../lib/supabaseClient')
+        await supabase.rpc('log_audit', {
+          p_module: 'HR Management',
+          p_action: 'Updated',
+          p_entity_type: 'Employee',
+          p_entity_name: data.first_name + ' ' + data.last_name,
+          p_description: 'Employee updated: ' + data.first_name + ' ' + data.last_name
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true, data }
     } catch (err) {
       console.error('Update employee exception:', err)
@@ -139,6 +169,10 @@ const useHRStore = create((set, get) => ({
 
   deleteEmployee: async (id) => {
     try {
+      // Get employee name before deleting for audit
+      const employee = get().employees?.find(emp => emp.id === id)
+      const employeeName = employee ? employee.first_name + ' ' + employee.last_name : 'Unknown'
+      
       const { error } = await hrApi.deleteEmployee(id)
       if (error) return { success: false, error: error.message }
       set(state => ({
@@ -146,6 +180,21 @@ const useHRStore = create((set, get) => ({
           emp.id === id ? { ...emp, employment_status: 'terminated' } : emp
         )
       }))
+      
+      // AUDIT: Log employee termination
+      try {
+        const { supabase } = await import('../lib/supabaseClient')
+        await supabase.rpc('log_audit', {
+          p_module: 'HR Management',
+          p_action: 'Terminated',
+          p_entity_type: 'Employee',
+          p_entity_name: employeeName,
+          p_description: 'Employee terminated: ' + employeeName
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true }
     } catch (err) {
       return { success: false, error: err.message }
@@ -164,6 +213,21 @@ const useHRStore = create((set, get) => ({
     const { data, error } = await hrApi.createContract(contractData)
     if (error) return { success: false, error: error.message }
     set(state => ({ contracts: [data, ...(state.contracts || [])] }))
+    
+    // AUDIT: Log contract creation
+    try {
+      const { supabase } = await import('../lib/supabaseClient')
+      await supabase.rpc('log_audit', {
+        p_module: 'HR Management',
+        p_action: 'Contract Created',
+        p_entity_type: 'Contract',
+        p_entity_name: data.contract_title,
+        p_description: 'Contract created: ' + data.contract_title
+      })
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message)
+    }
+    
     return { success: true, data }
   },
 
@@ -186,6 +250,21 @@ const useHRStore = create((set, get) => ({
     const { data, error } = await hrApi.createLeaveRequest(requestData)
     if (error) return { success: false, error: error.message }
     set(state => ({ leaveRequests: [data, ...(state.leaveRequests || [])] }))
+    
+    // AUDIT: Log leave request
+    try {
+      const { supabase } = await import('../lib/supabaseClient')
+      await supabase.rpc('log_audit', {
+        p_module: 'HR Management',
+        p_action: 'Leave Requested',
+        p_entity_type: 'Leave',
+        p_entity_name: data.leave_types?.name || 'Leave',
+        p_description: 'Leave request submitted: ' + data.total_days + ' days'
+      })
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message)
+    }
+    
     return { success: true, data }
   },
 
@@ -195,6 +274,21 @@ const useHRStore = create((set, get) => ({
     set(state => ({
       leaveRequests: (state.leaveRequests || []).map(lr => lr.id === id ? data : lr)
     }))
+    
+    // AUDIT: Log leave status change
+    try {
+      const { supabase } = await import('../lib/supabaseClient')
+      await supabase.rpc('log_audit', {
+        p_module: 'HR Management',
+        p_action: 'Leave ' + (updates.status || 'Updated'),
+        p_entity_type: 'Leave',
+        p_entity_name: data.leave_types?.name || 'Leave',
+        p_description: 'Leave request ' + (updates.status || 'updated')
+      })
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message)
+    }
+    
     return { success: true, data }
   },
 
@@ -210,6 +304,21 @@ const useHRStore = create((set, get) => ({
     const { data, error } = await hrApi.createTrainingRecord(trainingData)
     if (error) return { success: false, error: error.message }
     set(state => ({ trainingRecords: [data, ...(state.trainingRecords || [])] }))
+    
+    // AUDIT: Log training record
+    try {
+      const { supabase } = await import('../lib/supabaseClient')
+      await supabase.rpc('log_audit', {
+        p_module: 'HR Management',
+        p_action: 'Training Added',
+        p_entity_type: 'Training',
+        p_entity_name: data.training_name,
+        p_description: 'Training record added: ' + data.training_name
+      })
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message)
+    }
+    
     return { success: true, data }
   },
 
@@ -225,6 +334,21 @@ const useHRStore = create((set, get) => ({
     const { data, error } = await hrApi.createDisciplinaryRecord(recordData)
     if (error) return { success: false, error: error.message }
     set(state => ({ disciplinaryRecords: [data, ...(state.disciplinaryRecords || [])] }))
+    
+    // AUDIT: Log disciplinary record
+    try {
+      const { supabase } = await import('../lib/supabaseClient')
+      await supabase.rpc('log_audit', {
+        p_module: 'HR Management',
+        p_action: 'Disciplinary Action',
+        p_entity_type: 'Disciplinary',
+        p_entity_name: data.incident_type,
+        p_description: 'Disciplinary record added: ' + data.incident_type
+      })
+    } catch (auditError) {
+      console.error('Audit log error (non-critical):', auditError.message)
+    }
+    
     return { success: true, data }
   },
 
