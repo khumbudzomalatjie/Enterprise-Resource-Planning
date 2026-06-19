@@ -65,7 +65,6 @@ const useAuthStore = create((set, get) => ({
 
         if (createError) {
           console.error('Error creating profile:', createError)
-          // Set a default profile so the app doesn't break
           set({ 
             profile: {
               id: userId,
@@ -80,7 +79,6 @@ const useAuthStore = create((set, get) => ({
         data = newProfile
       } else if (error) {
         console.error('Error fetching profile:', error)
-        // Set a basic profile from user metadata
         const user = get().user
         set({ 
           profile: {
@@ -119,20 +117,64 @@ const useAuthStore = create((set, get) => ({
       
       await get().fetchProfile(data.user.id)
       
+      // AUDIT: Log login
+      try {
+        await supabase.rpc('log_audit', {
+          p_module: 'Authentication',
+          p_action: 'Login',
+          p_entity_type: 'User',
+          p_entity_name: email,
+          p_description: 'User logged in: ' + email
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true }
     } catch (error) {
       console.error('Sign in error:', error)
       set({ error: error.message, loading: false })
+      
+      // AUDIT: Log failed login
+      try {
+        await supabase.rpc('log_audit', {
+          p_module: 'Authentication',
+          p_action: 'Login Failed',
+          p_entity_type: 'User',
+          p_entity_name: email,
+          p_description: 'Failed login attempt: ' + error.message
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: false, error: error.message }
     }
   },
 
   signOut: async () => {
     try {
+      const userEmail = get().user?.email
+      
       set({ loading: true })
       
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+
+      // AUDIT: Log logout
+      if (userEmail) {
+        try {
+          await supabase.rpc('log_audit', {
+            p_module: 'Authentication',
+            p_action: 'Logout',
+            p_entity_type: 'User',
+            p_entity_name: userEmail,
+            p_description: 'User logged out: ' + userEmail
+          })
+        } catch (auditError) {
+          console.error('Audit log error (non-critical):', auditError.message)
+        }
+      }
 
       set({ 
         user: null, 
@@ -160,6 +202,20 @@ const useAuthStore = create((set, get) => ({
       if (error) throw error
 
       set({ loading: false })
+      
+      // AUDIT: Log password reset request
+      try {
+        await supabase.rpc('log_audit', {
+          p_module: 'Authentication',
+          p_action: 'Password Reset',
+          p_entity_type: 'User',
+          p_entity_name: email,
+          p_description: 'Password reset requested for: ' + email
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true }
     } catch (error) {
       console.error('Forgot password error:', error)
@@ -179,6 +235,20 @@ const useAuthStore = create((set, get) => ({
       if (error) throw error
 
       set({ loading: false })
+      
+      // AUDIT: Log password changed
+      try {
+        await supabase.rpc('log_audit', {
+          p_module: 'Authentication',
+          p_action: 'Password Changed',
+          p_entity_type: 'User',
+          p_entity_name: get().user?.email || 'Unknown',
+          p_description: 'Password changed successfully'
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true }
     } catch (error) {
       console.error('Reset password error:', error)
@@ -198,6 +268,20 @@ const useAuthStore = create((set, get) => ({
 
       if (error) throw error
       set({ profile: data })
+      
+      // AUDIT: Log profile update
+      try {
+        await supabase.rpc('log_audit', {
+          p_module: 'Authentication',
+          p_action: 'Profile Updated',
+          p_entity_type: 'User',
+          p_entity_name: data.email || data.full_name,
+          p_description: 'User profile updated'
+        })
+      } catch (auditError) {
+        console.error('Audit log error (non-critical):', auditError.message)
+      }
+      
       return { success: true, data }
     } catch (error) {
       console.error('Update profile error:', error)
