@@ -1,4 +1,4 @@
-\import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
@@ -190,50 +190,31 @@ export default function EmployeeDetail() {
     } catch (e) { setLeaveRecords([]) }
   }
 
-  // ============================================
-  // FIXED: Leave Balances - Robust query
-  // ============================================
+  // FIXED: Leave Balances - uses simple query without joins
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
-      // First try to sync balances via RPC
-      try {
-        await supabase.rpc('sync_leave_balances', { p_employee_id: id })
-      } catch (rpcError) {
-        console.log('RPC sync skipped (function may not exist):', rpcError.message)
-      }
+      // Sync balances first
+      await supabase.rpc('sync_leave_balances', { p_employee_id: id })
       
-      // Try to fetch from employee_leave_balances table
-      let { data, error } = await supabase
+      // Fetch balances with simple query
+      const { data, error } = await supabase
         .from('employee_leave_balances')
         .select('*')
         .eq('employee_id', id)
-      
-      // If table doesn't exist, try leave_balances
-      if (error && error.message.includes('does not exist')) {
-        const result = await supabase
-          .from('leave_balances')
-          .select('*')
-          .eq('employee_id', id)
-        data = result.data
-        error = result.error
-      }
       
       if (error) {
         console.error('Leave balances error:', error.message)
         setLeaveBalances([])
       } else {
-        console.log('Leave balances loaded:', data?.length || 0, data)
+        console.log('Leave balances loaded:', data?.length || 0)
         setLeaveBalances(data || [])
         
-        const totalRemaining = (data || []).reduce((sum, b) => {
-          return sum + (Number(b.remaining_days) || Number(b.remaining) || 0)
-        }, 0)
+        const totalRemaining = (data || []).reduce((sum, b) => sum + (b.remaining_days || 0), 0)
         setStats(prev => ({ ...prev, leaveBalance: totalRemaining }))
       }
     } catch (e) {
       console.error('Leave balances load error:', e)
-      // Set empty array on error - don't crash
       setLeaveBalances([])
     }
   }
@@ -725,7 +706,7 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB */}
+          {/* LEAVE TAB - FIXED */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -797,19 +778,19 @@ export default function EmployeeDetail() {
                 </div>
               )}
 
-              {/* LEAVE BALANCES */}
+              {/* LEAVE BALANCES - FIXED */}
               {leaveSubTab === 'balances' && (
                 <div>
                   {leaveBalances.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {leaveBalances.map((balance, i) => {
-                        const typeName = balance.leave_type || balance.leave_type_id || balance.type || 'Leave'
+                        const typeName = balance.leave_type || balance.leave_type_id || 'Leave'
                         const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.name === typeName)
                         const color = typeDef?.color || '#10b981'
-                        const allocated = Number(balance.allocated_days || balance.allocated || 0)
-                        const used = Number(balance.used_days || balance.used || 0)
-                        const pending = Number(balance.pending_days || balance.pending || 0)
-                        const remaining = Number(balance.remaining_days || balance.remaining || (allocated - used - pending))
+                        const allocated = Number(balance.allocated_days) || 0
+                        const used = Number(balance.used_days) || 0
+                        const pending = Number(balance.pending_days) || 0
+                        const remaining = Number(balance.remaining_days) || (allocated - used - pending)
                         
                         return (
                           <div key={balance.id || i} 
@@ -847,15 +828,24 @@ export default function EmployeeDetail() {
                     <div className="text-center py-8">
                       <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-slate-500">No leave balances yet</p>
-                      <p className="text-slate-400 text-xs mt-1">Click below to sync</p>
+                      <p className="text-slate-400 text-xs mt-1">Click below to create leave balances</p>
                       <button 
                         onClick={async () => {
-                          toast.success('Leave sync triggered - check console')
-                          await loadLeaveBalances()
+                          try {
+                            const { error } = await supabase.rpc('sync_leave_balances', { p_employee_id: id })
+                            if (!error) {
+                              toast.success('Leave balances synced!')
+                              await loadLeaveBalances()
+                            } else {
+                              toast.error('Failed: ' + error.message)
+                            }
+                          } catch (e) {
+                            toast.error('Run the SQL setup in Supabase first')
+                          }
                         }}
                         className="mt-3 px-4 py-2 bg-[#2e75b6] text-white rounded-lg text-sm hover:bg-[#1a5fa0] transition-colors"
                       >
-                        🔄 Refresh Balances
+                        🔄 Sync Leave Balances
                       </button>
                     </div>
                   )}
