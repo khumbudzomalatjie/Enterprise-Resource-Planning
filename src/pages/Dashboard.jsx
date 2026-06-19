@@ -74,6 +74,13 @@ export default function Dashboard() {
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER]
     },
     { 
+      icon: Shield, 
+      label: 'Audit Trail', 
+      description: 'Full system activity log',
+      path: '/audit',
+      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER]
+    },
+    { 
       icon: Landmark, 
       label: 'Finance', 
       description: 'Accounting, approvals, budgets',
@@ -147,7 +154,7 @@ export default function Dashboard() {
   const isModuleBuilt = (module) => {
     const builtModules = [
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
-      '/inventory', '/procurement', '/finance', '/fleet', 
+      '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
       '/tracker', '/mobile/field', '/mobile'
     ]
@@ -157,7 +164,7 @@ export default function Dashboard() {
   const handleModuleClick = (module) => {
     const availableModules = [
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
-      '/inventory', '/procurement', '/finance', '/fleet', 
+      '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
       '/tracker', '/mobile/field', '/mobile', '/dashboard', '/users'
     ]
