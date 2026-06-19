@@ -45,8 +45,8 @@ export default function EmployeeDetail() {
   const [payrollDetails, setPayrollDetails] = useState(null)
   const [schedules, setSchedules] = useState([])
   const [leaveRecords, setLeaveRecords] = useState([])
-  const [leaveBalances, setLeaveBalances] = useState([]) // NEW: Leave balances
-  const [leaveSubTab, setLeaveSubTab] = useState('history') // NEW: Sub-tab for leave
+  const [leaveBalances, setLeaveBalances] = useState([])
+  const [leaveSubTab, setLeaveSubTab] = useState('history')
   const [events, setEvents] = useState([])
   const [attachments, setAttachments] = useState([])
   const [tabLoading, setTabLoading] = useState(false)
@@ -104,7 +104,7 @@ export default function EmployeeDetail() {
       loadPayrollDetails(),
       loadSchedules(),
       loadLeaveRecords(),
-      loadLeaveBalances(), // NEW
+      loadLeaveBalances(),
       loadEvents(),
       loadAttachments(),
       loadStats()
@@ -119,7 +119,7 @@ export default function EmployeeDetail() {
       case 'payroll': await loadPayrollHistory(); break
       case 'details': await loadPayrollDetails(); break
       case 'schedule': await loadSchedules(); break
-      case 'leave': await loadLeaveRecords(); await loadLeaveBalances(); break // Updated
+      case 'leave': await loadLeaveRecords(); await loadLeaveBalances(); break
       case 'events': await loadEvents(); break
     }
     await loadStats()
@@ -144,69 +144,80 @@ export default function EmployeeDetail() {
   // 2. Payroll History
   const loadPayrollHistory = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('payslips')
-      .select('*, payroll_periods(period_name, period_start, period_end)')
-      .eq('employee_id', id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    setPayrollHistory(data || [])
+    try {
+      const { data } = await supabase
+        .from('payslips')
+        .select('*, payroll_periods(period_name, period_start, period_end)')
+        .eq('employee_id', id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      setPayrollHistory(data || [])
+    } catch (e) { setPayrollHistory([]) }
   }
 
   // 3. Payroll Details
   const loadPayrollDetails = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('salary_structures')
-      .select('*')
-      .eq('employee_id', id)
-      .eq('is_active', true)
-      .maybeSingle()
-    setPayrollDetails(data || null)
+    try {
+      const { data } = await supabase
+        .from('salary_structures')
+        .select('*')
+        .eq('employee_id', id)
+        .eq('is_active', true)
+        .maybeSingle()
+      setPayrollDetails(data || null)
+    } catch (e) { setPayrollDetails(null) }
   }
 
   // 4. Schedules
   const loadSchedules = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('employee_shifts')
-      .select('*, shift_types(*), jobs(title, job_number, site_address, clients(company_name))')
-      .eq('employee_id', id)
-      .gte('shift_date', new Date().toISOString().split('T')[0])
-      .order('shift_date', { ascending: true })
-      .limit(30)
-    setSchedules(data || [])
+    try {
+      const { data } = await supabase
+        .from('employee_shifts')
+        .select('*, shift_types(*), jobs(title, job_number, site_address, clients(company_name))')
+        .eq('employee_id', id)
+        .gte('shift_date', new Date().toISOString().split('T')[0])
+        .order('shift_date', { ascending: true })
+        .limit(30)
+      setSchedules(data || [])
+    } catch (e) { setSchedules([]) }
   }
 
   // 5. Leave Records
   const loadLeaveRecords = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('leave_requests')
-      .select('*, leave_types(name)')
-      .eq('employee_id', id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    setLeaveRecords(data || [])
+    try {
+      const { data } = await supabase
+        .from('leave_requests')
+        .select('*, leave_types(name)')
+        .eq('employee_id', id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      setLeaveRecords(data || [])
+    } catch (e) { setLeaveRecords([]) }
   }
 
-  // NEW: 5b. Leave Balances - Sync with Leave Management
+  // 5b. Leave Balances
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
+      // First try to sync balances
+      await supabase.rpc('sync_leave_balances', { p_employee_id: id })
+      
+      // Then fetch them
       const { data, error } = await supabase
         .from('employee_leave_balances')
-        .select('*, leave_types(name, code, color, days_allowed)')
+        .select('*, leave_types(id, name, days_per_year)')
         .eq('employee_id', id)
       
       if (error) {
         console.error('Leave balances error:', error.message)
         setLeaveBalances([])
       } else {
-        console.log('📊 Leave balances loaded:', data?.length || 0)
+        console.log('Leave balances loaded:', data?.length || 0)
         setLeaveBalances(data || [])
         
-        // Update leave balance stat
         const totalRemaining = (data || []).reduce((sum, b) => sum + (b.remaining_days || 0), 0)
         setStats(prev => ({ ...prev, leaveBalance: totalRemaining }))
       }
@@ -219,25 +230,29 @@ export default function EmployeeDetail() {
   // 6. Events
   const loadEvents = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('jobs')
-      .select('*')
-      .eq('assigned_to', id)
-      .gte('scheduled_date', new Date().toISOString().split('T')[0])
-      .order('scheduled_date', { ascending: true })
-      .limit(10)
-    setEvents(data || [])
+    try {
+      const { data } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('assigned_to', id)
+        .gte('scheduled_date', new Date().toISOString().split('T')[0])
+        .order('scheduled_date', { ascending: true })
+        .limit(10)
+      setEvents(data || [])
+    } catch (e) { setEvents([]) }
   }
 
   // 7. Attachments
   const loadAttachments = async () => {
     if (!id) return
-    const { data } = await supabase
-      .from('employee_documents')
-      .select('*')
-      .eq('employee_id', id)
-      .order('uploaded_at', { ascending: false })
-    setAttachments(data || [])
+    try {
+      const { data } = await supabase
+        .from('employee_documents')
+        .select('*')
+        .eq('employee_id', id)
+        .order('uploaded_at', { ascending: false })
+      setAttachments(data || [])
+    } catch (e) { setAttachments([]) }
   }
 
   // Stats
@@ -257,7 +272,7 @@ export default function EmployeeDetail() {
           .gte('attendance_date', weekStartStr)
           .not('total_hours', 'is', null)
         totalHours = weekAttendance?.reduce((s, a) => s + (a.total_hours || 0), 0) || 0
-      } catch (e) { console.log('Week attendance query issue:', e.message) }
+      } catch (e) {}
 
       let activeJobsCount = 0
       try {
@@ -267,7 +282,7 @@ export default function EmployeeDetail() {
           .eq('employee_id', id)
           .eq('status', 'assigned')
         activeJobsCount = count || 0
-      } catch (e) { console.log('Job assignments query issue:', e.message) }
+      } catch (e) {}
 
       const presentCount = attendanceRecords?.filter(a => a.status === 'present').length || 0
       const totalRecords = attendanceRecords?.length || 0
@@ -283,7 +298,7 @@ export default function EmployeeDetail() {
         activeJobs: activeJobsCount,
         attendanceRate: attendanceRate,
       }))
-    } catch (e) { console.error('Stats error:', e.message) }
+    } catch (e) {}
   }
 
   // Save Employee
@@ -517,7 +532,7 @@ export default function EmployeeDetail() {
           {activeTab === 'attendance' && (
             <div>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">⏰ Time Clock History (Synced with Mobile App)</h3>
+                <h3 className="font-bold text-slate-700 dark:text-slate-300">⏰ Time Clock History</h3>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">{attendanceRecords.length} records</span>
                   <button onClick={() => refreshTab('attendance')} disabled={refreshingTab === 'attendance'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
@@ -566,7 +581,6 @@ export default function EmployeeDetail() {
                   <div className="text-center py-8">
                     <Clock className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                     <p className="text-slate-500">No attendance records found</p>
-                    <p className="text-slate-400 text-xs mt-1">Records will appear when employee clocks in/out from the mobile app</p>
                   </div>
                 )}
               </div>
@@ -704,13 +718,13 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB - ENHANCED with Balances + History Sub-tabs */}
+          {/* LEAVE TAB */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records (Synced with Leave Management)</h3>
+                <h3 className="font-bold text-slate-700 dark:text-slate-300">🏖️ Leave Records</h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days</span>
+                  <span className="text-xs text-slate-500">Balance: {stats.leaveBalance} days remaining</span>
                   <button onClick={() => refreshTab('leave')} disabled={refreshingTab === 'leave'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors" title="Refresh">
                     <RefreshCw className={`w-4 h-4 ${refreshingTab === 'leave' ? 'animate-spin' : ''}`} />
                   </button>
@@ -753,7 +767,13 @@ export default function EmployeeDetail() {
                               <td className="p-2 border border-[#b8ccdc]">{formatDate(leave.end_date)}</td>
                               <td className="p-2 border border-[#b8ccdc] font-bold">{leave.total_days}</td>
                               <td className="p-2 border border-[#b8ccdc]">
-                                <span className={`px-2 py-0.5 rounded-full text-xs ${leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{leave.status}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                  leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 
+                                  leave.status === 'pending' ? 'bg-amber-100 text-amber-700' : 
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {leave.status}
+                                </span>
                               </td>
                               <td className="p-2 border border-[#b8ccdc] text-xs">{leave.reason?.slice(0, 40) || '-'}</td>
                             </tr>
@@ -761,7 +781,13 @@ export default function EmployeeDetail() {
                         </tbody>
                       </table>
                     </div>
-                  ) : <p className="text-center text-slate-400 py-8">No leave records found</p>}
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500">No leave records found</p>
+                      <p className="text-slate-400 text-xs mt-1">Leave requests will appear here when submitted</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -771,25 +797,41 @@ export default function EmployeeDetail() {
                   {leaveBalances.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {leaveBalances.map(balance => {
-                        const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.id === (balance.leave_types?.code?.toLowerCase() || balance.leave_type_id)) || {}
-                        const color = balance.leave_types?.color || typeDef.color || '#10b981'
-                        const name = balance.leave_types?.name || typeDef.name || 'Leave'
+                        const typeName = balance.leave_types?.name || 'Leave'
+                        const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.name === typeName)
+                        const color = typeDef?.color || '#10b981'
                         const allocated = balance.allocated_days || 0
                         const used = balance.used_days || 0
                         const pending = balance.pending_days || 0
                         const remaining = balance.remaining_days || 0
                         
                         return (
-                          <div key={balance.id} className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded-xl p-4" style={{ borderLeftColor: color, borderLeftWidth: '4px' }}>
-                            <p className="font-bold text-slate-800 dark:text-white text-sm mb-2">{name}</p>
+                          <div key={balance.id} 
+                            className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded-xl p-4" 
+                            style={{ borderLeftColor: color, borderLeftWidth: '4px' }}>
+                            <p className="font-bold text-slate-800 dark:text-white text-sm mb-2">{typeName}</p>
                             <div className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-full mb-2 overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0}%`, backgroundColor: color }}></div>
+                              <div className="h-full rounded-full transition-all" 
+                                style={{ width: `${allocated > 0 ? Math.min(((used + pending) / allocated) * 100, 100) : 0}%`, backgroundColor: color }}>
+                              </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="text-center"><p className="text-slate-500">Remaining</p><p className="text-lg font-bold" style={{ color }}>{remaining}</p></div>
-                              <div className="text-center"><p className="text-slate-500">Allocated</p><p className="text-lg font-bold text-slate-600">{allocated}</p></div>
-                              <div className="text-center"><p className="text-slate-500">Used</p><p className="text-sm font-bold text-red-500">{used}</p></div>
-                              <div className="text-center"><p className="text-slate-500">Pending</p><p className="text-sm font-bold text-amber-500">{pending}</p></div>
+                              <div className="text-center">
+                                <p className="text-slate-500">Remaining</p>
+                                <p className="text-lg font-bold" style={{ color }}>{remaining}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-slate-500">Allocated</p>
+                                <p className="text-lg font-bold text-slate-600">{allocated}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-slate-500">Used</p>
+                                <p className="text-sm font-bold text-red-500">{used}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-slate-500">Pending</p>
+                                <p className="text-sm font-bold text-amber-500">{pending}</p>
+                              </div>
                             </div>
                           </div>
                         )
@@ -799,7 +841,25 @@ export default function EmployeeDetail() {
                     <div className="text-center py-8">
                       <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-slate-500">No leave balances found</p>
-                      <p className="text-slate-400 text-xs mt-1">Run the leave sync SQL to create balances for all employees</p>
+                      <p className="text-slate-400 text-xs mt-1">Click the button below to sync leave balances</p>
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase.rpc('sync_leave_balances', { p_employee_id: id })
+                            if (!error) {
+                              toast.success('Leave balances synced!')
+                              await loadLeaveBalances()
+                            } else {
+                              toast.error('Failed to sync: ' + error.message)
+                            }
+                          } catch (e) {
+                            toast.error('Sync failed. Run the SQL setup first.')
+                          }
+                        }}
+                        className="mt-3 px-4 py-2 bg-[#2e75b6] text-white rounded-lg text-sm hover:bg-[#1a5fa0] transition-colors"
+                      >
+                        🔄 Sync Leave Balances
+                      </button>
                     </div>
                   )}
                 </div>
