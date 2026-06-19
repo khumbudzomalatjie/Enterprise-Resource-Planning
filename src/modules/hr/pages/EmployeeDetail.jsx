@@ -190,21 +190,22 @@ export default function EmployeeDetail() {
     } catch (e) { setLeaveRecords([]) }
   }
 
-  // AMENDED: Leave Balances - uses simple query
+  // REPLACED: Leave Balances - No RPC dependency, handles missing table
   const loadLeaveBalances = async () => {
     if (!id) return
     try {
-      // Sync balances first
-      await supabase.rpc('sync_leave_balances', { p_employee_id: id })
-      
-      // Fetch balances with simple query
       const { data, error } = await supabase
         .from('employee_leave_balances')
         .select('*')
         .eq('employee_id', id)
       
       if (error) {
-        console.error('Leave balances error:', error.message)
+        // Table doesn't exist or other error - silently handle
+        if (error.code === '42P01' || error.message.includes('does not exist')) {
+          console.log('employee_leave_balances table does not exist yet')
+        } else {
+          console.error('Leave balances error:', error.message)
+        }
         setLeaveBalances([])
       } else {
         console.log('Leave balances loaded:', data?.length || 0)
