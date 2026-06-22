@@ -64,7 +64,7 @@ export default function MessagesDashboard() {
     return groups
   }, [contacts])
 
-  // Filter contacts by search
+  // Filter contacts by search - handles both position and job_position
   const filteredContacts = useMemo(() => {
     if (!searchTerm) return contacts
     const term = searchTerm.toLowerCase()
@@ -72,7 +72,7 @@ export default function MessagesDashboard() {
       c.full_name?.toLowerCase().includes(term) ||
       c.email?.toLowerCase().includes(term) ||
       c.department?.toLowerCase().includes(term) ||
-      c.position?.toLowerCase().includes(term) ||
+      (c.job_position || c.position)?.toLowerCase().includes(term) ||
       c.phone?.toLowerCase().includes(term) ||
       c.employee_code?.toLowerCase().includes(term)
     )
@@ -126,7 +126,9 @@ export default function MessagesDashboard() {
     return d.toLocaleDateString()
   }
 
+  // UPDATED: Handles both user_role and role
   const getRoleBadge = (role) => {
+    const roleValue = role || 'employee'
     const colors = {
       super_admin: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
       operations_manager: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -138,7 +140,7 @@ export default function MessagesDashboard() {
       customer: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
       employee: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
     }
-    return colors[role] || 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+    return colors[roleValue] || 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
   }
 
   const getStatusColor = (status) => {
@@ -328,7 +330,7 @@ export default function MessagesDashboard() {
         </div>
       </main>
 
-      {/* EMPLOYEE DIRECTORY MODAL */}
+      {/* EMPLOYEE DIRECTORY MODAL - UPDATED COLUMN NAMES */}
       <AnimatePresence>
         {showContacts && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowContacts(false)}>
@@ -420,8 +422,9 @@ export default function MessagesDashboard() {
                                           )}
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
+                                          {/* UPDATED: Uses job_position with fallback to position */}
                                           <span className="text-xs text-slate-500 flex items-center gap-1">
-                                            <Briefcase className="w-3 h-3" />{contact.position || 'Staff'}
+                                            <Briefcase className="w-3 h-3" />{contact.job_position || contact.position || 'Staff'}
                                           </span>
                                           {contact.email && (
                                             <span className="text-xs text-slate-400 flex items-center gap-1">
@@ -430,11 +433,12 @@ export default function MessagesDashboard() {
                                           )}
                                         </div>
                                         <div className="flex items-center gap-2 mt-1">
-                                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${getRoleBadge(contact.role)}`}>
-                                            {contact.role?.replace('_', ' ')}
+                                          {/* UPDATED: Uses user_role with fallback to role */}
+                                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${getRoleBadge(contact.user_role || contact.role)}`}>
+                                            {(contact.user_role || contact.role)?.replace(/_/g, ' ') || 'Staff'}
                                           </span>
                                           {!contact.is_active && (
-                                            <span className="px-1.5 py-0.5 rounded-full text-xs bg-red-100 text-red-700">Inactive</span>
+                                            <span className="px-1.5 py-0.5 rounded-full text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Inactive</span>
                                           )}
                                         </div>
                                       </div>
