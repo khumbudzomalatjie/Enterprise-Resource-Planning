@@ -9,6 +9,7 @@ const useMessagesStore = create((set, get) => ({
   notifications: [],
   unreadCount: 0,
   loading: false,
+  contactsLoading: false,
   error: null,
 
   fetchConversations: async () => {
@@ -55,10 +56,42 @@ const useMessagesStore = create((set, get) => ({
     }
   },
 
+  // UPDATED: fetchContacts with debug logging
   fetchContacts: async () => {
-    const { data } = await messagesApi.getContacts()
-    set({ contacts: data || [] })
-    return { success: true, data }
+    console.log('🔍 Store: Fetching contacts...')
+    set({ contactsLoading: true })
+    
+    try {
+      const { data, error } = await messagesApi.getContacts()
+      
+      console.log('📊 Store: getContacts result:', { 
+        count: data?.length || 0, 
+        error: error || 'none',
+        hasData: !!data,
+        sample: data?.length > 0 ? data[0] : 'empty'
+      })
+      
+      if (error) {
+        console.error('❌ Store: Error fetching contacts:', error)
+        set({ contacts: [], contactsLoading: false, error })
+        return { success: false, data: [], error }
+      }
+      
+      if (!data || data.length === 0) {
+        console.warn('⚠️ Store: No contacts returned - employees table may be empty or query failed')
+        set({ contacts: [], contactsLoading: false })
+        return { success: true, data: [] }
+      }
+      
+      console.log(`✅ Store: Loaded ${data.length} contacts successfully`)
+      set({ contacts: data, contactsLoading: false, error: null })
+      return { success: true, data }
+      
+    } catch (e) {
+      console.error('❌ Store: Exception in fetchContacts:', e)
+      set({ contacts: [], contactsLoading: false, error: e.message })
+      return { success: false, data: [], error: e.message }
+    }
   },
 
   fetchNotifications: async () => {
@@ -70,12 +103,18 @@ const useMessagesStore = create((set, get) => ({
 
   markNotificationRead: async (id) => {
     await messagesApi.markNotificationRead(id)
-    set(state => ({ notifications: state.notifications.map(n => n.id === id ? { ...n, is_read: true } : n), unreadCount: Math.max(0, state.unreadCount - 1) }))
+    set(state => ({ 
+      notifications: state.notifications.map(n => n.id === id ? { ...n, is_read: true } : n), 
+      unreadCount: Math.max(0, state.unreadCount - 1) 
+    }))
   },
 
   markAllNotificationsRead: async () => {
     await messagesApi.markAllNotificationsRead()
-    set(state => ({ notifications: state.notifications.map(n => ({ ...n, is_read: true })), unreadCount: 0 }))
+    set(state => ({ 
+      notifications: state.notifications.map(n => ({ ...n, is_read: true })), 
+      unreadCount: 0 
+    }))
   },
 
   clearError: () => set({ error: null }),
