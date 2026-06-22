@@ -12,8 +12,7 @@ import {
   ChevronRight, Send, ChevronDown, ChevronUp,
   Sparkles, Sun, Moon, User, UserCircle,
   CheckCheck, X, RefreshCw, Phone, Mail,
-  Building2, Briefcase, Circle,
-  MessageCircle, Star
+  Building2, Briefcase, Circle, MessageCircle
 } from 'lucide-react'
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '✅', '🙏']
@@ -43,29 +42,27 @@ export default function MessagesDashboard() {
     fetchNotifications()
   }, [])
 
-  // Load contacts directly when modal opens
   const loadContacts = async () => {
     setContactsLoading(true)
-    console.log('🔍 Loading contacts directly from employees table...')
+    console.log('🔍 Starting contact load...')
     
+    // Try multiple sources
+    let allContacts = []
+    
+    // SOURCE 1: Employees table
     try {
-      const { data: employees, error } = await supabase
+      const { data: employees, error: empErr } = await supabase
         .from('employees')
         .select('*')
         .order('department')
         .order('first_name')
-
-      console.log('📊 Employees result:', { 
-        count: employees?.length || 0, 
-        error: error?.message || 'none',
-        first: employees?.[0] 
-      })
-
-      if (!error && employees && employees.length > 0) {
-        const mappedContacts = employees.map(emp => ({
+      
+      console.log('📊 Employees query:', { count: employees?.length, error: empErr?.message })
+      
+      if (!empErr && employees?.length > 0) {
+        const empContacts = employees.map(emp => ({
           id: emp.user_id || emp.id,
-          contact_type: 'employee',
-          full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed',
+          full_name: [emp.first_name, emp.last_name].filter(Boolean).join(' ') || 'Unnamed',
           email: emp.email || '',
           phone: emp.phone || '',
           department: emp.department || 'Unassigned',
@@ -73,42 +70,67 @@ export default function MessagesDashboard() {
           profile_photo_url: emp.profile_photo_url || null,
           is_active: emp.employment_status === 'active',
           employee_code: emp.employee_code || '',
-          employment_status: emp.employment_status || 'active'
+          source: 'employees'
         }))
-        console.log(`✅ Loaded ${mappedContacts.length} contacts`)
-        setContacts(mappedContacts)
-      } else if (error) {
-        console.error('❌ Error:', error.message)
-        toast.error('Failed to load contacts: ' + error.message)
-        setContacts([])
-      } else {
-        console.warn('⚠️ No employees found')
-        // Try profiles as fallback
-        const { data: profiles } = await supabase.from('profiles').select('*').order('full_name')
-        if (profiles && profiles.length > 0) {
-          const mappedProfiles = profiles.map(p => ({
+        allContacts = [...allContacts, ...empContacts]
+        console.log(`✅ Added ${empContacts.length} from employees`)
+      }
+    } catch(e) { console.error('Employees error:', e) }
+    
+    // SOURCE 2: Profiles table
+    try {
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('full_name')
+      
+      console.log('📊 Profiles query:', { count: profiles?.length, error: profErr?.message })
+      
+      if (!profErr && profiles?.length > 0) {
+        const existingIds = new Set(allContacts.map(c => c.id))
+        const profContacts = profiles
+          .filter(p => !existingIds.has(p.id))
+          .map(p => ({
             id: p.id,
-            contact_type: 'user',
             full_name: p.full_name || p.email || 'Unknown',
             email: p.email || '',
             phone: '',
-            department: 'General',
-            position: p.role || 'User',
+            department: 'Management',
+            position: p.role?.replace(/_/g, ' ') || 'User',
             profile_photo_url: null,
             is_active: p.is_active !== false,
             employee_code: '',
-            employment_status: 'active'
+            source: 'profiles'
           }))
-          setContacts(mappedProfiles)
-          console.log(`✅ Loaded ${mappedProfiles.length} profiles as contacts`)
-        } else {
-          setContacts([])
-        }
+        allContacts = [...allContacts, ...profContacts]
+        console.log(`✅ Added ${profContacts.length} from profiles`)
       }
-    } catch (e) {
-      console.error('❌ Error:', e)
-      setContacts([])
+    } catch(e) { console.error('Profiles error:', e) }
+    
+    // SOURCE 3: Auth users (last resort)
+    if (allContacts.length === 0) {
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        if (currentUser) {
+          allContacts = [{
+            id: currentUser.id,
+            full_name: currentUser.email || 'Current User',
+            email: currentUser.email || '',
+            phone: '',
+            department: 'General',
+            position: 'User',
+            profile_photo_url: null,
+            is_active: true,
+            employee_code: '',
+            source: 'auth'
+          }]
+          console.log('⚠️ Only current user found')
+        }
+      } catch(e) { console.error('Auth error:', e) }
     }
+    
+    console.log(`📊 Total contacts: ${allContacts.length}`)
+    setContacts(allContacts)
     setContactsLoading(false)
   }
 
@@ -132,16 +154,15 @@ export default function MessagesDashboard() {
       c.email?.toLowerCase().includes(term) ||
       c.department?.toLowerCase().includes(term) ||
       c.position?.toLowerCase().includes(term) ||
-      c.phone?.toLowerCase().includes(term) ||
       c.employee_code?.toLowerCase().includes(term)
     )
   }, [contacts, searchTerm])
 
   const stats = useMemo(() => ({
     totalContacts: contacts.length,
-    onlineCount: contacts.filter(c => c.is_active).length,
+    activeCount: contacts.filter(c => c.is_active).length,
     departments: Object.keys(groupedContacts).length,
-    activeConversations: conversations.length,
+    conversations: conversations.length,
   }), [contacts, groupedContacts, conversations])
 
   const handleSendMessage = async () => {
@@ -180,17 +201,6 @@ export default function MessagesDashboard() {
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
     if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     return d.toLocaleDateString()
-  }
-
-  const getRoleBadge = (role) => {
-    const colors = {
-      super_admin: 'bg-red-100 text-red-700', operations_manager: 'bg-blue-100 text-blue-700',
-      hr_manager: 'bg-purple-100 text-purple-700', finance_officer: 'bg-yellow-100 text-yellow-700',
-      supervisor: 'bg-green-100 text-green-700', cleaner: 'bg-cyan-100 text-cyan-700',
-      sales_agent: 'bg-pink-100 text-pink-700', customer: 'bg-orange-100 text-orange-700',
-      employee: 'bg-slate-100 text-slate-700',
-    }
-    return colors[role] || 'bg-slate-100 text-slate-700'
   }
 
   const otherParticipants = selectedConversation?.conversation_participants?.filter(p => p.user_id !== user?.id) || []
@@ -234,17 +244,22 @@ export default function MessagesDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[
-            { icon: Users, label: 'Contacts', value: stats.totalContacts, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-            { icon: Circle, label: 'Active', value: stats.onlineCount, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-            { icon: Building2, label: 'Departments', value: stats.departments, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-            { icon: MessageCircle, label: 'Chats', value: stats.activeConversations, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-          ].map((s, i) => (
-            <div key={i} className="neu-raised rounded-xl p-3 flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg ${s.bg} flex items-center justify-center`}><s.icon className={`w-5 h-5 ${s.color}`} /></div>
-              <div><p className="text-xs text-slate-500">{s.label}</p><p className="text-lg font-bold text-slate-800 dark:text-white">{s.value}</p></div>
-            </div>
-          ))}
+          <div className="neu-raised rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"><Users className="w-5 h-5 text-blue-600" /></div>
+            <div><p className="text-xs text-slate-500">Contacts</p><p className="text-lg font-bold">{stats.totalContacts}</p></div>
+          </div>
+          <div className="neu-raised rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"><Circle className="w-5 h-5 text-emerald-600" /></div>
+            <div><p className="text-xs text-slate-500">Active</p><p className="text-lg font-bold">{stats.activeCount}</p></div>
+          </div>
+          <div className="neu-raised rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center"><Building2 className="w-5 h-5 text-purple-600" /></div>
+            <div><p className="text-xs text-slate-500">Departments</p><p className="text-lg font-bold">{stats.departments}</p></div>
+          </div>
+          <div className="neu-raised rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center"><MessageCircle className="w-5 h-5 text-amber-600" /></div>
+            <div><p className="text-xs text-slate-500">Chats</p><p className="text-lg font-bold">{stats.conversations}</p></div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 h-[calc(100vh-380px)] min-h-[500px]">
@@ -292,38 +307,25 @@ export default function MessagesDashboard() {
           <div className="neu-raised rounded-3xl overflow-hidden flex flex-col">
             {selectedConversation ? (
               <>
-                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div className="p-4 border-b flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                       <User className="w-5 h-5 text-emerald-600" />
                     </div>
-                    <div>
-                      <p className="font-medium">{otherParticipants[0]?.profiles?.full_name || 'Chat'}</p>
-                    </div>
+                    <p className="font-medium">{otherParticipants[0]?.profiles?.full_name || 'Chat'}</p>
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map(msg => {
                     const isMine = msg.sender_id === user?.id
                     return (
-                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
-                        onMouseEnter={() => setHoveredMessage(msg.id)} onMouseLeave={() => setHoveredMessage(null)}>
+                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                         <div className="max-w-[70%]">
                           {!isMine && <p className="text-xs text-slate-500 mb-1 ml-1">{msg.sender?.full_name}</p>}
                           <div className={`p-3 rounded-2xl ${isMine ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
                             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                           </div>
-                          <div className={`flex items-center gap-2 mt-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
-                            <span className="text-xs text-slate-400">{formatTime(msg.created_at)}</span>
-                          </div>
-                          {hoveredMessage === msg.id && (
-                            <div className="flex gap-1 mt-1">
-                              {EMOJI_LIST.slice(0, 4).map(emoji => (
-                                <button key={emoji} onClick={() => addReaction(msg.id, emoji)} className="hover:scale-125 text-sm">{emoji}</button>
-                              ))}
-                              {isMine && <button onClick={() => deleteMessage(msg.id)} className="text-xs text-red-400 ml-2"><X className="w-3 h-3" /></button>}
-                            </div>
-                          )}
+                          <span className="text-xs text-slate-400 mt-1 block">{formatTime(msg.created_at)}</span>
                         </div>
                       </div>
                     )
@@ -345,7 +347,7 @@ export default function MessagesDashboard() {
                 <div className="text-center">
                   <MessageSquare className="w-20 h-20 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500 text-lg">Select a conversation</p>
-                  <p className="text-slate-400 text-sm mt-1">or open the directory to start one</p>
+                  <button onClick={() => { setShowContacts(true); loadContacts() }} className="mt-2 text-emerald-600 text-sm hover:underline">Open Directory</button>
                 </div>
               </div>
             )}
@@ -414,24 +416,20 @@ export default function MessagesDashboard() {
                                     <UserCircle className="w-5 h-5 text-emerald-600" />
                                   </div>
                                   <div>
-                                    <div className="flex items-center gap-2">
-                                      <p className="font-medium text-sm">{contact.full_name || 'Unknown'}{contact.id === user?.id && ' (You)'}</p>
-                                      {contact.employee_code && <span className="text-xs text-slate-400">#{contact.employee_code}</span>}
-                                    </div>
+                                    <p className="font-medium text-sm">
+                                      {contact.full_name || 'Unknown'}
+                                      {contact.id === user?.id && ' (You)'}
+                                      {contact.employee_code && <span className="text-xs text-slate-400 ml-1">#{contact.employee_code}</span>}
+                                    </p>
                                     <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-xs text-slate-500 flex items-center gap-1"><Briefcase className="w-3 h-3" />{contact.position || 'Staff'}</span>
-                                      {contact.email && <span className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{contact.email}</span>}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className={`px-1.5 py-0.5 rounded-full text-xs ${contact.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                        {contact.is_active ? 'Active' : 'Inactive'}
-                                      </span>
+                                      <span className="text-xs text-slate-500"><Briefcase className="w-3 h-3 inline mr-1" />{contact.position || 'Staff'}</span>
+                                      {contact.email && <span className="text-xs text-slate-400"><Mail className="w-3 h-3 inline mr-1" />{contact.email}</span>}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <button onClick={(e) => { e.stopPropagation() }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><Phone className="w-4 h-4" /></button>
-                                  <button onClick={(e) => { e.stopPropagation() }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><Mail className="w-4 h-4" /></button>
+                                  {contact.phone && <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><Phone className="w-4 h-4" /></button>}
+                                  {contact.email && <button className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><Mail className="w-4 h-4" /></button>}
                                   {contact.id !== user?.id && (
                                     <button onClick={(e) => { e.stopPropagation(); handleStartChat(contact.id) }}
                                       className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs hover:bg-emerald-700 flex items-center gap-1">
@@ -450,7 +448,7 @@ export default function MessagesDashboard() {
                   <div className="text-center py-16">
                     <Users className="w-16 h-16 text-slate-300 mx-auto mb-3" />
                     <p className="text-slate-500 text-lg">No contacts found</p>
-                    <p className="text-slate-400 text-sm mt-1">{searchTerm ? 'Try a different search' : 'No employees in the database yet'}</p>
+                    <p className="text-slate-400 text-sm mt-1">{searchTerm ? 'Try a different search' : 'Run the SQL to add test employees'}</p>
                     <button onClick={loadContacts} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 mx-auto">
                       <RefreshCw className="w-4 h-4" />Refresh
                     </button>
@@ -478,16 +476,8 @@ export default function MessagesDashboard() {
               {notifications.length > 0 ? notifications.map(n => (
                 <div key={n.id} onClick={() => { markNotificationRead(n.id); setShowNotifications(false) }}
                   className={`p-4 cursor-pointer hover:bg-slate-50 ${!n.is_read ? 'bg-amber-50 dark:bg-amber-900/10' : ''}`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${!n.is_read ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                      <Bell className={`w-4 h-4 ${!n.is_read ? 'text-amber-600' : 'text-slate-400'}`} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{n.title}</p>
-                      <p className="text-xs text-slate-500 mt-1">{n.body}</p>
-                      <p className="text-xs text-slate-400 mt-1">{formatTime(n.created_at)}</p>
-                    </div>
-                  </div>
+                  <p className="text-sm font-medium">{n.title}</p>
+                  <p className="text-xs text-slate-500 mt-1">{n.body}</p>
                 </div>
               )) : (
                 <div className="text-center py-8"><Bell className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500 text-sm">No notifications</p></div>
