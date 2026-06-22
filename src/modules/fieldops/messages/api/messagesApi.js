@@ -100,47 +100,68 @@ export const messagesApi = {
   // CONTACTS - DIRECT EMPLOYEE QUERY
   // ============================================
   async getContacts() {
+    console.log('🔍 getContacts: Fetching employees...')
+    
     try {
-      // DIRECT QUERY: Get all employees from the employees table
-      // This is the SAME table used by the Employee Management module
-      const { data: employees, error } = await supabase
+      // Query employees table directly - same as Employee Management module
+      const { data: employees, error: empError } = await supabase
         .from('employees')
         .select('*')
+        .neq('employment_status', 'terminated')
         .order('department')
         .order('first_name')
 
-      console.log('🔍 Employee query result:', { count: employees?.length, error: error?.message })
+      console.log('📊 Employees query:', { count: employees?.length || 0, error: empError?.message || 'none' })
 
-      if (error) {
-        console.error('❌ Employee query error:', error.message)
-        return { data: [], error: error.message }
+      if (!empError && employees && employees.length > 0) {
+        const contacts = employees.map(emp => ({
+          id: emp.user_id || emp.id,
+          contact_type: 'employee',
+          full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed',
+          email: emp.email || '',
+          phone: emp.phone || '',
+          department: emp.department || 'Unassigned',
+          job_position: emp.position || 'Staff',
+          profile_photo_url: emp.profile_photo_url || null,
+          user_role: 'employee',
+          is_active: emp.employment_status === 'active',
+          is_online: false,
+          employee_code: emp.employee_code || '',
+          employment_status: emp.employment_status || 'active'
+        }))
+        console.log(`✅ Loaded ${contacts.length} contacts from employees table`)
+        return { data: contacts, error: null }
       }
 
-      if (!employees || employees.length === 0) {
-        console.warn('⚠️ No employees found in the employees table')
-        return { data: [], error: null }
+      // Fallback: Try profiles table
+      console.log('⚠️ No employees, trying profiles...')
+      const { data: profiles, error: profError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('full_name')
+
+      if (!profError && profiles && profiles.length > 0) {
+        const contacts = profiles.map(p => ({
+          id: p.id,
+          contact_type: 'user',
+          full_name: p.full_name || p.email || 'Unknown',
+          email: p.email || '',
+          phone: '',
+          department: 'General',
+          job_position: p.role || 'User',
+          profile_photo_url: null,
+          user_role: p.role || 'customer',
+          is_active: p.is_active !== false,
+          is_online: false,
+          employee_code: '',
+          employment_status: 'active'
+        }))
+        console.log(`✅ Loaded ${contacts.length} contacts from profiles table`)
+        return { data: contacts, error: null }
       }
 
-      // Map employees to contacts format
-      const contacts = employees.map(emp => ({
-        id: emp.user_id || emp.id,
-        contact_type: 'employee',
-        full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed Employee',
-        email: emp.email || '',
-        phone: emp.phone || '',
-        department: emp.department || 'Unassigned',
-        job_position: emp.position || 'Staff',
-        profile_photo_url: emp.profile_photo_url || null,
-        user_role: 'employee',
-        is_active: emp.employment_status === 'active',
-        is_online: false,
-        employee_code: emp.employee_code || '',
-        last_login: null,
-        employment_status: emp.employment_status || 'active'
-      }))
-
-      console.log(`✅ Successfully loaded ${contacts.length} contacts from employees table`)
-      return { data: contacts, error: null }
+      console.warn('⚠️ No contacts found')
+      return { data: [], error: null }
 
     } catch (e) {
       console.error('❌ getContacts error:', e)
