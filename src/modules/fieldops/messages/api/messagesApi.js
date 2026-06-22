@@ -1,6 +1,9 @@
 import { supabase } from '../../../../lib/supabaseClient'
 
 export const messagesApi = {
+  // ============================================
+  // CONVERSATIONS
+  // ============================================
   async getConversations() {
     const { data, error } = await supabase
       .from('conversations')
@@ -13,6 +16,7 @@ export const messagesApi = {
     const currentUser = (await supabase.auth.getUser()).data.user
     if (!currentUser) return { error: 'Not authenticated' }
 
+    // Check if direct conversation already exists
     const { data: existing } = await supabase
       .from('conversations')
       .select('*, conversation_participants!inner(*)')
@@ -24,6 +28,7 @@ export const messagesApi = {
     )
     if (existingConv) return { data: existingConv }
 
+    // Create new direct conversation
     const { data: conv, error } = await supabase
       .from('conversations')
       .insert([{ conversation_type: 'direct', created_by: currentUser.id }])
@@ -37,6 +42,9 @@ export const messagesApi = {
     return { data: conv }
   },
 
+  // ============================================
+  // MESSAGES
+  // ============================================
   async getMessages(conversationId, limit = 50) {
     const { data, error } = await supabase
       .from('messages')
@@ -90,41 +98,83 @@ export const messagesApi = {
     return { data, error }
   },
 
-  // UPDATED: getContacts with fallback to auth.users
+  // ============================================
+  // CONTACTS - EMPLOYEE DIRECTORY
+  // ============================================
   async getContacts() {
-    // First try the profiles table
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, role, is_active, last_login')
-      .order('full_name')
-    
-    // If profiles exist, return them
-    if (profiles && profiles.length > 0) {
-      console.log('Contacts loaded from profiles:', profiles.length)
-      return { data: profiles, error: null }
-    }
-
-    // If no profiles found, log a warning
-    console.warn('No profiles found in profiles table, profiles may not be synced with auth.users')
-    
-    // Try to get users who are authenticated but may not have profiles
-    // Note: This requires admin privileges or a security definer function
     try {
-      const { data: authUsers, error: authError } = await supabase.rpc('get_all_users_profiles')
+      // Try the RPC function first
+      const { data, error } = await supabase.rpc('get_all_contacts')
       
-      if (authUsers && authUsers.length > 0) {
-        console.log('Contacts loaded from auth users:', authUsers.length)
-        return { data: authUsers, error: null }
+      if (!error && data && data.length > 0) {
+        console.log('Contacts loaded via RPC:', data.length)
+        return { data, error: null }
       }
-    } catch (rpcError) {
-      console.error('RPC get_all_users_profiles not available:', rpcError.message)
-    }
 
-    // Last resort: Return empty array
-    console.warn('No contacts found from any source')
-    return { data: [], error: null }
+      // Fallback: Query employees directly
+      const { data: employees } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, email, phone, department, position, profile_photo_url, employment_status, employee_code, user_id')
+        .neq('employment_status', 'terminated')
+        .order('department')
+        .order('first_name')
+
+      if (employees?.length) {
+        const contacts = employees.map(emp => ({
+          id: emp.user_id || emp.id,
+          contact_type: 'employee',
+          full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed',
+          email: emp.email || '',
+          phone: emp.phone || '',
+          department: emp.department || 'Unassigned',
+          position: emp.position || 'Staff',
+          profile_photo_url: emp.profile_photo_url || null,
+          role: 'employee',
+          is_active: emp.employment_status === 'active',
+          is_online: false,
+          employee_code: emp.employee_code || '',
+          last_login: null
+        }))
+        console.log('Contacts loaded from employees table:', contacts.length)
+        return { data: contacts, error: null }
+      }
+
+      // Last resort: Get from profiles
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('full_name')
+
+      if (profiles?.length) {
+        const contacts = profiles.map(p => ({
+          id: p.id,
+          contact_type: 'user',
+          full_name: p.full_name || p.email || 'Unknown',
+          email: p.email || '',
+          phone: '',
+          department: 'Management',
+          position: p.role || 'Staff',
+          profile_photo_url: null,
+          role: p.role || 'customer',
+          is_active: p.is_active !== false,
+          is_online: false,
+          employee_code: '',
+          last_login: p.last_login
+        }))
+        console.log('Contacts loaded from profiles:', contacts.length)
+        return { data: contacts, error: null }
+      }
+
+      return { data: [], error: null }
+    } catch (e) {
+      console.error('Error loading contacts:', e)
+      return { data: [], error: null }
+    }
   },
 
+  // ============================================
+  // NOTIFICATIONS
+  // ============================================
   async getNotifications(limit = 50) {
     const { data, error } = await supabase
       .from('notifications')
@@ -135,9 +185,11 @@ export const messagesApi = {
   },
 
   async getUnreadCount() {
-    const user = (await supabase.auth.getUser()).data.user
-    const { data } = await supabase.rpc('get_unread_count', { p_user_id: user.id })
-    return data || 0
+    try {
+      const user = (await supabase.auth.getUser()).data.user
+      const { data } = await supabase.rpc('get_unread_count', { p_user_id: user.id })
+      return data || 0
+    } catch { return 0 }
   },
 
   async markNotificationRead(id) {
