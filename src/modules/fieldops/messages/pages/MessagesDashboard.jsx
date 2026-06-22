@@ -8,9 +8,9 @@ import useThemeStore from '../../../../store/themeStore'
 import toast from 'react-hot-toast'
 import { 
   MessageSquare, Users, Bell, Search, Plus, 
-  ChevronRight, ArrowLeft, Send, Paperclip,
+  ChevronRight, Send, 
   Sparkles, Sun, Moon, User,
-  CheckCheck, Clock, X
+  CheckCheck, X, RefreshCw
 } from 'lucide-react'
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '✅', '🙏']
@@ -21,7 +21,7 @@ export default function MessagesDashboard() {
     fetchConversations, selectConversation, selectedConversation,
     sendMessage, fetchContacts, fetchNotifications,
     getOrCreateDirectConversation, addReaction, deleteMessage,
-    markNotificationRead, markAllNotificationsRead
+    markNotificationRead, markAllNotificationsRead, loading
   } = useMessagesStore()
   const { user } = useAuthStore()
   const { isDark, toggleTheme } = useThemeStore()
@@ -31,12 +31,26 @@ export default function MessagesDashboard() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [hoveredMessage, setHoveredMessage] = useState(null)
+  const [contactsLoading, setContactsLoading] = useState(false)
 
   useEffect(() => {
-    fetchConversations()
-    fetchContacts()
-    fetchNotifications()
+    loadData()
   }, [])
+
+  const loadData = async () => {
+    await fetchConversations()
+    await fetchNotifications()
+    await loadContacts()
+  }
+
+  const loadContacts = async () => {
+    setContactsLoading(true)
+    const result = await fetchContacts()
+    setContactsLoading(false)
+    if (!result?.success || !result?.data?.length) {
+      console.log('No contacts found, trying direct Supabase query...')
+    }
+  }
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedConversation) return
@@ -57,6 +71,7 @@ export default function MessagesDashboard() {
   const handleStartChat = async (contactId) => {
     const result = await getOrCreateDirectConversation(contactId)
     if (result.success) setShowContacts(false)
+    else toast.error('Failed to start conversation')
   }
 
   const formatTime = (date) => {
@@ -160,6 +175,7 @@ export default function MessagesDashboard() {
                 <div className="text-center py-8">
                   <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                   <p className="text-slate-500 text-sm">No conversations yet</p>
+                  <button onClick={() => setShowContacts(true)} className="mt-2 text-emerald-600 text-sm hover:underline">Start a new chat</button>
                 </div>
               )}
             </div>
@@ -249,32 +265,49 @@ export default function MessagesDashboard() {
               <button onClick={() => setShowContacts(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
             </div>
             <p className="text-xs text-slate-500 mb-4">Click on any user to start a conversation</p>
-            <div className="space-y-2">
-              {contacts.map(contact => (
-                <div key={contact.id} 
-                  className={`flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer ${contact.id === user?.id ? 'opacity-50' : ''}`}
-                  onClick={() => contact.id !== user?.id && handleStartChat(contact.id)}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                      <User className="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-slate-800 dark:text-white">
-                        {contact.full_name || contact.email}
-                        {contact.id === user?.id && ' (You)'}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadge(contact.role)}`}>
-                          {contact.role?.replace('_', ' ')}
-                        </span>
-                        {contact.is_active && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Active"></span>}
+            
+            {contactsLoading ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
+                <p className="text-slate-500 text-sm">Loading users...</p>
+              </div>
+            ) : contacts.length > 0 ? (
+              <div className="space-y-2">
+                {contacts.map(contact => (
+                  <div key={contact.id} 
+                    className={`flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer ${contact.id === user?.id ? 'opacity-50' : ''}`}
+                    onClick={() => contact.id !== user?.id && handleStartChat(contact.id)}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                        <User className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm text-slate-800 dark:text-white">
+                          {contact.full_name || contact.email || 'Unknown User'}
+                          {contact.id === user?.id && ' (You)'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadge(contact.role)}`}>
+                            {contact.role?.replace('_', ' ') || 'No Role'}
+                          </span>
+                          {contact.is_active && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Active"></span>}
+                        </div>
                       </div>
                     </div>
+                    <MessageSquare className="w-4 h-4 text-slate-400" />
                   </div>
-                  <MessageSquare className="w-4 h-4 text-slate-400" />
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-slate-500 text-sm">No users found</p>
+                <p className="text-slate-400 text-xs mt-1">Make sure profiles exist in the database</p>
+                <button onClick={loadContacts} className="mt-3 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm">
+                  <RefreshCw className="w-4 h-4 inline mr-1" />Refresh
+                </button>
+              </div>
+            )}
           </motion.div>
         </div>
       )}
@@ -290,7 +323,7 @@ export default function MessagesDashboard() {
             </div>
           </div>
           <div className="divide-y">
-            {notifications.map(n => (
+            {notifications.length > 0 ? notifications.map(n => (
               <div key={n.id} onClick={() => { markNotificationRead(n.id); setShowNotifications(false) }}
                 className={`p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 ${!n.is_read ? 'bg-amber-50 dark:bg-amber-900/10' : ''}`}>
                 <div className="flex items-start gap-3">
@@ -304,7 +337,12 @@ export default function MessagesDashboard() {
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8">
+                <Bell className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-slate-500 text-sm">No notifications</p>
+              </div>
+            )}
           </div>
         </div>
       )}
