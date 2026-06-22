@@ -5,25 +5,38 @@ const useMessagesStore = create((set, get) => ({
   conversations: [],
   selectedConversation: null,
   messages: [],
-  contacts: [],
   notifications: [],
   unreadCount: 0,
   loading: false,
-  contactsLoading: false,
   error: null,
 
   fetchConversations: async () => {
     set({ loading: true })
     const { data, error } = await messagesApi.getConversations()
-    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    if (error) { 
+      console.error('fetchConversations error:', error)
+      set({ error: error.message, loading: false }); 
+      return { success: false } 
+    }
     set({ conversations: data || [], loading: false })
     return { success: true, data }
   },
 
   selectConversation: async (id) => {
-    set({ loading: true, selectedConversation: get().conversations.find(c => c.id === id) || null })
+    set({ loading: true })
+    const conv = get().conversations.find(c => c.id === id) || null
+    set({ selectedConversation: conv })
+    
+    if (!id) {
+      set({ messages: [], loading: false })
+      return { success: true }
+    }
+    
     const { data, error } = await messagesApi.getMessages(id)
-    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    if (error) { 
+      set({ error: error.message, loading: false }); 
+      return { success: false } 
+    }
     set({ messages: data || [], loading: false })
     return { success: true, data }
   },
@@ -39,7 +52,7 @@ const useMessagesStore = create((set, get) => ({
 
   sendMessage: async (messageData) => {
     const { data, error } = await messagesApi.sendMessage(messageData)
-    if (error) return { success: false }
+    if (error) return { success: false, error: error.message }
     set(state => ({ messages: [...state.messages, data] }))
     return { success: true, data }
   },
@@ -52,40 +65,21 @@ const useMessagesStore = create((set, get) => ({
   addReaction: async (messageId, reaction) => {
     const { data } = await messagesApi.addReaction(messageId, reaction)
     if (data) {
-      set(state => ({ messages: state.messages.map(m => m.id === messageId ? { ...m, reactions: [...(m.reactions || []), data] } : m) }))
+      set(state => ({ 
+        messages: state.messages.map(m => 
+          m.id === messageId ? { ...m, reactions: [...(m.reactions || []), data] } : m
+        ) 
+      }))
     }
-  },
-
-  fetchContacts: async () => {
-    console.log('🔍 Store: Fetching contacts...')
-    set({ contactsLoading: true })
-    
-    const result = await messagesApi.getContacts()
-    
-    console.log('📊 Store: Result:', { count: result.data?.length || 0, error: result.error || 'none' })
-    
-    if (result.error) {
-      console.error('❌ Store: Error:', result.error)
-      set({ contacts: [], contactsLoading: false })
-      return { success: false, error: result.error }
-    }
-    
-    if (!result.data || result.data.length === 0) {
-      console.warn('⚠️ Store: No contacts')
-      set({ contacts: [], contactsLoading: false })
-      return { success: true, data: [] }
-    }
-    
-    console.log(`✅ Store: Loaded ${result.data.length} contacts`)
-    set({ contacts: result.data, contactsLoading: false })
-    return { success: true, data: result.data }
   },
 
   fetchNotifications: async () => {
     const { data } = await messagesApi.getNotifications()
     set({ notifications: data || [] })
-    const count = await messagesApi.getUnreadCount()
-    set({ unreadCount: count || 0 })
+    try {
+      const count = await messagesApi.getUnreadCount()
+      set({ unreadCount: count || 0 })
+    } catch { set({ unreadCount: 0 }) }
   },
 
   markNotificationRead: async (id) => {
