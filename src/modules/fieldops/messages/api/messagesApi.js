@@ -7,7 +7,7 @@ export const messagesApi = {
   async getConversations() {
     const { data, error } = await supabase
       .from('conversations')
-      .select('*, conversation_participants(*, profiles:user_id(full_name, email, role)), last_message_by_user:last_message_by(full_name)')
+      .select('*, conversation_participants(*), last_message_by_user:last_message_by(full_name)')
       .order('last_message_at', { ascending: false })
     return { data, error }
   },
@@ -40,13 +40,10 @@ export const messagesApi = {
     return { data: conv }
   },
 
-  // ============================================
-  // MESSAGES
-  // ============================================
   async getMessages(conversationId, limit = 50) {
     const { data, error } = await supabase
       .from('messages')
-      .select('*, sender:sender_id(full_name, email, role), reactions:message_reactions(*), read_by:message_read_status(*)')
+      .select('*, sender:sender_id(full_name, email)')
       .eq('conversation_id', conversationId)
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
@@ -96,82 +93,6 @@ export const messagesApi = {
     return { data, error }
   },
 
-  // ============================================
-  // CONTACTS - DIRECT EMPLOYEE QUERY
-  // ============================================
-  async getContacts() {
-    console.log('🔍 getContacts: Fetching employees...')
-    
-    try {
-      // Query employees table directly - same as Employee Management module
-      const { data: employees, error: empError } = await supabase
-        .from('employees')
-        .select('*')
-        .neq('employment_status', 'terminated')
-        .order('department')
-        .order('first_name')
-
-      console.log('📊 Employees query:', { count: employees?.length || 0, error: empError?.message || 'none' })
-
-      if (!empError && employees && employees.length > 0) {
-        const contacts = employees.map(emp => ({
-          id: emp.user_id || emp.id,
-          contact_type: 'employee',
-          full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed',
-          email: emp.email || '',
-          phone: emp.phone || '',
-          department: emp.department || 'Unassigned',
-          job_position: emp.position || 'Staff',
-          profile_photo_url: emp.profile_photo_url || null,
-          user_role: 'employee',
-          is_active: emp.employment_status === 'active',
-          is_online: false,
-          employee_code: emp.employee_code || '',
-          employment_status: emp.employment_status || 'active'
-        }))
-        console.log(`✅ Loaded ${contacts.length} contacts from employees table`)
-        return { data: contacts, error: null }
-      }
-
-      // Fallback: Try profiles table
-      console.log('⚠️ No employees, trying profiles...')
-      const { data: profiles, error: profError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('full_name')
-
-      if (!profError && profiles && profiles.length > 0) {
-        const contacts = profiles.map(p => ({
-          id: p.id,
-          contact_type: 'user',
-          full_name: p.full_name || p.email || 'Unknown',
-          email: p.email || '',
-          phone: '',
-          department: 'General',
-          job_position: p.role || 'User',
-          profile_photo_url: null,
-          user_role: p.role || 'customer',
-          is_active: p.is_active !== false,
-          is_online: false,
-          employee_code: '',
-          employment_status: 'active'
-        }))
-        console.log(`✅ Loaded ${contacts.length} contacts from profiles table`)
-        return { data: contacts, error: null }
-      }
-
-      console.warn('⚠️ No contacts found')
-      return { data: [], error: null }
-
-    } catch (e) {
-      console.error('❌ getContacts error:', e)
-      return { data: [], error: e.message }
-    }
-  },
-
-  // ============================================
-  // NOTIFICATIONS
-  // ============================================
   async getNotifications(limit = 50) {
     const { data, error } = await supabase
       .from('notifications')
