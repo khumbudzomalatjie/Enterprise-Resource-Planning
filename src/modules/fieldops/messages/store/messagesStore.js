@@ -17,7 +17,7 @@ const useMessagesStore = create((set, get) => ({
     const { data, error } = await messagesApi.getConversations()
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
     set({ conversations: data || [], loading: false })
-    return { success: true }
+    return { success: true, data }
   },
 
   selectConversation: async (id) => {
@@ -25,7 +25,7 @@ const useMessagesStore = create((set, get) => ({
     const { data, error } = await messagesApi.getMessages(id)
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
     set({ messages: data || [], loading: false })
-    return { success: true }
+    return { success: true, data }
   },
 
   getOrCreateDirectConversation: async (otherUserId) => {
@@ -56,42 +56,29 @@ const useMessagesStore = create((set, get) => ({
     }
   },
 
-  // UPDATED: fetchContacts with debug logging
   fetchContacts: async () => {
     console.log('🔍 Store: Fetching contacts...')
     set({ contactsLoading: true })
     
-    try {
-      const { data, error } = await messagesApi.getContacts()
-      
-      console.log('📊 Store: getContacts result:', { 
-        count: data?.length || 0, 
-        error: error || 'none',
-        hasData: !!data,
-        sample: data?.length > 0 ? data[0] : 'empty'
-      })
-      
-      if (error) {
-        console.error('❌ Store: Error fetching contacts:', error)
-        set({ contacts: [], contactsLoading: false, error })
-        return { success: false, data: [], error }
-      }
-      
-      if (!data || data.length === 0) {
-        console.warn('⚠️ Store: No contacts returned - employees table may be empty or query failed')
-        set({ contacts: [], contactsLoading: false })
-        return { success: true, data: [] }
-      }
-      
-      console.log(`✅ Store: Loaded ${data.length} contacts successfully`)
-      set({ contacts: data, contactsLoading: false, error: null })
-      return { success: true, data }
-      
-    } catch (e) {
-      console.error('❌ Store: Exception in fetchContacts:', e)
-      set({ contacts: [], contactsLoading: false, error: e.message })
-      return { success: false, data: [], error: e.message }
+    const result = await messagesApi.getContacts()
+    
+    console.log('📊 Store: Result:', { count: result.data?.length || 0, error: result.error || 'none' })
+    
+    if (result.error) {
+      console.error('❌ Store: Error:', result.error)
+      set({ contacts: [], contactsLoading: false })
+      return { success: false, error: result.error }
     }
+    
+    if (!result.data || result.data.length === 0) {
+      console.warn('⚠️ Store: No contacts')
+      set({ contacts: [], contactsLoading: false })
+      return { success: true, data: [] }
+    }
+    
+    console.log(`✅ Store: Loaded ${result.data.length} contacts`)
+    set({ contacts: result.data, contactsLoading: false })
+    return { success: true, data: result.data }
   },
 
   fetchNotifications: async () => {
