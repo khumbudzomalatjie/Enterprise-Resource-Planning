@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
@@ -7,9 +7,9 @@ import useAuthStore from '../../../store/authStore'
 import useThemeStore from '../../../store/themeStore'
 import { 
   MessageSquare, Users, Bell, Smartphone, MapPin, 
-  ClipboardCheck, Radio, Wifi, Battery, Signal,
-  Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Clock, CheckCircle2, AlertTriangle, Truck
+  ClipboardCheck, Radio, Signal,
+  Sparkles, Sun, Moon, ArrowLeft,
+  CheckCircle2, Truck
 } from 'lucide-react'
 
 export default function FieldOpsDashboard() {
@@ -107,7 +107,6 @@ export default function FieldOpsDashboard() {
           <p className="text-slate-500 dark:text-slate-400 ml-11">Mobile workforce, messages, GPS tracking, and field communications</p>
         </motion.div>
 
-        {/* Status Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3">
             <Signal className="w-5 h-5 text-emerald-600" />
@@ -115,7 +114,7 @@ export default function FieldOpsDashboard() {
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3">
             <Users className="w-5 h-5 text-blue-600" />
-            <div><p className="text-xs text-slate-500">Field Staff</p><p className="font-semibold text-slate-800 dark:text-white">12 Active</p></div>
+            <div><p className="text-xs text-slate-500">Field Staff</p><p className="font-semibold text-slate-800 dark:text-white">Active</p></div>
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3">
             <MessageSquare className="w-5 h-5 text-purple-600" />
@@ -123,11 +122,10 @@ export default function FieldOpsDashboard() {
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-amber-600" />
-            <div><p className="text-xs text-slate-500">Jobs Today</p><p className="font-semibold text-slate-800 dark:text-white">8 Scheduled</p></div>
+            <div><p className="text-xs text-slate-500">Jobs Today</p><p className="font-semibold text-slate-800 dark:text-white">Scheduled</p></div>
           </div>
         </div>
 
-        {/* Module Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {modules.map((mod, index) => (
             <motion.div key={mod.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
