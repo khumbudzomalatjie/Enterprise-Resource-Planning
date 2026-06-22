@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { hrApi } from '../api/hrApi'
+import { supabase } from '../../../lib/supabaseClient'
 
 const useHRStore = create((set, get) => ({
   // State
@@ -41,7 +42,6 @@ const useHRStore = create((set, get) => ({
     try {
       set({ loading: true, error: null })
       
-      // Only include fields that actually exist in the employees table
       const safeData = {
         first_name: employeeData.first_name,
         last_name: employeeData.last_name,
@@ -83,7 +83,6 @@ const useHRStore = create((set, get) => ({
       
       // AUDIT: Log employee creation
       try {
-        const { supabase } = await import('../lib/supabaseClient')
         await supabase.rpc('log_audit', {
           p_module: 'HR Management',
           p_action: 'Created',
@@ -107,7 +106,6 @@ const useHRStore = create((set, get) => ({
     try {
       set({ loading: true, error: null })
       
-      // Only include safe fields that exist in the employees table
       const safeUpdates = {}
       const allowedFields = [
         'first_name', 'last_name', 'email', 'phone', 'alternative_phone',
@@ -120,17 +118,13 @@ const useHRStore = create((set, get) => ({
         'date_of_termination', 'termination_reason'
       ]
 
-      // Only copy allowed fields that have values
       allowedFields.forEach(field => {
         if (updates[field] !== undefined) {
           safeUpdates[field] = updates[field] || null
         }
       })
 
-      // Always update the timestamp
       safeUpdates.updated_at = new Date().toISOString()
-
-      console.log('Updating employee with:', safeUpdates)
 
       const { data, error } = await hrApi.updateEmployee(id, safeUpdates)
       if (error) {
@@ -147,7 +141,6 @@ const useHRStore = create((set, get) => ({
       
       // AUDIT: Log employee update
       try {
-        const { supabase } = await import('../lib/supabaseClient')
         await supabase.rpc('log_audit', {
           p_module: 'HR Management',
           p_action: 'Updated',
@@ -169,7 +162,6 @@ const useHRStore = create((set, get) => ({
 
   deleteEmployee: async (id) => {
     try {
-      // Get employee name before deleting for audit
       const employee = get().employees?.find(emp => emp.id === id)
       const employeeName = employee ? employee.first_name + ' ' + employee.last_name : 'Unknown'
       
@@ -183,7 +175,6 @@ const useHRStore = create((set, get) => ({
       
       // AUDIT: Log employee termination
       try {
-        const { supabase } = await import('../lib/supabaseClient')
         await supabase.rpc('log_audit', {
           p_module: 'HR Management',
           p_action: 'Terminated',
@@ -216,7 +207,6 @@ const useHRStore = create((set, get) => ({
     
     // AUDIT: Log contract creation
     try {
-      const { supabase } = await import('../lib/supabaseClient')
       await supabase.rpc('log_audit', {
         p_module: 'HR Management',
         p_action: 'Contract Created',
@@ -253,7 +243,6 @@ const useHRStore = create((set, get) => ({
     
     // AUDIT: Log leave request
     try {
-      const { supabase } = await import('../lib/supabaseClient')
       await supabase.rpc('log_audit', {
         p_module: 'HR Management',
         p_action: 'Leave Requested',
@@ -277,7 +266,6 @@ const useHRStore = create((set, get) => ({
     
     // AUDIT: Log leave status change
     try {
-      const { supabase } = await import('../lib/supabaseClient')
       await supabase.rpc('log_audit', {
         p_module: 'HR Management',
         p_action: 'Leave ' + (updates.status || 'Updated'),
@@ -307,7 +295,6 @@ const useHRStore = create((set, get) => ({
     
     // AUDIT: Log training record
     try {
-      const { supabase } = await import('../lib/supabaseClient')
       await supabase.rpc('log_audit', {
         p_module: 'HR Management',
         p_action: 'Training Added',
@@ -337,7 +324,6 @@ const useHRStore = create((set, get) => ({
     
     // AUDIT: Log disciplinary record
     try {
-      const { supabase } = await import('../lib/supabaseClient')
       await supabase.rpc('log_audit', {
         p_module: 'HR Management',
         p_action: 'Disciplinary Action',
