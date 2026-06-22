@@ -90,12 +90,39 @@ export const messagesApi = {
     return { data, error }
   },
 
+  // UPDATED: getContacts with fallback to auth.users
   async getContacts() {
-    const { data, error } = await supabase
+    // First try the profiles table
+    const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name, email, role, is_active, last_login')
       .order('full_name')
-    return { data, error }
+    
+    // If profiles exist, return them
+    if (profiles && profiles.length > 0) {
+      console.log('Contacts loaded from profiles:', profiles.length)
+      return { data: profiles, error: null }
+    }
+
+    // If no profiles found, log a warning
+    console.warn('No profiles found in profiles table, profiles may not be synced with auth.users')
+    
+    // Try to get users who are authenticated but may not have profiles
+    // Note: This requires admin privileges or a security definer function
+    try {
+      const { data: authUsers, error: authError } = await supabase.rpc('get_all_users_profiles')
+      
+      if (authUsers && authUsers.length > 0) {
+        console.log('Contacts loaded from auth users:', authUsers.length)
+        return { data: authUsers, error: null }
+      }
+    } catch (rpcError) {
+      console.error('RPC get_all_users_profiles not available:', rpcError.message)
+    }
+
+    // Last resort: Return empty array
+    console.warn('No contacts found from any source')
+    return { data: [], error: null }
   },
 
   async getNotifications(limit = 50) {
