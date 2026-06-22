@@ -26,6 +26,9 @@ import AssetsRoutes from '../modules/assets/routes/AssetsRoutes'
 import MobileRoutes from '../modules/mobile/routes/MobileRoutes'
 import TrackerRoutes from '../modules/tracker/routes/TrackerRoutes'
 
+// Field Operations - Messages & Contacts
+import FieldOpsRoutes from '../modules/fieldops/routes/FieldOpsRoutes'
+
 import { USER_ROLES } from '../types/authTypes'
 
 export default function AppRoutes() {
@@ -180,23 +183,24 @@ export default function AppRoutes() {
       />
 
       {/* ============================================ */}
-{/* AUDIT TRAIL - System Activity Log            */}
-{/* ============================================ */}
-<Route 
-  path="/audit/*" 
-  element={
-    <ProtectedRoute>
-      <RoleBasedRoute requiredRoles={[
-        USER_ROLES.SUPER_ADMIN, 
-        USER_ROLES.OPERATIONS_MANAGER, 
-        USER_ROLES.HR_MANAGER,
-        USER_ROLES.FINANCE_OFFICER
-      ]}>
-        <AuditRoutes />
-      </RoleBasedRoute>
-    </ProtectedRoute>
-  } 
-/>
+      {/* AUDIT TRAIL - System Activity Log            */}
+      {/* ============================================ */}
+      <Route 
+        path="/audit/*" 
+        element={
+          <ProtectedRoute>
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.HR_MANAGER,
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <AuditRoutes />
+            </RoleBasedRoute>
+          </ProtectedRoute>
+        } 
+      />
+
       {/* ============================================ */}
       {/* MODULE 9 - FINANCE & ACCOUNTING              */}
       {/* ============================================ */}
@@ -326,6 +330,19 @@ export default function AppRoutes() {
         element={
           <ProtectedRoute>
             <TrackerRoutes />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* ============================================ */}
+      {/* FIELD OPERATIONS - Messages & Contacts       */}
+      {/* All authenticated users can access           */}
+      {/* ============================================ */}
+      <Route 
+        path="/fieldops/*" 
+        element={
+          <ProtectedRoute>
+            <FieldOpsRoutes />
           </ProtectedRoute>
         } 
       />
