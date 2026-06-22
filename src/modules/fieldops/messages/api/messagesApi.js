@@ -16,7 +16,6 @@ export const messagesApi = {
     const currentUser = (await supabase.auth.getUser()).data.user
     if (!currentUser) return { error: 'Not authenticated' }
 
-    // Check if direct conversation already exists
     const { data: existing } = await supabase
       .from('conversations')
       .select('*, conversation_participants!inner(*)')
@@ -28,7 +27,6 @@ export const messagesApi = {
     )
     if (existingConv) return { data: existingConv }
 
-    // Create new direct conversation
     const { data: conv, error } = await supabase
       .from('conversations')
       .insert([{ conversation_type: 'direct', created_by: currentUser.id }])
@@ -99,76 +97,54 @@ export const messagesApi = {
   },
 
   // ============================================
-  // CONTACTS - EMPLOYEE DIRECTORY
+  // CONTACTS - DIRECT EMPLOYEE QUERY
   // ============================================
   async getContacts() {
     try {
-      // Try the RPC function first
-      const { data, error } = await supabase.rpc('get_all_contacts')
-      
-      if (!error && data && data.length > 0) {
-        console.log('Contacts loaded via RPC:', data.length)
-        return { data, error: null }
-      }
-
-      // Fallback: Query employees directly
-      const { data: employees } = await supabase
+      // DIRECT QUERY: Get all employees from the employees table
+      // This is the SAME table used by the Employee Management module
+      const { data: employees, error } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, email, phone, department, position, profile_photo_url, employment_status, employee_code, user_id')
-        .neq('employment_status', 'terminated')
+        .select('*')
         .order('department')
         .order('first_name')
 
-      if (employees?.length) {
-        const contacts = employees.map(emp => ({
-          id: emp.user_id || emp.id,
-          contact_type: 'employee',
-          full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed',
-          email: emp.email || '',
-          phone: emp.phone || '',
-          department: emp.department || 'Unassigned',
-          position: emp.position || 'Staff',
-          profile_photo_url: emp.profile_photo_url || null,
-          role: 'employee',
-          is_active: emp.employment_status === 'active',
-          is_online: false,
-          employee_code: emp.employee_code || '',
-          last_login: null
-        }))
-        console.log('Contacts loaded from employees table:', contacts.length)
-        return { data: contacts, error: null }
+      console.log('🔍 Employee query result:', { count: employees?.length, error: error?.message })
+
+      if (error) {
+        console.error('❌ Employee query error:', error.message)
+        return { data: [], error: error.message }
       }
 
-      // Last resort: Get from profiles
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('full_name')
-
-      if (profiles?.length) {
-        const contacts = profiles.map(p => ({
-          id: p.id,
-          contact_type: 'user',
-          full_name: p.full_name || p.email || 'Unknown',
-          email: p.email || '',
-          phone: '',
-          department: 'Management',
-          position: p.role || 'Staff',
-          profile_photo_url: null,
-          role: p.role || 'customer',
-          is_active: p.is_active !== false,
-          is_online: false,
-          employee_code: '',
-          last_login: p.last_login
-        }))
-        console.log('Contacts loaded from profiles:', contacts.length)
-        return { data: contacts, error: null }
+      if (!employees || employees.length === 0) {
+        console.warn('⚠️ No employees found in the employees table')
+        return { data: [], error: null }
       }
 
-      return { data: [], error: null }
+      // Map employees to contacts format
+      const contacts = employees.map(emp => ({
+        id: emp.user_id || emp.id,
+        contact_type: 'employee',
+        full_name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed Employee',
+        email: emp.email || '',
+        phone: emp.phone || '',
+        department: emp.department || 'Unassigned',
+        job_position: emp.position || 'Staff',
+        profile_photo_url: emp.profile_photo_url || null,
+        user_role: 'employee',
+        is_active: emp.employment_status === 'active',
+        is_online: false,
+        employee_code: emp.employee_code || '',
+        last_login: null,
+        employment_status: emp.employment_status || 'active'
+      }))
+
+      console.log(`✅ Successfully loaded ${contacts.length} contacts from employees table`)
+      return { data: contacts, error: null }
+
     } catch (e) {
-      console.error('Error loading contacts:', e)
-      return { data: [], error: null }
+      console.error('❌ getContacts error:', e)
+      return { data: [], error: e.message }
     }
   },
 
