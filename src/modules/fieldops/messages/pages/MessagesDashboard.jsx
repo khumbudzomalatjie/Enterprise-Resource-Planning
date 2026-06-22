@@ -42,24 +42,32 @@ export default function MessagesDashboard() {
     fetchNotifications()
   }, [])
 
+  // FIXED: loadContacts with proper error handling and logging
   const loadContacts = async () => {
     setContactsLoading(true)
     console.log('🔍 Starting contact load...')
     
-    // Try multiple sources
     let allContacts = []
     
-    // SOURCE 1: Employees table
+    // SOURCE 1: Employees table - simplified query
     try {
+      console.log('📊 Querying employees table...')
       const { data: employees, error: empErr } = await supabase
         .from('employees')
         .select('*')
-        .order('department')
-        .order('first_name')
       
-      console.log('📊 Employees query:', { count: employees?.length, error: empErr?.message })
+      console.log('📊 Employees result:', { 
+        count: employees?.length || 0, 
+        errorCode: empErr?.code,
+        errorMessage: empErr?.message,
+        errorDetails: empErr?.details,
+        hint: empErr?.hint
+      })
       
-      if (!empErr && employees?.length > 0) {
+      if (empErr) {
+        console.error('❌ Employees query failed:', empErr)
+        toast.error('Employee query failed: ' + empErr.message)
+      } else if (employees && employees.length > 0) {
         const empContacts = employees.map(emp => ({
           id: emp.user_id || emp.id,
           full_name: [emp.first_name, emp.last_name].filter(Boolean).join(' ') || 'Unnamed',
@@ -74,19 +82,23 @@ export default function MessagesDashboard() {
         }))
         allContacts = [...allContacts, ...empContacts]
         console.log(`✅ Added ${empContacts.length} from employees`)
+      } else {
+        console.warn('⚠️ Employees table returned empty array')
       }
-    } catch(e) { console.error('Employees error:', e) }
+    } catch(e) {
+      console.error('❌ Employees exception:', e.message || e)
+    }
     
     // SOURCE 2: Profiles table
     try {
+      console.log('📊 Querying profiles table...')
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
         .select('*')
-        .order('full_name')
       
-      console.log('📊 Profiles query:', { count: profiles?.length, error: profErr?.message })
+      console.log('📊 Profiles result:', { count: profiles?.length || 0, error: profErr?.message || 'none' })
       
-      if (!profErr && profiles?.length > 0) {
+      if (!profErr && profiles && profiles.length > 0) {
         const existingIds = new Set(allContacts.map(c => c.id))
         const profContacts = profiles
           .filter(p => !existingIds.has(p.id))
@@ -105,31 +117,40 @@ export default function MessagesDashboard() {
         allContacts = [...allContacts, ...profContacts]
         console.log(`✅ Added ${profContacts.length} from profiles`)
       }
-    } catch(e) { console.error('Profiles error:', e) }
-    
-    // SOURCE 3: Auth users (last resort)
-    if (allContacts.length === 0) {
-      try {
-        const { data: { user: currentUser } } = await supabase.auth.getUser()
-        if (currentUser) {
-          allContacts = [{
-            id: currentUser.id,
-            full_name: currentUser.email || 'Current User',
-            email: currentUser.email || '',
-            phone: '',
-            department: 'General',
-            position: 'User',
-            profile_photo_url: null,
-            is_active: true,
-            employee_code: '',
-            source: 'auth'
-          }]
-          console.log('⚠️ Only current user found')
-        }
-      } catch(e) { console.error('Auth error:', e) }
+    } catch(e) {
+      console.error('❌ Profiles exception:', e.message || e)
     }
     
-    console.log(`📊 Total contacts: ${allContacts.length}`)
+    // SOURCE 3: Current user as last resort
+    if (allContacts.length === 0) {
+      console.warn('⚠️ No contacts found from any source')
+      if (user) {
+        allContacts = [{
+          id: user.id,
+          full_name: profile?.full_name || user.email || 'Current User',
+          email: user.email || '',
+          phone: '',
+          department: 'General',
+          position: profile?.role?.replace(/_/g, ' ') || 'User',
+          profile_photo_url: null,
+          is_active: true,
+          employee_code: '',
+          source: 'current_user'
+        }]
+        console.log('⚠️ Added current user as only contact')
+      }
+    }
+    
+    console.log(`📊 FINAL: ${allContacts.length} total contacts loaded`)
+    if (allContacts.length > 0) {
+      console.table(allContacts.map(c => ({ 
+        Name: c.full_name, 
+        Department: c.department, 
+        Position: c.position,
+        Source: c.source 
+      })))
+    }
+    
     setContacts(allContacts)
     setContactsLoading(false)
   }
@@ -448,7 +469,7 @@ export default function MessagesDashboard() {
                   <div className="text-center py-16">
                     <Users className="w-16 h-16 text-slate-300 mx-auto mb-3" />
                     <p className="text-slate-500 text-lg">No contacts found</p>
-                    <p className="text-slate-400 text-sm mt-1">{searchTerm ? 'Try a different search' : 'Run the SQL to add test employees'}</p>
+                    <p className="text-slate-400 text-sm mt-1">{searchTerm ? 'Try a different search' : 'No employees in the database yet'}</p>
                     <button onClick={loadContacts} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 mx-auto">
                       <RefreshCw className="w-4 h-4" />Refresh
                     </button>
