@@ -1,12 +1,7 @@
 import { supabase } from '../../../../lib/supabaseClient'
 
 export const messagesApi = {
-  // ============================================
-  // CONVERSATIONS
-  // ============================================
   async getConversations() {
-    // FIXED: Removed profiles(*) join and last_message_by_user join
-    // These were causing 400 errors because foreign key relationships don't exist
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
@@ -18,7 +13,6 @@ export const messagesApi = {
     const currentUser = (await supabase.auth.getUser()).data.user
     if (!currentUser) return { error: 'Not authenticated' }
 
-    // Check if direct conversation already exists
     const { data: myConversations } = await supabase
       .from('conversation_participants')
       .select('conversation_id')
@@ -26,7 +20,6 @@ export const messagesApi = {
 
     if (myConversations?.length) {
       const myConvIds = myConversations.map(p => p.conversation_id)
-      
       const { data: otherParticipants } = await supabase
         .from('conversation_participants')
         .select('conversation_id')
@@ -41,31 +34,23 @@ export const messagesApi = {
           .eq('id', otherParticipants[0].conversation_id)
           .eq('conversation_type', 'direct')
           .single()
-        
         if (existingConv) return { data: existingConv }
       }
     }
 
-    // Create new direct conversation
     const { data: conv, error } = await supabase
       .from('conversations')
       .insert([{ conversation_type: 'direct', created_by: currentUser.id }])
-      .select()
-      .single()
-    
+      .select().single()
     if (error) return { error }
 
     await supabase.from('conversation_participants').insert([
       { conversation_id: conv.id, user_id: currentUser.id },
       { conversation_id: conv.id, user_id: otherUserId }
     ])
-    
     return { data: conv }
   },
 
-  // ============================================
-  // MESSAGES
-  // ============================================
   async getMessages(conversationId, limit = 50) {
     const { data, error } = await supabase
       .from('messages')
@@ -81,11 +66,9 @@ export const messagesApi = {
     const { data, error } = await supabase
       .from('messages')
       .insert([messageData])
-      .select()
-      .single()
+      .select().single()
     
     if (!error) {
-      // Get other participants to notify
       const { data: participants } = await supabase
         .from('conversation_participants')
         .select('user_id')
@@ -98,7 +81,7 @@ export const messagesApi = {
           notification_type: 'message',
           title: 'New Message',
           body: messageData.content?.substring(0, 100) || 'You have a new message',
-          link_url: `/fieldops/messages`,
+          link_url: '/fieldops/messages',
           metadata: { conversation_id: messageData.conversation_id, sender_id: messageData.sender_id }
         })))
       }
@@ -116,14 +99,10 @@ export const messagesApi = {
     const { data, error } = await supabase
       .from('message_reactions')
       .upsert([{ message_id: messageId, user_id: user.id, reaction }], { onConflict: 'message_id,user_id,reaction' })
-      .select()
-      .single()
+      .select().single()
     return { data, error }
   },
 
-  // ============================================
-  // NOTIFICATIONS
-  // ============================================
   async getNotifications(limit = 50) {
     const { data, error } = await supabase
       .from('notifications')
