@@ -22,7 +22,6 @@ export default function Dashboard() {
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'User'
   const userRole = profile?.role
 
-  // ALL modules defined
   const allModules = [
     { 
       icon: Users, 
@@ -132,9 +131,9 @@ export default function Dashboard() {
     { 
       icon: Smartphone, 
       label: 'Field Operations', 
-      description: 'Monitor cleaners, photos, incidents, supplies',
-      path: '/mobile/field',
-      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]
+      description: 'Messages, live jobs, GPS tracking',
+      path: '/fieldops',
+      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.SALES_AGENT, USER_ROLES.CLEANER]
     },
     { 
       icon: Smartphone, 
@@ -145,7 +144,6 @@ export default function Dashboard() {
     },
   ]
 
-  // FILTER: Only show modules the user has access to
   const modules = allModules.filter(module => {
     if (userRole === USER_ROLES.SUPER_ADMIN) return true
     return module.roles.includes(userRole)
@@ -156,7 +154,7 @@ export default function Dashboard() {
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
       '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
-      '/tracker', '/mobile/field', '/mobile'
+      '/tracker', '/fieldops', '/mobile'
     ]
     return builtModules.includes(module.path)
   }
@@ -166,7 +164,7 @@ export default function Dashboard() {
       '/hr', '/payroll', '/crm', '/sales', '/operations', 
       '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
       '/reports', '/workflow', '/documents', '/assets', 
-      '/tracker', '/mobile/field', '/mobile', '/dashboard', '/users'
+      '/tracker', '/fieldops', '/mobile', '/dashboard', '/users'
     ]
     
     if (availableModules.includes(module.path)) {
