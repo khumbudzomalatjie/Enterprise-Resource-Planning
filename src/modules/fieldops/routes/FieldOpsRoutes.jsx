@@ -9,7 +9,6 @@ export default function FieldOpsRoutes() {
     <Routes>
       <Route path="/" element={<ProtectedRoute><FieldOpsDashboard /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><MessagesDashboard /></ProtectedRoute>} />
-      <Route path="/messages/:conversationId" element={<ProtectedRoute><MessagesDashboard /></ProtectedRoute>} />
       <Route path="/jobs" element={<ProtectedRoute><LiveJobs /></ProtectedRoute>} />
     </Routes>
   )
