@@ -24,8 +24,7 @@ export default function FieldOpsDashboard() {
     inProgress: 0,
     pending: 0,
     completed: 0,
-    overdue: 0,
-    todayCount: 0
+    overdue: 0
   })
 
   useEffect(() => {
@@ -37,19 +36,20 @@ export default function FieldOpsDashboard() {
   const loadJobStats = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
-      
-      const { data: jobs, error } = await supabase
-        .from('jobs')
-        .select('id, status, scheduled_date')
+      const { data: jobs } = await supabase.from('jobs').select('id, status, scheduled_date')
 
-      if (!error && jobs) {
+      if (jobs) {
         setJobStats({
           total: jobs.length,
           inProgress: jobs.filter(j => j.status === 'in_progress').length,
           pending: jobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length,
           completed: jobs.filter(j => j.status === 'completed').length,
-          overdue: jobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled' && j.scheduled_date < today).length,
-          todayCount: jobs.filter(j => j.scheduled_date === today).length,
+          overdue: jobs.filter(j => 
+            j.status !== 'completed' && 
+            j.status !== 'cancelled' && 
+            j.scheduled_date && 
+            j.scheduled_date < today
+          ).length,
         })
       }
     } catch (e) {
@@ -70,7 +70,7 @@ export default function FieldOpsDashboard() {
     {
       icon: ClipboardCheck,
       label: 'Live Jobs',
-      description: `Real-time job tracking (${jobStats.inProgress} active)`,
+      description: `Real-time job tracking (${jobStats.inProgress} active, ${jobStats.total} total)`,
       path: '/fieldops/jobs',
       badge: jobStats.inProgress > 0 ? jobStats.inProgress : null,
       color: 'text-amber-600',
@@ -141,13 +141,13 @@ export default function FieldOpsDashboard() {
           <p className="text-slate-500 dark:text-slate-400 ml-11">Mobile workforce, live jobs, GPS tracking, messages, and field communications</p>
         </motion.div>
 
-        {/* Status Bar with Live Job Stats */}
+        {/* Status Bar */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/jobs')}>
             <Briefcase className="w-5 h-5 text-blue-600" />
             <div>
-              <p className="text-xs text-slate-500">Total Jobs</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total Jobs</p>
               <p className="font-semibold text-slate-800 dark:text-white">{jobStats.total}</p>
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function FieldOpsDashboard() {
             onClick={() => navigate('/fieldops/jobs')}>
             <Clock className="w-5 h-5 text-amber-600" />
             <div>
-              <p className="text-xs text-slate-500">In Progress</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">In Progress</p>
               <p className="font-semibold text-amber-600">{jobStats.inProgress}</p>
             </div>
           </div>
@@ -163,7 +163,7 @@ export default function FieldOpsDashboard() {
             onClick={() => navigate('/fieldops/jobs')}>
             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
             <div>
-              <p className="text-xs text-slate-500">Completed</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Completed</p>
               <p className="font-semibold text-emerald-600">{jobStats.completed}</p>
             </div>
           </div>
@@ -171,15 +171,16 @@ export default function FieldOpsDashboard() {
             onClick={() => navigate('/fieldops/jobs')}>
             <AlertTriangle className="w-5 h-5 text-red-600" />
             <div>
-              <p className="text-xs text-slate-500">Overdue</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Overdue</p>
               <p className="font-semibold text-red-600">{jobStats.overdue}</p>
             </div>
           </div>
-          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3">
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/messages')}>
             <MessageSquare className="w-5 h-5 text-purple-600" />
             <div>
-              <p className="text-xs text-slate-500">Unread Messages</p>
-              <p className="font-semibold text-purple-600">{unreadCount}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Messages</p>
+              <p className="font-semibold text-purple-600">{unreadCount} Unread</p>
             </div>
           </div>
         </div>
