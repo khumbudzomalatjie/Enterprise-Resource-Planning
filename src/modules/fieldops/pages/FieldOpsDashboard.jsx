@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
@@ -14,7 +15,9 @@ export default function FieldOpsDashboard() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
 
-  const [jobStats, setJobStats] = useState({ total: 0, inProgress: 0, pending: 0, completed: 0, overdue: 0 })
+  const [jobStats, setJobStats] = useState({
+    total: 0, inProgress: 0, pending: 0, completed: 0, overdue: 0
+  })
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -32,112 +35,163 @@ export default function FieldOpsDashboard() {
           inProgress: jobs.filter(j => j.status === 'in_progress').length,
           pending: jobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length,
           completed: jobs.filter(j => j.status === 'completed').length,
-          overdue: jobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled' && j.scheduled_date && j.scheduled_date < today).length,
+          overdue: jobs.filter(j => 
+            j.status !== 'completed' && j.status !== 'cancelled' && 
+            j.scheduled_date && j.scheduled_date < today
+          ).length,
         })
       }
-    } catch (e) { console.error('Stats error:', e) }
+    } catch (e) {
+      console.error('Job stats error:', e)
+    }
   }
 
   const loadUnreadCount = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase.rpc('get_unread_count', { p_user_id: user.id })
-        setUnreadCount(data || 0)
-      }
-    } catch (e) { console.error('Unread error:', e) }
+      const { data } = await supabase.rpc('get_unread_count', { 
+        p_user_id: (await supabase.auth.getUser()).data.user?.id 
+      })
+      setUnreadCount(data || 0)
+    } catch (e) {
+      console.error('Unread count error:', e)
+    }
   }
 
   const modules = [
-    { icon: MessageSquare, label: 'Messages & Contacts', desc: 'Chat with team, view employees', path: '/fieldops/messages', badge: unreadCount > 0 ? unreadCount : null, color: '#2563eb', bg: '#dbeafe' },
-    { icon: ClipboardCheck, label: 'Live Jobs', desc: `${jobStats.inProgress} active, ${jobStats.total} total`, path: '/fieldops/jobs', badge: jobStats.inProgress > 0 ? jobStats.inProgress : null, color: '#d97706', bg: '#fef3c7' },
-    { icon: Smartphone, label: 'Mobile Workforce', desc: 'Field app, routes, clock in/out', path: '/fieldops/mobile', badge: null, color: '#059669', bg: '#d1fae5' },
-    { icon: MapPin, label: 'GPS Tracking', desc: 'Live location tracking', path: '/fieldops/tracking', badge: null, color: '#7c3aed', bg: '#ede9fe' },
-    { icon: Truck, label: 'Fleet Tracking', desc: 'Vehicle locations & routes', path: '/fieldops/fleet', badge: null, color: '#4f46e5', bg: '#e0e7ff' },
-    { icon: Bell, label: 'Notifications', desc: 'Alerts & system updates', path: '/fieldops/notifications', badge: unreadCount > 0 ? unreadCount : null, color: '#dc2626', bg: '#fee2e2' },
+    {
+      icon: MessageSquare,
+      label: 'Messages & Contacts',
+      description: 'Chat with team members, view all employees',
+      path: '/fieldops/messages',
+      badge: unreadCount > 0 ? unreadCount : null,
+      color: 'text-blue-600',
+      bg: 'bg-blue-100 dark:bg-blue-900/30'
+    },
+    {
+      icon: ClipboardCheck,
+      label: 'Live Jobs',
+      description: `${jobStats.inProgress} active, ${jobStats.total} total jobs`,
+      path: '/fieldops/jobs',
+      badge: jobStats.inProgress > 0 ? jobStats.inProgress : null,
+      color: 'text-amber-600',
+      bg: 'bg-amber-100 dark:bg-amber-900/30'
+    },
+    {
+      icon: Smartphone,
+      label: 'Mobile Workforce',
+      description: 'Field app, route updates, clock in/out',
+      path: '/fieldops/mobile',
+      badge: null,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100 dark:bg-emerald-900/30'
+    },
+    {
+      icon: MapPin,
+      label: 'GPS Tracking',
+      description: 'Live location tracking for field staff',
+      path: '/fieldops/tracking',
+      badge: null,
+      color: 'text-purple-600',
+      bg: 'bg-purple-100 dark:bg-purple-900/30'
+    },
+    {
+      icon: Truck,
+      label: 'Fleet Tracking',
+      description: 'Vehicle locations and route monitoring',
+      path: '/fieldops/fleet',
+      badge: null,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-100 dark:bg-indigo-900/30'
+    },
+    {
+      icon: Bell,
+      label: 'Notifications',
+      description: 'Alerts, reminders, and system updates',
+      path: '/fieldops/notifications',
+      badge: unreadCount > 0 ? unreadCount : null,
+      color: 'text-red-600',
+      bg: 'bg-red-100 dark:bg-red-900/30'
+    },
   ]
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: isDark ? '#1e293b' : '#f1f5f9', fontFamily: 'Inter, sans-serif' }}>
+    <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       
-      {/* Fixed header buttons */}
-      <div style={{ position: 'fixed', top: '80px', right: '16px', zIndex: 30, display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ background: isDark ? '#334155' : '#e2e8f0', padding: '8px 20px', borderRadius: '50px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'inset 2px 2px 5px rgba(0,0,0,0.1)' }}>
-          <Sparkles size={16} color="#059669" />
-          <span style={{ fontSize: '14px', fontWeight: 600, color: isDark ? '#a7f3d0' : '#065f46' }}>Field Operations</span>
+      <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold hidden sm:inline">Field Operations</span>
         </div>
-        <button onClick={toggleTheme} style={{ width: '48px', height: '48px', borderRadius: '16px', border: 'none', cursor: 'pointer', background: isDark ? '#334155' : '#fff', boxShadow: '4px 4px 10px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {isDark ? <Sun size={24} color="#fbbf24" /> : <Moon size={24} color="#475569" />}
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
+          {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
         </button>
       </div>
 
-      <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '32px 16px' }}>
-        {/* Back link */}
-        <Link to="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', color: isDark ? '#94a3b8' : '#64748b', textDecoration: 'none', marginBottom: '24px', fontSize: '14px' }}>
-          <ArrowLeft size={16} style={{ marginRight: '4px' }} />Back to Main Dashboard
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
+        <Link to="/dashboard" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
+          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Main Dashboard</span>
         </Link>
 
-        {/* Title */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <Radio size={32} color="#059669" />
-            <h1 style={{ fontSize: '36px', fontWeight: 800, color: isDark ? '#fff' : '#1e293b', margin: 0 }}>Field Operations Management</h1>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <Radio className="w-8 h-8 text-emerald-600" />
+            <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Field Operations Management</h1>
           </div>
-          <p style={{ color: isDark ? '#94a3b8' : '#64748b', margin: '0 0 0 44px', fontSize: '16px' }}>Live jobs, messages, GPS tracking, mobile workforce</p>
+          <p className="text-slate-500 dark:text-slate-400 ml-11">Live jobs, messages, GPS tracking, mobile workforce</p>
+        </motion.div>
+
+        {/* Status Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/jobs')}>
+            <Briefcase className="w-5 h-5 text-blue-600" />
+            <div><p className="text-xs text-slate-500 dark:text-slate-400">Total Jobs</p><p className="font-semibold text-slate-800 dark:text-white">{jobStats.total}</p></div>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/jobs')}>
+            <Clock className="w-5 h-5 text-amber-600" />
+            <div><p className="text-xs text-slate-500 dark:text-slate-400">In Progress</p><p className="font-semibold text-amber-600">{jobStats.inProgress}</p></div>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/jobs')}>
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            <div><p className="text-xs text-slate-500 dark:text-slate-400">Completed</p><p className="font-semibold text-emerald-600">{jobStats.completed}</p></div>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/jobs')}>
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <div><p className="text-xs text-slate-500 dark:text-slate-400">Overdue</p><p className="font-semibold text-red-600">{jobStats.overdue}</p></div>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => navigate('/fieldops/messages')}>
+            <MessageSquare className="w-5 h-5 text-purple-600" />
+            <div><p className="text-xs text-slate-500 dark:text-slate-400">Messages</p><p className="font-semibold text-purple-600">{unreadCount} Unread</p></div>
+          </div>
         </div>
 
-        {/* Stats Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
-          {[
-            { icon: Briefcase, label: 'Total Jobs', value: jobStats.total, color: '#2563eb', onClick: () => navigate('/fieldops/jobs') },
-            { icon: Clock, label: 'In Progress', value: jobStats.inProgress, color: '#d97706', onClick: () => navigate('/fieldops/jobs') },
-            { icon: CheckCircle2, label: 'Completed', value: jobStats.completed, color: '#059669', onClick: () => navigate('/fieldops/jobs') },
-            { icon: AlertTriangle, label: 'Overdue', value: jobStats.overdue, color: '#dc2626', onClick: () => navigate('/fieldops/jobs') },
-            { icon: MessageSquare, label: 'Messages', value: `${unreadCount} Unread`, color: '#7c3aed', onClick: () => navigate('/fieldops/messages') },
-          ].map((s, i) => (
-            <div key={i} onClick={s.onClick} style={{ cursor: 'pointer', background: isDark ? '#1e293b' : '#fff', borderRadius: '16px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '4px 4px 10px rgba(0,0,0,0.08)', border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}` }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: `${s.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <s.icon size={20} color={s.color} />
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: isDark ? '#94a3b8' : '#64748b', margin: 0 }}>{s.label}</p>
-                <p style={{ fontSize: '18px', fontWeight: 700, color: isDark ? '#fff' : '#1e293b', margin: 0 }}>{s.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Module Cards Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+        {/* Module Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {modules.map((mod, index) => (
-            <div 
-              key={mod.label}
+            <motion.div 
+              key={mod.label} 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: index * 0.05 }}
               onClick={() => navigate(mod.path)}
-              style={{ 
-                cursor: 'pointer', 
-                background: isDark ? '#1e293b' : '#fff', 
-                borderRadius: '20px', 
-                padding: '24px', 
-                position: 'relative',
-                boxShadow: '4px 4px 10px rgba(0,0,0,0.08)', 
-                border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-                transition: 'transform 0.2s',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              className="neu-raised rounded-2xl p-6 cursor-pointer hover:scale-[1.02] transition-all relative"
             >
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: mod.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                <mod.icon size={24} color={mod.color} />
+              <div className={`w-12 h-12 rounded-xl ${mod.bg} flex items-center justify-center mb-4`}>
+                <mod.icon className={`w-6 h-6 ${mod.color}`} />
               </div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, color: isDark ? '#fff' : '#1e293b', margin: '0 0 4px 0' }}>{mod.label}</h3>
-              <p style={{ fontSize: '14px', color: isDark ? '#94a3b8' : '#64748b', margin: 0 }}>{mod.desc}</p>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white">{mod.label}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{mod.description}</p>
               {mod.badge && (
-                <span style={{ position: 'absolute', top: '16px', right: '16px', minWidth: '24px', height: '24px', background: '#ef4444', color: '#fff', fontSize: '12px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>
+                <span className="absolute top-4 right-4 min-w-[24px] h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1.5">
                   {mod.badge}
                 </span>
               )}
-            </div>
+            </motion.div>
           ))}
         </div>
       </main>
