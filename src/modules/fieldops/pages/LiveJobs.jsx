@@ -1,175 +1,235 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
+import useFieldOpsStore from '../store/fieldOpsStore'
 import useThemeStore from '../../../store/themeStore'
-import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  Briefcase, Search, RefreshCw, MapPin, 
-  ChevronRight, Sparkles, Sun, Moon, 
-  Play, CheckCircle2, Eye, Calendar
+  Radio, Search, Users, UserPlus, UserX, MapPin, 
+  Clock, Play, CheckCircle2, XCircle, ChevronRight,
+  Sun, Moon, Sparkles, Filter, Briefcase
 } from 'lucide-react'
 
 export default function LiveJobs() {
+  const { liveJobs, fetchLiveJobs, assignEmployee, releaseEmployee, updateJobStatus, loading } = useFieldOpsStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  
-  const [jobs, setJobs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [refreshing, setRefreshing] = useState(false)
+  const [search, setSearch] = useState('')
   const [selectedJob, setSelectedJob] = useState(null)
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [availableEmployees, setAvailableEmployees] = useState([])
+  const [selectedEmployee, setSelectedEmployee] = useState('')
 
   useEffect(() => {
-    loadJobs()
+    fetchLiveJobs()
+    fetchAvailableEmployees()
   }, [])
 
-  const loadJobs = async () => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.from('jobs').select('*').limit(100)
-      if (error) {
-        console.error('Jobs error:', error.message)
-        setJobs([])
+  const fetchAvailableEmployees = async () => {
+    const { supabase } = await import('../../../lib/supabaseClient')
+    const { data } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('employment_status', 'active')
+      .order('first_name')
+    setAvailableEmployees(data || [])
+  }
+
+  const filteredJobs = liveJobs.filter(job => {
+    if (!search) return true
+    return job.job_number?.toLowerCase().includes(search.toLowerCase()) ||
+           job.title?.toLowerCase().includes(search.toLowerCase()) ||
+           job.clients?.company_name?.toLowerCase().includes(search.toLowerCase())
+  })
+
+  const handleAssign = async () => {
+    if (!selectedJob || !selectedEmployee) return
+    const result = await assignEmployee(selectedJob.id, selectedEmployee)
+    if (result.success) {
+      toast.success('Employee assigned!')
+      setShowAssignModal(false)
+      setSelectedEmployee('')
+    } else {
+      toast.error(result.error || 'Failed to assign')
+    }
+  }
+
+  const handleRelease = async (assignmentId, employeeName) => {
+    if (window.confirm(`Release ${employeeName} from this job?`)) {
+      const result = await releaseEmployee(assignmentId, 'Manually released')
+      if (result.success) {
+        toast.success('Employee released')
       } else {
-        setJobs(data || [])
+        toast.error('Failed to release')
       }
-    } catch (e) {
-      console.error('Jobs exception:', e)
-      setJobs([])
     }
-    setLoading(false)
   }
 
-  const refreshJobs = async () => {
-    setRefreshing(true)
-    await loadJobs()
-    setRefreshing(false)
-    toast.success('Refreshed')
+  const handleStartJob = async (jobId) => {
+    const result = await updateJobStatus(jobId, 'in_progress')
+    if (result.success) toast.success('Job started!')
   }
 
-  const updateJobStatus = async (jobId, newStatus) => {
-    const { error } = await supabase.from('jobs').update({ 
-      status: newStatus, updated_at: new Date().toISOString() 
-    }).eq('id', jobId)
-    if (error) toast.error('Failed to update')
-    else { toast.success(`Job ${newStatus.replace('_', ' ')}`); loadJobs() }
-  }
-
-  const filteredJobs = useMemo(() => {
-    let result = jobs
-    if (searchTerm) {
-      const t = searchTerm.toLowerCase()
-      result = result.filter(j => 
-        (j.title || '').toLowerCase().includes(t) ||
-        (j.job_number || '').toLowerCase().includes(t) ||
-        (j.site_address || '').toLowerCase().includes(t)
-      )
+  const handleCompleteJob = async (jobId) => {
+    if (window.confirm('Mark this job as completed?')) {
+      const result = await updateJobStatus(jobId, 'completed')
+      if (result.success) toast.success('Job completed!')
     }
-    if (statusFilter !== 'all') {
-      result = result.filter(j => j.status === statusFilter)
-    }
-    return result
-  }, [jobs, searchTerm, statusFilter])
-
-  const stats = useMemo(() => ({
-    total: jobs.length,
-    inProgress: jobs.filter(j => j.status === 'in_progress').length,
-    pending: jobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length,
-    completed: jobs.filter(j => j.status === 'completed').length,
-  }), [jobs])
-
-  const getStatusBadge = (s) => {
-    const b = { pending: 'bg-gray-100 text-gray-700', scheduled: 'bg-blue-100 text-blue-700', in_progress: 'bg-amber-100 text-amber-700', completed: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-red-100 text-red-700', on_hold: 'bg-purple-100 text-purple-700' }
-    return b[s] || 'bg-gray-100 text-gray-700'
   }
 
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : 'N/A'
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-slate-100 text-slate-700',
+      scheduled: 'bg-blue-100 text-blue-700',
+      assigned: 'bg-purple-100 text-purple-700',
+      in_progress: 'bg-amber-100 text-amber-700',
+      completed: 'bg-emerald-100 text-emerald-700',
+    }
+    return colors[status] || 'bg-slate-100 text-slate-700'
+  }
+
+  const getPriorityColor = (priority) => {
+    const colors = {
+      low: 'bg-slate-100 text-slate-600',
+      medium: 'bg-blue-100 text-blue-600',
+      high: 'bg-amber-100 text-amber-600',
+      urgent: 'bg-red-100 text-red-600',
+      emergency: 'bg-red-200 text-red-700 animate-pulse',
+    }
+    return colors[priority] || ''
+  }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <button onClick={refreshJobs} disabled={refreshing} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
-          <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold hidden sm:inline">Field Ops</span>
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
         </div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110">
           {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
         </button>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
         <div className="flex items-center gap-2 mb-6 text-sm">
-          <Link to="/fieldops" className="text-slate-500 hover:text-emerald-600">Field Operations</Link>
-          <ChevronRight className="w-4 h-4 text-slate-400" /><span className="font-medium">Live Jobs</span>
+          <Link to="/fieldops" className="text-slate-500 hover:text-emerald-600">Field Ops</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <span className="text-slate-800 dark:text-white font-medium">Live Jobs</span>
         </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold flex items-center gap-3"><Briefcase className="w-8 h-8 text-emerald-600" />Live Jobs</h1>
-          <button onClick={refreshJobs} disabled={refreshing} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm hover:bg-emerald-700">
-            <RefreshCw className={`w-4 h-4 inline mr-1 ${refreshing ? 'animate-spin' : ''}`} />Refresh
-          </button>
-        </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3 mb-2">
+            <Radio className="w-8 h-8 text-emerald-600" />Live Jobs
+          </h1>
+          <p className="text-slate-500 mb-8">{filteredJobs.length} active jobs - No completed jobs shown</p>
+        </motion.div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[{l:'Total',v:stats.total,c:'text-blue-600',bg:'bg-blue-100'},{l:'In Progress',v:stats.inProgress,c:'text-amber-600',bg:'bg-amber-100'},{l:'Pending',v:stats.pending,c:'text-purple-600',bg:'bg-purple-100'},{l:'Completed',v:stats.completed,c:'text-emerald-600',bg:'bg-emerald-100'}].map((s,i)=>(
-            <div key={i} className="neu-raised rounded-xl p-3 flex items-center gap-3 cursor-pointer" onClick={() => setStatusFilter(s.l === 'In Progress' ? 'in_progress' : s.l === 'Pending' ? 'pending' : s.l === 'Completed' ? 'completed' : 'all')}>
-              <div className={`w-10 h-10 rounded-lg ${s.bg} dark:bg-opacity-30 flex items-center justify-center`}><span className={`text-lg font-bold ${s.c}`}>{s.v}</span></div>
-              <p className="text-xs text-slate-500">{s.l}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div className="neu-raised rounded-2xl p-4 mb-6 flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search jobs..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
+        {/* Search */}
+        <div className="neu-raised rounded-2xl p-4 mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by job number, title, or client..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
           </div>
-          <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-sm">
-            <option value="all">All</option><option value="in_progress">In Progress</option><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option>
-          </select>
         </div>
 
-        {/* Jobs List */}
-        {loading ? <div className="flex justify-center py-20"><RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" /></div>
-        : filteredJobs.length > 0 ? (
-          <div className="space-y-3">
-            {filteredJobs.map(job=>(
-              <motion.div key={job.id} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}}
-                className={`neu-raised rounded-2xl p-5 cursor-pointer ${job.status==='in_progress'?'border-l-4 border-l-amber-500':''}`}
-                onClick={()=>setSelectedJob(selectedJob?.id===job.id?null:job)}>
-                <div className="flex items-start justify-between mb-2">
+        {/* Live Jobs List */}
+        {loading ? (
+          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {filteredJobs.map(job => (
+              <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6">
+                {/* Job Header */}
+                <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold">{job.title||'Untitled'}</h3>
-                    <p className="text-sm text-slate-500">{job.job_number||'No #'} • {formatDate(job.scheduled_date)} {job.site_address&&`• ${job.site_address}`}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800 dark:text-white">{job.job_number}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>{job.status?.replace('_', ' ')}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${getPriorityColor(job.priority)}`}>{job.priority}</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white mt-1">{job.title}</h3>
+                    <p className="text-sm text-slate-500">{job.clients?.company_name}</p>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(job.status)}`}>{job.status?.replace('_',' ')}</span>
+                  <div className="flex gap-1">
+                    {job.status === 'scheduled' && (
+                      <button onClick={() => handleStartJob(job.id)} className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200" title="Start Job"><Play className="w-4 h-4" /></button>
+                    )}
+                    {job.status === 'in_progress' && (
+                      <button onClick={() => handleCompleteJob(job.id)} className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200" title="Complete Job"><CheckCircle2 className="w-4 h-4" /></button>
+                    )}
+                    <button onClick={() => { setSelectedJob(job); setShowAssignModal(true) }} className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200" title="Assign Staff"><UserPlus className="w-4 h-4" /></button>
+                  </div>
                 </div>
-                <div className="flex gap-2 mt-3 pt-3 border-t">
-                  {(job.status==='scheduled'||job.status==='pending')&&
-                    <button onClick={e=>{e.stopPropagation();updateJobStatus(job.id,'in_progress')}} className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs"><Play className="w-3 h-3 inline mr-1"/>Start</button>}
-                  {job.status==='in_progress'&&
-                    <button onClick={e=>{e.stopPropagation();updateJobStatus(job.id,'completed')}} className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs"><CheckCircle2 className="w-3 h-3 inline mr-1"/>Complete</button>}
-                  <button onClick={e=>{e.stopPropagation();navigate(`/operations/jobs/${job.id}`)}} className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs"><Eye className="w-3 h-3 inline mr-1"/>View</button>
+
+                {/* Job Info */}
+                <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                  <div className="flex items-center gap-1 text-slate-500"><MapPin className="w-3.5 h-3.5" />{job.site_city || 'N/A'}</div>
+                  <div className="flex items-center gap-1 text-slate-500"><Clock className="w-3.5 h-3.5" />{job.scheduled_start_time?.slice(0,5) || 'N/A'}</div>
+                  <div className="flex items-center gap-1 text-slate-500"><Briefcase className="w-3.5 h-3.5" />{job.cleaners_required || 1} cleaners</div>
+                  <div className="flex items-center gap-1 text-slate-500"><Users className="w-3.5 h-3.5" />{job.field_job_assignments?.length || 0} assigned</div>
+                </div>
+
+                {/* Assigned Staff */}
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                  <h4 className="text-sm font-semibold text-slate-500 mb-2">Assigned Staff:</h4>
+                  {job.field_job_assignments?.length > 0 ? (
+                    <div className="space-y-2">
+                      {job.field_job_assignments
+                        .filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
+                        .map(assignment => (
+                          <div key={assignment.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+                            <div>
+                              <p className="text-sm font-medium text-slate-800 dark:text-white">
+                                {assignment.employees?.first_name} {assignment.employees?.last_name}
+                              </p>
+                              <p className="text-xs text-slate-500">{assignment.employees?.employee_code} · {assignment.assignment_status}</p>
+                            </div>
+                            <button onClick={() => handleRelease(assignment.id, `${assignment.employees?.first_name} ${assignment.employees?.last_name}`)} className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Release">
+                              <UserX className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 italic">No staff assigned yet</p>
+                  )}
                 </div>
               </motion.div>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-20 neu-raised rounded-3xl">
-            <Briefcase className="w-20 h-20 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 text-lg">No jobs found</p>
-            <button onClick={refreshJobs} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm">Refresh</button>
+        )}
+
+        {!loading && filteredJobs.length === 0 && (
+          <div className="text-center py-12 neu-raised rounded-3xl">
+            <Radio className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500 text-lg">No live jobs found</p>
           </div>
         )}
       </main>
+
+      {/* Assign Modal */}
+      <AnimatePresence>
+        {showAssignModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignModal(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Assign Staff to {selectedJob?.job_number}</h3>
+              <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-slate-700 dark:text-slate-300">
+                <option value="">Select Employee</option>
+                {availableEmployees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code})</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAssignModal(false)} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-slate-600 text-white">Cancel</button>
+                <button onClick={handleAssign} disabled={!selectedEmployee} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50">Assign</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
