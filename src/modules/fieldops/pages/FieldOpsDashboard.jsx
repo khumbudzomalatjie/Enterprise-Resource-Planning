@@ -14,30 +14,24 @@ import {
 } from 'lucide-react'
 
 export default function FieldOpsDashboard() {
-  const { unreadCount, fetchNotifications, fetchConversations } = useMessagesStore()
-  const { user, profile } = useAuthStore()
+  const { unreadCount, fetchNotifications } = useMessagesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
 
   const [jobStats, setJobStats] = useState({
-    total: 0,
-    inProgress: 0,
-    pending: 0,
-    completed: 0,
-    overdue: 0
+    total: 0, inProgress: 0, pending: 0, completed: 0, overdue: 0
   })
 
   useEffect(() => {
     fetchNotifications()
-    fetchConversations()
     loadJobStats()
+    // NOTE: NOT calling fetchConversations() to avoid 400 error
   }, [])
 
   const loadJobStats = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
       const { data: jobs } = await supabase.from('jobs').select('id, status, scheduled_date')
-
       if (jobs) {
         setJobStats({
           total: jobs.length,
@@ -45,10 +39,8 @@ export default function FieldOpsDashboard() {
           pending: jobs.filter(j => j.status === 'pending' || j.status === 'scheduled').length,
           completed: jobs.filter(j => j.status === 'completed').length,
           overdue: jobs.filter(j => 
-            j.status !== 'completed' && 
-            j.status !== 'cancelled' && 
-            j.scheduled_date && 
-            j.scheduled_date < today
+            j.status !== 'completed' && j.status !== 'cancelled' && 
+            j.scheduled_date && j.scheduled_date < today
           ).length,
         })
       }
@@ -146,61 +138,41 @@ export default function FieldOpsDashboard() {
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/jobs')}>
             <Briefcase className="w-5 h-5 text-blue-600" />
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Total Jobs</p>
-              <p className="font-semibold text-slate-800 dark:text-white">{jobStats.total}</p>
-            </div>
+            <div><p className="text-xs text-slate-500">Total Jobs</p><p className="font-semibold">{jobStats.total}</p></div>
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/jobs')}>
             <Clock className="w-5 h-5 text-amber-600" />
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">In Progress</p>
-              <p className="font-semibold text-amber-600">{jobStats.inProgress}</p>
-            </div>
+            <div><p className="text-xs text-slate-500">In Progress</p><p className="font-semibold text-amber-600">{jobStats.inProgress}</p></div>
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/jobs')}>
             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Completed</p>
-              <p className="font-semibold text-emerald-600">{jobStats.completed}</p>
-            </div>
+            <div><p className="text-xs text-slate-500">Completed</p><p className="font-semibold text-emerald-600">{jobStats.completed}</p></div>
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/jobs')}>
             <AlertTriangle className="w-5 h-5 text-red-600" />
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Overdue</p>
-              <p className="font-semibold text-red-600">{jobStats.overdue}</p>
-            </div>
+            <div><p className="text-xs text-slate-500">Overdue</p><p className="font-semibold text-red-600">{jobStats.overdue}</p></div>
           </div>
           <div className="neu-raised rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             onClick={() => navigate('/fieldops/messages')}>
             <MessageSquare className="w-5 h-5 text-purple-600" />
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Messages</p>
-              <p className="font-semibold text-purple-600">{unreadCount} Unread</p>
-            </div>
+            <div><p className="text-xs text-slate-500">Messages</p><p className="font-semibold text-purple-600">{unreadCount} Unread</p></div>
           </div>
         </div>
 
         {/* Module Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {modules.map((mod, index) => (
-            <motion.div 
-              key={mod.label} 
-              initial={{ opacity: 0, y: 20 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              transition={{ delay: index * 0.05 }}
+            <motion.div key={mod.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
               onClick={() => navigate(mod.path)}
-              className="neu-raised rounded-2xl p-6 cursor-pointer hover:scale-[1.02] transition-all relative"
-            >
+              className="neu-raised rounded-2xl p-6 cursor-pointer hover:scale-[1.02] transition-all relative">
               <div className={`w-12 h-12 rounded-xl ${mod.bg} flex items-center justify-center mb-4`}>
                 <mod.icon className={`w-6 h-6 ${mod.color}`} />
               </div>
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white">{mod.label}</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{mod.description}</p>
+              <h3 className="font-bold text-lg">{mod.label}</h3>
+              <p className="text-sm text-slate-500 mt-1">{mod.description}</p>
               {mod.badge && (
                 <span className="absolute top-4 right-4 min-w-[24px] h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1.5">
                   {mod.badge}
