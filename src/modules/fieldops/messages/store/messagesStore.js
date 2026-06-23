@@ -12,14 +12,20 @@ const useMessagesStore = create((set, get) => ({
 
   fetchConversations: async () => {
     set({ loading: true })
-    const { data, error } = await messagesApi.getConversations()
-    if (error) { 
-      console.error('fetchConversations error:', error)
-      set({ error: error.message, loading: false }); 
-      return { success: false } 
+    try {
+      const { data, error } = await messagesApi.getConversations()
+      if (error) {
+        console.error('fetchConversations error:', error)
+        set({ error: error.message, loading: false })
+        return { success: false }
+      }
+      set({ conversations: data || [], loading: false })
+      return { success: true, data }
+    } catch (e) {
+      console.error('fetchConversations exception:', e)
+      set({ loading: false })
+      return { success: false }
     }
-    set({ conversations: data || [], loading: false })
-    return { success: true, data }
   },
 
   selectConversation: async (id) => {
@@ -32,29 +38,42 @@ const useMessagesStore = create((set, get) => ({
       return { success: true }
     }
     
-    const { data, error } = await messagesApi.getMessages(id)
-    if (error) { 
-      set({ error: error.message, loading: false }); 
-      return { success: false } 
+    try {
+      const { data, error } = await messagesApi.getMessages(id)
+      if (error) {
+        set({ error: error.message, loading: false })
+        return { success: false }
+      }
+      set({ messages: data || [], loading: false })
+      return { success: true, data }
+    } catch (e) {
+      set({ loading: false })
+      return { success: false }
     }
-    set({ messages: data || [], loading: false })
-    return { success: true, data }
   },
 
   getOrCreateDirectConversation: async (otherUserId) => {
-    const result = await messagesApi.getOrCreateDirectConversation(otherUserId)
-    if (result.error) return { success: false, error: result.error }
-    const exists = get().conversations.find(c => c.id === result.data.id)
-    if (!exists) set(state => ({ conversations: [result.data, ...state.conversations] }))
-    await get().selectConversation(result.data.id)
-    return { success: true, data: result.data }
+    try {
+      const result = await messagesApi.getOrCreateDirectConversation(otherUserId)
+      if (result.error) return { success: false, error: result.error }
+      const exists = get().conversations.find(c => c.id === result.data.id)
+      if (!exists) set(state => ({ conversations: [result.data, ...state.conversations] }))
+      await get().selectConversation(result.data.id)
+      return { success: true, data: result.data }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
   },
 
   sendMessage: async (messageData) => {
-    const { data, error } = await messagesApi.sendMessage(messageData)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ messages: [...state.messages, data] }))
-    return { success: true, data }
+    try {
+      const { data, error } = await messagesApi.sendMessage(messageData)
+      if (error) return { success: false, error: error.message }
+      set(state => ({ messages: [...state.messages, data] }))
+      return { success: true, data }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
   },
 
   deleteMessage: async (id) => {
@@ -74,12 +93,14 @@ const useMessagesStore = create((set, get) => ({
   },
 
   fetchNotifications: async () => {
-    const { data } = await messagesApi.getNotifications()
-    set({ notifications: data || [] })
     try {
+      const { data } = await messagesApi.getNotifications()
+      set({ notifications: data || [] })
       const count = await messagesApi.getUnreadCount()
       set({ unreadCount: count || 0 })
-    } catch { set({ unreadCount: 0 }) }
+    } catch (e) {
+      set({ notifications: [], unreadCount: 0 })
+    }
   },
 
   markNotificationRead: async (id) => {
