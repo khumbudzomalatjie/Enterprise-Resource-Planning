@@ -2,24 +2,28 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export const fieldOpsApi = {
   // ============================================
-  // LIVE JOBS
+  // LIVE JOBS - All Open Jobs (No Completed/Cancelled)
   // ============================================
   async getLiveJobs() {
     const { data, error } = await supabase
       .from('jobs')
       .select(`
         *,
-        clients(company_name, client_code, phone, city),
+        clients(company_name, client_code, phone, city, address_line1),
         job_categories(name, color),
         teams(team_name),
         field_job_assignments(
           *,
-          employees(first_name, last_name, employee_code, phone)
-        )
+          employees(first_name, last_name, employee_code, phone, department, position)
+        ),
+        quality_inspections(id, overall_rating, inspection_date),
+        job_checklist_items(id, description, is_completed)
       `)
-      .in('status', ['pending', 'scheduled', 'in_progress', 'assigned'])
-      .order('priority', { ascending: true })
+      .not('status', 'eq', 'completed')
+      .not('status', 'eq', 'cancelled')
+      .order('priority', { ascending: false })
       .order('scheduled_date', { ascending: true })
+      .order('scheduled_start_time', { ascending: true })
     
     return { data, error }
   },
@@ -35,34 +39,31 @@ export const fieldOpsApi = {
   },
 
   async assignEmployeeToJob(jobId, employeeId, teamId = null) {
+    const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('field_job_assignments')
       .upsert([{
         job_id: jobId,
         employee_id: employeeId,
         team_id: teamId,
-        assigned_by: (await supabase.auth.getUser()).data.user?.id,
+        assigned_by: userData.user?.id,
         assignment_status: 'assigned',
         assigned_at: new Date().toISOString()
       }], { onConflict: 'job_id,employee_id' })
       .select('*, employees(first_name, last_name)')
       .single()
     
-    if (!error) {
-      // Update job cleaners_assigned count
-      await supabase.rpc('increment_job_cleaners', { p_job_id: jobId })
-    }
-    
     return { data, error }
   },
 
   async releaseEmployeeFromJob(assignmentId, reason = '') {
+    const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('field_job_assignments')
       .update({
         assignment_status: 'released',
         released_at: new Date().toISOString(),
-        released_by: (await supabase.auth.getUser()).data.user?.id,
+        released_by: userData.user?.id,
         release_reason: reason
       })
       .eq('id', assignmentId)
@@ -73,12 +74,12 @@ export const fieldOpsApi = {
   },
 
   async bulkAssignEmployees(jobId, employeeIds, teamId = null) {
-    const userId = (await supabase.auth.getUser()).data.user?.id
+    const { data: userData } = await supabase.auth.getUser()
     const assignments = employeeIds.map(empId => ({
       job_id: jobId,
       employee_id: empId,
       team_id: teamId,
-      assigned_by: userId,
+      assigned_by: userData.user?.id,
       assignment_status: 'assigned',
       assigned_at: new Date().toISOString()
     }))
@@ -104,6 +105,46 @@ export const fieldOpsApi = {
       .single()
     
     return { data, error }
+  },
+
+  // ============================================
+  // LIVE JOBS BY EMPLOYEE (Mobile Sync)
+  // ============================================
+  async getLiveJobsByEmployee(employeeId) {
+    const { data, error } = await supabase
+      .from('field_job_assignments')
+      .select(`
+        *,
+        jobs(
+          *, 
+          clients(company_name, client_code, phone, city), 
+          job_categories(name, color)
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+      .order('assigned_at', { ascending: false })
+    
+    const activeJobs = data?.filter(a => 
+      a.jobs && 
+      a.jobs.status !== 'completed' && 
+      a.jobs.status !== 'cancelled'
+    ) || []
+    
+    return { data: activeJobs, error }
+  },
+
+  async getMobileSyncData(employeeId) {
+    const [jobsResult, assignedResult] = await Promise.all([
+      this.getLiveJobs(),
+      this.getLiveJobsByEmployee(employeeId)
+    ])
+    
+    return {
+      allLiveJobs: jobsResult.data || [],
+      myAssignedJobs: assignedResult.data || [],
+      timestamp: new Date().toISOString()
+    }
   },
 
   // ============================================
@@ -161,6 +202,7 @@ export const fieldOpsApi = {
   },
 
   async resolveIncident(id, resolution) {
+    const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('incidents')
       .update({
@@ -169,7 +211,7 @@ export const fieldOpsApi = {
         root_cause: resolution.root_cause,
         corrective_actions: resolution.corrective_actions,
         preventive_actions: resolution.preventive_actions,
-        resolved_by: (await supabase.auth.getUser()).data.user?.id,
+        resolved_by: userData.user?.id,
         resolved_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -179,69 +221,97 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // JOB TRACKER / AUDIT
+  // ENHANCED JOB TRACKER - COMPLETE AUDIT
   // ============================================
   async getJobAuditTrail(jobNumber) {
-    // First find the job by number
     const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('*')
-      .eq('job_number', jobNumber)
+      .select(`
+        *,
+        clients(company_name, client_code, phone, email, city),
+        job_categories(name, color),
+        teams(team_name),
+        quotations(quotation_number, total_amount, status),
+        invoices(invoice_number, total_amount, status, amount_paid)
+      `)
+      .eq('job_number', jobNumber.toUpperCase())
       .single()
     
     if (jobError || !job) {
-      return { error: 'Job not found' }
+      return { error: `Job ${jobNumber} not found. Please check the job number.` }
     }
 
-    // Get all audit logs
-    const { data: auditLogs, error: auditError } = await supabase
-      .from('job_audit_log')
+    const { data: auditLogs } = await supabase
+      .from('job_full_audit')
       .select('*')
       .eq('job_id', job.id)
       .order('created_at', { ascending: true })
 
-    // Get status history
     const { data: statusHistory } = await supabase
       .from('job_status_history')
       .select('*')
       .eq('job_id', job.id)
       .order('changed_at', { ascending: true })
 
-    // Get assignments
     const { data: assignments } = await supabase
       .from('field_job_assignments')
-      .select('*, employees(first_name, last_name, employee_code)')
+      .select('*, employees(first_name, last_name, employee_code, phone, department, position)')
       .eq('job_id', job.id)
+      .order('assigned_at', { ascending: true })
 
-    // Get client info
-    const { data: client } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', job.client_id)
-      .single()
-
-    // Get quality inspections
     const { data: inspections } = await supabase
       .from('quality_inspections')
       .select('*')
       .eq('job_id', job.id)
+      .order('inspection_date', { ascending: true })
 
-    // Get related invoice/quotations if any
-    const { data: quotation } = await supabase
-      .from('quotations')
+    const { data: incidents } = await supabase
+      .from('incidents')
       .select('*')
-      .eq('id', job.quotation_id)
-      .maybeSingle()
+      .eq('job_id', job.id)
+      .order('created_at', { ascending: true })
+
+    const { data: checklists } = await supabase
+      .from('job_checklist_items')
+      .select('*')
+      .eq('job_id', job.id)
+      .order('item_number', { ascending: true })
+
+    const { data: supplies } = await supabase
+      .from('job_supplies_used')
+      .select('*, equipment_supplies(name)')
+      .eq('job_id', job.id)
+
+    const { data: routeStops } = await supabase
+      .from('route_stops')
+      .select('*, routes(route_name, route_date, teams(team_name))')
+      .eq('job_id', job.id)
+
+    let creator = null
+    if (job.created_by) {
+      const { data: creatorData } = await supabase
+        .from('profiles')
+        .select('full_name, email, role')
+        .eq('id', job.created_by)
+        .single()
+      creator = creatorData
+    }
 
     return {
       data: {
         job,
-        client,
+        creator,
         auditLogs: auditLogs || [],
         statusHistory: statusHistory || [],
         assignments: assignments || [],
         inspections: inspections || [],
-        quotation: quotation || null
+        incidents: incidents || [],
+        checklists: checklists || [],
+        supplies: supplies || [],
+        routeStops: routeStops || [],
+        client: job.clients || null,
+        quotation: job.quotations || null,
+        invoice: job.invoices || null
       }
     }
   },
@@ -259,8 +329,6 @@ export const fieldOpsApi = {
   // DASHBOARD STATS
   // ============================================
   async getFieldOpsStats() {
-    const today = new Date().toISOString().split('T')[0]
-    
     const [
       { count: activeJobs },
       { count: assignedEmployees },
@@ -269,12 +337,12 @@ export const fieldOpsApi = {
       { data: recentIncidents },
       { data: liveJobs }
     ] = await Promise.all([
-      supabase.from('jobs').select('*', { count: 'exact', head: true }).in('status', ['in_progress', 'assigned']),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled'),
       supabase.from('field_job_assignments').select('*', { count: 'exact', head: true }).in('assignment_status', ['assigned', 'accepted', 'in_progress']),
       supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'under_investigation']),
       supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('severity', 'critical').in('status', ['reported', 'under_investigation']),
       supabase.from('incidents').select('*, employees(first_name, last_name)').order('created_at', { ascending: false }).limit(5),
-      supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('status', ['in_progress', 'assigned']).order('scheduled_date', { ascending: true }).limit(10)
+      supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').not('status', 'eq', 'completed').not('status', 'eq', 'cancelled').order('scheduled_date', { ascending: true }).limit(10)
     ])
 
     return {
