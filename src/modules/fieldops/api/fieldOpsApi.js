@@ -221,10 +221,33 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // ENHANCED JOB TRACKER - COMPLETE AUDIT
+  // ENHANCED JOB TRACKER - FLEXIBLE SEARCH
+  // Searches by job number, title, OR client name
   // ============================================
+  async getJobByNumber(jobNumber) {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*, clients(*), job_categories(*)')
+      .eq('job_number', jobNumber.toUpperCase())
+      .single()
+    return { data, error }
+  },
+
+  async getJobSuggestions(searchTerm) {
+    const term = searchTerm.trim().toUpperCase()
+    const { data } = await supabase
+      .from('jobs')
+      .select('job_number, title, clients(company_name)')
+      .or(`job_number.ilike.%${term}%,title.ilike.%${term}%,clients.company_name.ilike.%${term}%`)
+      .limit(5)
+    return { data: data || [], error: null }
+  },
+
   async getJobAuditTrail(jobNumber) {
-    const { data: job, error: jobError } = await supabase
+    const searchTerm = jobNumber.trim().toUpperCase()
+    
+    // Step 1: Try exact job number match
+    let { data: job, error: jobError } = await supabase
       .from('jobs')
       .select(`
         *,
@@ -234,58 +257,101 @@ export const fieldOpsApi = {
         quotations(quotation_number, total_amount, status),
         invoices(invoice_number, total_amount, status, amount_paid)
       `)
-      .eq('job_number', jobNumber.toUpperCase())
+      .eq('job_number', searchTerm)
       .single()
     
+    // Step 2: If not found by exact number, try partial match
     if (jobError || !job) {
-      return { error: `Job ${jobNumber} not found. Please check the job number.` }
+      const { data: partialMatches } = await supabase
+        .from('jobs')
+        .select('job_number')
+        .ilike('job_number', `%${searchTerm}%`)
+        .limit(1)
+      
+      if (partialMatches && partialMatches.length > 0) {
+        const { data: matchedJob } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            clients(company_name, client_code, phone, email, city),
+            job_categories(name, color),
+            teams(team_name),
+            quotations(quotation_number, total_amount, status),
+            invoices(invoice_number, total_amount, status, amount_paid)
+          `)
+          .eq('job_number', partialMatches[0].job_number)
+          .single()
+        
+        if (matchedJob) {
+          job = matchedJob
+          jobError = null
+        }
+      }
+    }
+    
+    // Step 3: If still not found, search by title or client name
+    if (jobError || !job) {
+      const { data: searchResults } = await supabase
+        .from('jobs')
+        .select('job_number')
+        .or(`title.ilike.%${searchTerm}%,clients.company_name.ilike.%${searchTerm}%`)
+        .limit(1)
+      
+      if (searchResults && searchResults.length > 0) {
+        const { data: matchedJob } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            clients(company_name, client_code, phone, email, city),
+            job_categories(name, color),
+            teams(team_name),
+            quotations(quotation_number, total_amount, status),
+            invoices(invoice_number, total_amount, status, amount_paid)
+          `)
+          .eq('job_number', searchResults[0].job_number)
+          .single()
+        
+        if (matchedJob) {
+          job = matchedJob
+          jobError = null
+        }
+      }
+    }
+    
+    // Step 4: If nothing found, return error with suggestions
+    if (jobError || !job) {
+      const { data: suggestions } = await supabase
+        .from('jobs')
+        .select('job_number, title, clients(company_name)')
+        .or(`job_number.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%,clients.company_name.ilike.%${searchTerm}%`)
+        .limit(5)
+      
+      return { 
+        error: `No job found matching "${searchTerm}". Try searching by job title or client name, or browse the job list.`,
+        suggestions: suggestions || []
+      }
     }
 
-    const { data: auditLogs } = await supabase
-      .from('job_full_audit')
-      .select('*')
-      .eq('job_id', job.id)
-      .order('created_at', { ascending: true })
-
-    const { data: statusHistory } = await supabase
-      .from('job_status_history')
-      .select('*')
-      .eq('job_id', job.id)
-      .order('changed_at', { ascending: true })
-
-    const { data: assignments } = await supabase
-      .from('field_job_assignments')
-      .select('*, employees(first_name, last_name, employee_code, phone, department, position)')
-      .eq('job_id', job.id)
-      .order('assigned_at', { ascending: true })
-
-    const { data: inspections } = await supabase
-      .from('quality_inspections')
-      .select('*')
-      .eq('job_id', job.id)
-      .order('inspection_date', { ascending: true })
-
-    const { data: incidents } = await supabase
-      .from('incidents')
-      .select('*')
-      .eq('job_id', job.id)
-      .order('created_at', { ascending: true })
-
-    const { data: checklists } = await supabase
-      .from('job_checklist_items')
-      .select('*')
-      .eq('job_id', job.id)
-      .order('item_number', { ascending: true })
-
-    const { data: supplies } = await supabase
-      .from('job_supplies_used')
-      .select('*, equipment_supplies(name)')
-      .eq('job_id', job.id)
-
-    const { data: routeStops } = await supabase
-      .from('route_stops')
-      .select('*, routes(route_name, route_date, teams(team_name))')
-      .eq('job_id', job.id)
+    // Job found! Get all related data
+    const [
+      { data: auditLogs },
+      { data: statusHistory },
+      { data: assignments },
+      { data: inspections },
+      { data: incidents },
+      { data: checklists },
+      { data: supplies },
+      { data: routeStops }
+    ] = await Promise.all([
+      supabase.from('job_full_audit').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
+      supabase.from('job_status_history').select('*').eq('job_id', job.id).order('changed_at', { ascending: true }),
+      supabase.from('field_job_assignments').select('*, employees(first_name, last_name, employee_code, phone, department, position)').eq('job_id', job.id).order('assigned_at', { ascending: true }),
+      supabase.from('quality_inspections').select('*').eq('job_id', job.id).order('inspection_date', { ascending: true }),
+      supabase.from('incidents').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
+      supabase.from('job_checklist_items').select('*').eq('job_id', job.id).order('item_number', { ascending: true }),
+      supabase.from('job_supplies_used').select('*, equipment_supplies(name)').eq('job_id', job.id),
+      supabase.from('route_stops').select('*, routes(route_name, route_date, teams(team_name))').eq('job_id', job.id)
+    ])
 
     let creator = null
     if (job.created_by) {
@@ -314,15 +380,6 @@ export const fieldOpsApi = {
         invoice: job.invoices || null
       }
     }
-  },
-
-  async getJobByNumber(jobNumber) {
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('*, clients(*), job_categories(*)')
-      .eq('job_number', jobNumber)
-      .single()
-    return { data, error }
   },
 
   // ============================================
