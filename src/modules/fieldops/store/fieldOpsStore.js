@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { fieldOpsApi } from '../api/fieldOpsApi'
+import toast from 'react-hot-toast'
 
 const useFieldOpsStore = create((set, get) => ({
-  // State
   liveJobs: [],
   assignedEmployees: [],
   incidents: [],
@@ -32,22 +32,18 @@ const useFieldOpsStore = create((set, get) => ({
   assignEmployee: async (jobId, employeeId, teamId) => {
     set({ error: null })
     const { data, error } = await fieldOpsApi.assignEmployeeToJob(jobId, employeeId, teamId)
-    if (error) {
-      set({ error: error.message })
-      return { success: false, error: error.message }
-    }
+    if (error) { set({ error: error.message }); return { success: false, error: error.message } }
     await get().fetchLiveJobs()
+    toast.success('Employee assigned!')
     return { success: true, data }
   },
 
   releaseEmployee: async (assignmentId, reason = '') => {
     set({ error: null })
     const { data, error } = await fieldOpsApi.releaseEmployeeFromJob(assignmentId, reason)
-    if (error) {
-      set({ error: error.message })
-      return { success: false, error: error.message }
-    }
+    if (error) { set({ error: error.message }); return { success: false, error: error.message } }
     await get().fetchLiveJobs()
+    toast.success('Employee released')
     return { success: true, data }
   },
 
@@ -63,6 +59,12 @@ const useFieldOpsStore = create((set, get) => ({
     if (error) return { success: false, error: error.message }
     await get().fetchLiveJobs()
     return { success: true, data }
+  },
+
+  // Mobile Sync
+  fetchMobileSyncData: async (employeeId) => {
+    const data = await fieldOpsApi.getMobileSyncData(employeeId)
+    return data
   },
 
   // Incidents
@@ -84,11 +86,9 @@ const useFieldOpsStore = create((set, get) => ({
   createIncident: async (incidentData) => {
     set({ loading: true, error: null })
     const { data, error } = await fieldOpsApi.createIncident(incidentData)
-    if (error) {
-      set({ error: error.message, loading: false })
-      return { success: false, error: error.message }
-    }
+    if (error) { set({ error: error.message, loading: false }); return { success: false, error: error.message } }
     set(state => ({ incidents: [data, ...(state.incidents || [])], loading: false }))
+    toast.success('Incident reported!')
     return { success: true, data }
   },
 
@@ -106,12 +106,13 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // Job Tracker
+  // Enhanced Job Tracker
   fetchJobAuditTrail: async (jobNumber) => {
     set({ loading: true, error: null, jobAuditData: null })
     const result = await fieldOpsApi.getJobAuditTrail(jobNumber)
     if (result.error) {
       set({ error: result.error, loading: false })
+      toast.error(result.error)
       return { success: false, error: result.error }
     }
     set({ jobAuditData: result.data, loading: false })
