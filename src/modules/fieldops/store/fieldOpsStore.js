@@ -61,7 +61,6 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // Mobile Sync
   fetchMobileSyncData: async (employeeId) => {
     const data = await fieldOpsApi.getMobileSyncData(employeeId)
     return data
@@ -106,15 +105,17 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // Enhanced Job Tracker
-  fetchJobAuditTrail: async (jobNumber) => {
+  // Job Tracker - Simple search
+  fetchJobAuditTrail: async (searchInput) => {
     set({ loading: true, error: null, jobAuditData: null })
-    const result = await fieldOpsApi.getJobAuditTrail(jobNumber)
-    if (result.error) {
+    
+    const result = await fieldOpsApi.getJobAuditTrail(searchInput)
+    
+    if (result.notFound || result.error) {
       set({ error: result.error, loading: false })
-      toast.error(result.error)
       return { success: false, error: result.error }
     }
+    
     set({ jobAuditData: result.data, loading: false })
     return { success: true, data: result.data }
   },
