@@ -221,55 +221,56 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // ENHANCED JOB TRACKER - FLEXIBLE SEARCH
-  // Searches by job number, title, OR client name
+  // SIMPLE JOB SEARCH - Just works
   // ============================================
-  async getJobByNumber(jobNumber) {
+  async getAllJobNumbers() {
     const { data, error } = await supabase
       .from('jobs')
-      .select('*, clients(*), job_categories(*)')
-      .eq('job_number', jobNumber.toUpperCase())
-      .single()
+      .select('job_number, title, status, clients(company_name), scheduled_date')
+      .order('created_at', { ascending: false })
+      .limit(50)
     return { data, error }
   },
 
-  async getJobSuggestions(searchTerm) {
-    const term = searchTerm.trim().toUpperCase()
-    const { data } = await supabase
-      .from('jobs')
-      .select('job_number, title, clients(company_name)')
-      .or(`job_number.ilike.%${term}%,title.ilike.%${term}%,clients.company_name.ilike.%${term}%`)
-      .limit(5)
-    return { data: data || [], error: null }
-  },
+  async getJobAuditTrail(searchInput) {
+    // Clean the input
+    const search = searchInput.trim()
+    let job = null
 
-  async getJobAuditTrail(jobNumber) {
-    const searchTerm = jobNumber.trim().toUpperCase()
-    
-    // Step 1: Try exact job number match
-    let { data: job, error: jobError } = await supabase
+    // Try 1: Exact match on job_number
+    const { data: exactMatch } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        clients(company_name, client_code, phone, email, city),
-        job_categories(name, color),
-        teams(team_name),
-        quotations(quotation_number, total_amount, status),
-        invoices(invoice_number, total_amount, status, amount_paid)
-      `)
-      .eq('job_number', searchTerm)
+      .select('id, job_number')
+      .eq('job_number', search.toUpperCase())
       .single()
     
-    // Step 2: If not found by exact number, try partial match
-    if (jobError || !job) {
-      const { data: partialMatches } = await supabase
+    if (exactMatch) {
+      const { data } = await supabase
         .from('jobs')
-        .select('job_number')
-        .ilike('job_number', `%${searchTerm}%`)
+        .select(`
+          *,
+          clients(company_name, client_code, phone, email, city),
+          job_categories(name, color),
+          teams(team_name),
+          quotations(quotation_number, total_amount, status),
+          invoices(invoice_number, total_amount, status, amount_paid)
+        `)
+        .eq('id', exactMatch.id)
+        .single()
+      job = data
+    }
+
+    // Try 2: Partial match on job_number (ilike)
+    if (!job) {
+      const { data: partialMatch } = await supabase
+        .from('jobs')
+        .select('id, job_number')
+        .ilike('job_number', `%${search.toUpperCase()}%`)
         .limit(1)
+        .single()
       
-      if (partialMatches && partialMatches.length > 0) {
-        const { data: matchedJob } = await supabase
+      if (partialMatch) {
+        const { data } = await supabase
           .from('jobs')
           .select(`
             *,
@@ -279,60 +280,72 @@ export const fieldOpsApi = {
             quotations(quotation_number, total_amount, status),
             invoices(invoice_number, total_amount, status, amount_paid)
           `)
-          .eq('job_number', partialMatches[0].job_number)
+          .eq('id', partialMatch.id)
           .single()
-        
-        if (matchedJob) {
-          job = matchedJob
-          jobError = null
-        }
-      }
-    }
-    
-    // Step 3: If still not found, search by title or client name
-    if (jobError || !job) {
-      const { data: searchResults } = await supabase
-        .from('jobs')
-        .select('job_number')
-        .or(`title.ilike.%${searchTerm}%,clients.company_name.ilike.%${searchTerm}%`)
-        .limit(1)
-      
-      if (searchResults && searchResults.length > 0) {
-        const { data: matchedJob } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            clients(company_name, client_code, phone, email, city),
-            job_categories(name, color),
-            teams(team_name),
-            quotations(quotation_number, total_amount, status),
-            invoices(invoice_number, total_amount, status, amount_paid)
-          `)
-          .eq('job_number', searchResults[0].job_number)
-          .single()
-        
-        if (matchedJob) {
-          job = matchedJob
-          jobError = null
-        }
-      }
-    }
-    
-    // Step 4: If nothing found, return error with suggestions
-    if (jobError || !job) {
-      const { data: suggestions } = await supabase
-        .from('jobs')
-        .select('job_number, title, clients(company_name)')
-        .or(`job_number.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%,clients.company_name.ilike.%${searchTerm}%`)
-        .limit(5)
-      
-      return { 
-        error: `No job found matching "${searchTerm}". Try searching by job title or client name, or browse the job list.`,
-        suggestions: suggestions || []
+        job = data
       }
     }
 
-    // Job found! Get all related data
+    // Try 3: Search by title
+    if (!job) {
+      const { data: titleMatch } = await supabase
+        .from('jobs')
+        .select('id, job_number, title')
+        .ilike('title', `%${search}%`)
+        .limit(1)
+        .single()
+      
+      if (titleMatch) {
+        const { data } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            clients(company_name, client_code, phone, email, city),
+            job_categories(name, color),
+            teams(team_name),
+            quotations(quotation_number, total_amount, status),
+            invoices(invoice_number, total_amount, status, amount_paid)
+          `)
+          .eq('id', titleMatch.id)
+          .single()
+        job = data
+      }
+    }
+
+    // Try 4: Search by client name
+    if (!job) {
+      const { data: clientJobs } = await supabase
+        .from('jobs')
+        .select('id, job_number, clients!inner(company_name)')
+        .ilike('clients.company_name', `%${search}%`)
+        .limit(1)
+      
+      if (clientJobs && clientJobs.length > 0) {
+        const { data } = await supabase
+          .from('jobs')
+          .select(`
+            *,
+            clients(company_name, client_code, phone, email, city),
+            job_categories(name, color),
+            teams(team_name),
+            quotations(quotation_number, total_amount, status),
+            invoices(invoice_number, total_amount, status, amount_paid)
+          `)
+          .eq('id', clientJobs[0].id)
+          .single()
+        job = data
+      }
+    }
+
+    // If no job found at all, return error
+    if (!job) {
+      return { 
+        error: `No job found for "${search}". Try a different search term or browse the job list.`,
+        notFound: true
+      }
+    }
+
+    // Job found! Now get all related audit data
     const [
       { data: auditLogs },
       { data: statusHistory },
