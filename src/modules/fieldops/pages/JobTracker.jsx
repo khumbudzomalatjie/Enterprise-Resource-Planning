@@ -5,23 +5,20 @@ import Navbar from '../../../components/Navbar'
 import useFieldOpsStore from '../store/fieldOpsStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
-import toast from 'react-hot-toast'
 import { 
   Search, FileText, Clock, User, CheckCircle2, XCircle,
   AlertTriangle, DollarSign, Sun, Moon, Sparkles, ChevronRight,
-  Users, Calendar, MapPin, Briefcase, Phone, Mail, Star,
-  ClipboardCheck, Package, Truck, Shield, History, ArrowUpDown,
-  List, RefreshCw, ExternalLink
+  Users, Calendar, MapPin, Briefcase, Phone, Mail,
+  Shield, History, List, RefreshCw
 } from 'lucide-react'
 
 export default function JobTracker() {
   const { jobAuditData, fetchJobAuditTrail, loading, clearAuditData } = useFieldOpsStore()
   const { isDark, toggleTheme } = useThemeStore()
-  const [jobNumber, setJobNumber] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [allJobs, setAllJobs] = useState([])
   const [showJobList, setShowJobList] = useState(false)
   const [searchError, setSearchError] = useState('')
-  const [suggestions, setSuggestions] = useState([])
 
   useEffect(() => {
     loadAllJobs()
@@ -33,33 +30,25 @@ export default function JobTracker() {
       .select('job_number, title, status, clients(company_name), scheduled_date')
       .order('created_at', { ascending: false })
       .limit(50)
-    
     if (data) setAllJobs(data)
   }
 
   const handleSearch = async (e) => {
     e.preventDefault()
     setSearchError('')
-    setSuggestions([])
     
-    if (!jobNumber.trim()) {
-      toast.error('Please enter a job number, title, or client name')
-      return
-    }
+    if (!searchInput.trim()) return
 
-    const result = await fetchJobAuditTrail(jobNumber.trim())
+    const result = await fetchJobAuditTrail(searchInput.trim())
     if (!result.success) {
       setSearchError(result.error || 'Job not found')
-      if (result.suggestions?.length > 0) {
-        setSuggestions(result.suggestions)
-      }
     }
   }
 
   const handleSelectJob = (jobNum) => {
-    setJobNumber(jobNum)
+    setSearchInput(jobNum)
     setShowJobList(false)
-    setSuggestions([])
+    setSearchError('')
     fetchJobAuditTrail(jobNum)
   }
 
@@ -116,14 +105,18 @@ export default function JobTracker() {
           <p className="text-slate-500">Search by job number, title, or client name</p>
         </motion.div>
 
-        {/* Search */}
+        {/* Search Bar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-6">
           <form onSubmit={handleSearch} className="flex gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" value={jobNumber} onChange={(e) => setJobNumber(e.target.value)}
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Job number, title, or client name..."
-                className="w-full pl-12 pr-4 py-4 text-lg neu-inset rounded-2xl text-slate-700 dark:text-slate-300" />
+                className="w-full pl-12 pr-4 py-4 text-lg neu-inset rounded-2xl text-slate-700 dark:text-slate-300"
+              />
             </div>
             <button type="submit" disabled={loading} className="neu-raised neu-btn px-6 py-4 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 font-semibold disabled:opacity-50">
               {loading ? '...' : 'Track'}
@@ -138,22 +131,11 @@ export default function JobTracker() {
               <p className="text-amber-700 dark:text-amber-400 text-sm flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />{searchError}
               </p>
-              {suggestions.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  <p className="text-xs text-slate-500">Did you mean:</p>
-                  {suggestions.map(s => (
-                    <button key={s.job_number} onClick={() => handleSelectJob(s.job_number)}
-                      className="block w-full text-left p-2 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-sm text-slate-700 dark:text-slate-300">
-                      <span className="font-medium">{s.job_number}</span> - {s.title} {s.clients?.company_name && `(${s.clients.company_name})`}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </motion.div>
 
-        {/* Job List */}
+        {/* Job List Dropdown */}
         {showJobList && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -163,11 +145,12 @@ export default function JobTracker() {
             {allJobs.length > 0 ? (
               <div className="max-h-72 overflow-y-auto space-y-2">
                 {allJobs.map(job => (
-                  <div key={job.job_number} onClick={() => handleSelectJob(job.job_number)}
+                  <div key={job.job_number}
+                    onClick={() => handleSelectJob(job.job_number)}
                     className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer">
                     <div>
-                      <p className="font-medium text-sm">{job.job_number}</p>
-                      <p className="text-xs text-slate-500 truncate max-w-xs">{job.title}</p>
+                      <p className="font-medium text-sm text-slate-800 dark:text-white">{job.job_number}</p>
+                      <p className="text-xs text-slate-500 truncate max-w-xs">{job.title || 'No title'}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500 hidden sm:inline">{job.clients?.company_name || ''}</span>
@@ -179,20 +162,21 @@ export default function JobTracker() {
             ) : (
               <div className="text-center py-8">
                 <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">No jobs found</p>
-                <p className="text-xs text-slate-400 mt-1">Run the SQL script to create test jobs, or create jobs in Operations</p>
-                <div className="flex gap-2 justify-center mt-3">
-                  <Link to="/operations/jobs/new" className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-                    <ExternalLink className="w-3 h-3" /> Create Job
-                  </Link>
-                </div>
+                <p className="text-slate-500">No jobs found in the system</p>
+                <p className="text-xs text-slate-400 mt-1">Create jobs in Operations module first</p>
+                <Link to="/operations/jobs/new" className="inline-block mt-3 text-sm text-emerald-600 hover:text-emerald-700">Create New Job →</Link>
               </div>
             )}
           </motion.div>
         )}
 
         {/* Loading */}
-        {loading && <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div><p className="text-slate-500">Loading audit trail...</p></div>}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-slate-500">Loading audit trail...</p>
+          </div>
+        )}
 
         {/* Results */}
         {jobAuditData && !loading && (
@@ -201,14 +185,14 @@ export default function JobTracker() {
             {/* Job Summary */}
             <div className="neu-raised rounded-3xl p-6 border-l-4 border-purple-500">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">📋 Job Summary</h2>
-                <button onClick={clearAuditData} className="text-sm text-slate-500">Clear</button>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">📋 Job Summary</h2>
+                <button onClick={clearAuditData} className="text-sm text-slate-500 hover:text-slate-700">Clear</button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div><p className="text-xs text-slate-500">Job Number</p><p className="font-bold text-lg">{jobAuditData.job.job_number}</p></div>
+                <div><p className="text-xs text-slate-500">Title</p><p className="font-medium text-sm">{jobAuditData.job.title || 'N/A'}</p></div>
                 <div><p className="text-xs text-slate-500">Status</p><span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(jobAuditData.job.status)}`}>{jobAuditData.job.status?.replace('_', ' ')}</span></div>
-                <div><p className="text-xs text-slate-500">Priority</p><p className="font-semibold capitalize">{jobAuditData.job.priority}</p></div>
-                <div><p className="text-xs text-slate-500">Value</p><p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.job.quoted_amount)}</p></div>
+                <div><p className="text-xs text-slate-500">Priority</p><p className="font-semibold capitalize">{jobAuditData.job.priority || 'N/A'}</p></div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-1 text-sm text-slate-500"><Calendar className="w-4 h-4" />{formatDate(jobAuditData.job.scheduled_date)}</div>
@@ -218,7 +202,7 @@ export default function JobTracker() {
               </div>
               {jobAuditData.creator && (
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                  <p className="text-xs">Created by: <span className="font-medium">{jobAuditData.creator.full_name} ({jobAuditData.creator.role?.replace('_', ' ')})</span></p>
+                  <p className="text-xs text-slate-500">Created by: <span className="font-medium">{jobAuditData.creator.full_name} ({jobAuditData.creator.role?.replace('_', ' ')})</span></p>
                 </div>
               )}
             </div>
@@ -272,7 +256,7 @@ export default function JobTracker() {
                   </div>
                 </div>
               ) : (
-                <p className="text-slate-500 text-center py-8">No audit logs yet. Perform actions on this job to generate logs.</p>
+                <p className="text-slate-500 text-center py-8">No audit logs yet. Actions on this job will appear here.</p>
               )}
             </div>
 
@@ -283,10 +267,7 @@ export default function JobTracker() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {jobAuditData.assignments.map(a => (
                     <div key={a.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-sm">{a.employees?.first_name} {a.employees?.last_name}</p>
-                        <p className="text-xs text-slate-500">{a.employees?.employee_code}</p>
-                      </div>
+                      <div><p className="font-medium text-sm">{a.employees?.first_name} {a.employees?.last_name}</p><p className="text-xs text-slate-500">{a.employees?.employee_code}</p></div>
                       <span className={`px-2 py-0.5 rounded-full text-xs ${a.assignment_status === 'completed' ? 'bg-emerald-100 text-emerald-700' : a.assignment_status === 'released' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{a.assignment_status}</span>
                     </div>
                   ))}
@@ -307,14 +288,12 @@ export default function JobTracker() {
           </motion.div>
         )}
 
+        {/* Empty State */}
         {!loading && !jobAuditData && !showJobList && allJobs.length === 0 && (
           <div className="text-center py-12 neu-raised rounded-3xl">
             <History className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 text-lg">No jobs in the system yet</p>
-            <p className="text-slate-400 text-sm mt-2">Run the SQL script below in Supabase to create test jobs</p>
-            <div className="mt-4 p-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-left text-xs font-mono overflow-auto max-h-40">
-              {`INSERT INTO public.jobs (job_number, title, ...) VALUES ...`}
-            </div>
+            <p className="text-slate-400 text-sm mt-2">Create jobs in the Operations module first</p>
             <Link to="/operations/jobs/new" className="mt-4 inline-block neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">Create First Job</Link>
           </div>
         )}
