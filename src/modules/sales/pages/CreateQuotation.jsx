@@ -88,7 +88,7 @@ function QuotationTemplate({ quotation, items }) {
           <div>
             <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
             <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678 | info@ndanduleni.co.za</p>
+            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 manthata street,midrand | Tel: 070 419 9457| account@ndanduleni.co.za</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
