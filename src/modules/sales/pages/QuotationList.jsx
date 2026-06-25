@@ -9,7 +9,7 @@ import {
   FileText, Search, Eye, Edit, ChevronRight,
   Sun, Moon, Sparkles, Download, MoreVertical,
   CheckCircle, XCircle, Send, Trash2, AlertTriangle,
-  Briefcase, Lock
+  Briefcase, Lock, User  // ← ADDED User icon
 } from 'lucide-react'
 
 export default function QuotationList() {
@@ -39,19 +39,15 @@ export default function QuotationList() {
     loadQuotations()
   }
 
-  // Status change handler
   const handleStatusChange = async (id, newStatus) => {
     setActionMenu(null)
-    
     if (newStatus === 'accepted') {
       setAcceptConfirm(id)
       return
     }
-
     setProcessingId(id)
     const result = await updateQuotationStatus(id, newStatus)
     setProcessingId(null)
-    
     if (result.success) {
       toast.success(`Quotation marked as ${newStatus.replace('_', ' ')}`)
       loadQuotations()
@@ -60,14 +56,11 @@ export default function QuotationList() {
     }
   }
 
-  // Accept quotation
   const handleAcceptQuotation = async () => {
     if (!acceptConfirm) return
-    
     setProcessingId(acceptConfirm)
     const result = await updateQuotationStatus(acceptConfirm, 'accepted')
     setProcessingId(null)
-    
     if (result.success) {
       toast.success('Quotation accepted! ✅')
       loadQuotations()
@@ -77,7 +70,6 @@ export default function QuotationList() {
     setAcceptConfirm(null)
   }
 
-  // Delete quotation
   const handleDelete = async (id) => {
     setDeleteConfirm(null)
     setProcessingId(id)
@@ -91,18 +83,15 @@ export default function QuotationList() {
     }
   }
 
-  // View quotation detail
   const handleView = (quote) => {
     navigate(`/sales/quotations/${quote.id}`)
   }
 
-  // Edit quotation - only if not accepted/converted
   const handleEdit = (quote) => {
     if (quote.status === 'accepted' || quote.status === 'converted') {
       toast.error('Cannot edit accepted or converted quotations')
       return
     }
-    // Navigate to edit page which opens CreateQuotation in edit mode
     navigate(`/sales/quotations/${quote.id}/edit`)
   }
 
@@ -116,11 +105,11 @@ export default function QuotationList() {
           <h3>Quotation ${quotation.quotation_number}</h3>
           <p><strong>Client:</strong> ${quotation.client_name || quotation.clients?.company_name || 'N/A'}</p>
           <p><strong>Date:</strong> ${formatDate(quotation.quotation_date)}</p>
+          <p><strong>Created By:</strong> ${quotation.created_by_name || quotation.prepared_by_name || 'Unknown'}</p>
           <p><strong>Total:</strong> ${formatCurrency(quotation.total_amount)}</p>
           <p><strong>Status:</strong> ${quotation.status}</p>
         </div>
       `
-      
       const opt = {
         margin: 10,
         filename: `Quotation_${quotation.quotation_number}.pdf`,
@@ -128,7 +117,6 @@ export default function QuotationList() {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       }
-
       await html2pdf().set(opt).from(tempDiv).save()
       toast.success('PDF downloaded')
     } catch (error) {
@@ -165,17 +153,9 @@ export default function QuotationList() {
     return badges[status] || badges.draft
   }
 
-  const canEdit = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
-
-  const canChangeStatus = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
-
-  const canDelete = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
+  const canEdit = (status) => status === 'draft' || status === 'sent'
+  const canChangeStatus = (status) => status === 'draft' || status === 'sent'
+  const canDelete = (status) => status === 'draft' || status === 'sent'
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -221,7 +201,7 @@ export default function QuotationList() {
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by quote # or client..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by quote #, client, or creator..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
               <option value="all">All Status</option>
@@ -249,6 +229,8 @@ export default function QuotationList() {
                     <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Quote #</th>
                     <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Client</th>
                     <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Date</th>
+                    {/* ADDED: Created By Column */}
+                    <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Created By</th>
                     <th className="text-right text-xs font-medium text-slate-500 py-4 px-4">Total</th>
                     <th className="text-center text-xs font-medium text-slate-500 py-4 px-4">Status</th>
                     <th className="text-right text-xs font-medium text-slate-500 py-4 px-4">Actions</th>
@@ -260,6 +242,17 @@ export default function QuotationList() {
                       <td className="py-3 px-4"><p className="font-medium text-slate-800 dark:text-white text-sm">{quote.quotation_number}</p></td>
                       <td className="py-3 px-4"><p className="text-sm text-slate-700 dark:text-slate-300">{quote.clients?.company_name || quote.client_name || 'N/A'}</p></td>
                       <td className="py-3 px-4"><p className="text-sm text-slate-600">{formatDate(quote.quotation_date)}</p></td>
+                      {/* ADDED: Created By Cell */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                            <User className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <span className="text-sm text-slate-600 dark:text-slate-400">
+                            {quote.created_by_name || quote.prepared_by_name || 'Unknown'}
+                          </span>
+                        </div>
+                      </td>
                       <td className="py-3 px-4 text-right"><p className="font-semibold text-sm text-slate-800 dark:text-white">{formatCurrency(quote.total_amount)}</p></td>
                       <td className="py-3 px-4 text-center">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(quote.status)}`}>
@@ -268,12 +261,9 @@ export default function QuotationList() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* View Button - Always available */}
                           <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Details">
                             <Eye className="w-4 h-4" />
                           </button>
-                          
-                          {/* Edit Button - Only for draft/sent (NOT accepted/converted) */}
                           {canEdit(quote.status) ? (
                             <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Quotation">
                               <Edit className="w-4 h-4" />
@@ -283,13 +273,9 @@ export default function QuotationList() {
                               <Lock className="w-4 h-4" />
                             </button>
                           )}
-                          
-                          {/* Download PDF - Always available */}
                           <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download PDF">
                             <Download className="w-4 h-4" />
                           </button>
-                          
-                          {/* Status Change Menu - Only for draft/sent */}
                           {canChangeStatus(quote.status) && (
                             <div className="relative">
                               <button onClick={() => setActionMenu(actionMenu === quote.id ? null : quote.id)} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Change Status">
@@ -313,8 +299,6 @@ export default function QuotationList() {
                               )}
                             </div>
                           )}
-                          
-                          {/* Delete Button - Only for draft/sent */}
                           {canDelete(quote.status) && (
                             <button onClick={() => setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
                               <Trash2 className="w-4 h-4" />
@@ -352,9 +336,7 @@ export default function QuotationList() {
                   </div>
                 </div>
               </div>
-              <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
-                Are you sure you want to accept this quotation?
-              </p>
+              <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">Are you sure you want to accept this quotation?</p>
               <div className="flex gap-3">
                 <button onClick={() => setAcceptConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600 hover:bg-slate-100">Cancel</button>
                 <button onClick={handleAcceptQuotation} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2">
