@@ -37,9 +37,6 @@ const SERVICES = [
   { category: 'Monthly Contract (3x Week)', name: '5 Bedroom - 3x Week', unit_price: 4782.61, unit: 'per_month' },
 ]
 
-// ═══════════════════════════════════════════════
-// COMPANY INFO - CHANGE ONCE, APPLIES EVERYWHERE
-// ═══════════════════════════════════════════════
 const COMPANY = {
   name: 'NDANDULENI GROUP',
   tagline: 'Professional Cleaning & Hygiene Services',
@@ -56,19 +53,15 @@ const COMPANY = {
 }
 
 const COLORS = {
-  main: '#1B5080',
-  dark: '#0D2D4A',
-  light: '#2B6FA8',
-  lightBg: '#e8f0f8',
-  lightBorder: '#c5d5e8',
-  tableHeader: '#1B5080',
-  totalBg: '#eaf1f8',
+  main: '#1B5080', dark: '#0D2D4A', light: '#2B6FA8',
+  lightBg: '#e8f0f8', lightBorder: '#c5d5e8',
+  tableHeader: '#1B5080', totalBg: '#eaf1f8',
 }
 
 // ═══════════════════════════════════════════════
-// A4 Quotation Template (HTML for PDF)
+// Build compact single-page A4 quotation HTML
 // ═══════════════════════════════════════════════
-function buildQuotationHTML(quotation, items) {
+function buildQuotationHTML(quotation, items, scale = 1) {
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
   const formatDate = (date) => {
@@ -91,13 +84,23 @@ function buildQuotationHTML(quotation, items) {
   const quoteDate = formatDate(quotation?.quotation_date || new Date())
   const notes = quotation?.notes || ''
 
+  // Scale factor for fonts and spacing
+  const s = scale
+  const baseFont = Math.round(10 * s)
+  const smallFont = Math.round(8 * s)
+  const tinyFont = Math.round(7 * s)
+  const headerFont = Math.round(22 * s)
+  const bigFont = Math.round(28 * s)
+  const sectionPad = Math.round(6 * s)
+  const rowPad = Math.round(4 * s)
+
   const itemsHTML = (items || []).filter(item => item.description).map((item, i) => `
     <tr>
-      <td style="padding:6px 10px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">${i + 1}</td>
-      <td style="padding:6px 10px;font-size:11px;color:#1e293b;font-weight:500;border-bottom:1px solid #e2e8f0;">${item.description}</td>
-      <td style="padding:6px 10px;font-size:11px;color:#1e293b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td>
-      <td style="padding:6px 10px;font-size:11px;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${formatCurrency(item.unit_price)}</td>
-      <td style="padding:6px 10px;font-size:11px;color:#1e293b;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;">${formatCurrency(calcLineTotal(item))}</td>
+      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#64748b;border-bottom:1px solid #e2e8f0;">${i + 1}</td>
+      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;font-weight:500;border-bottom:1px solid #e2e8f0;">${item.description}</td>
+      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td>
+      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${formatCurrency(item.unit_price)}</td>
+      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;">${formatCurrency(calcLineTotal(item))}</td>
     </tr>
   `).join('')
 
@@ -113,127 +116,163 @@ function buildQuotationHTML(quotation, items) {
   </style>
 </head>
 <body>
-<div style="width:794px;min-height:1123px;padding:35px 50px;background:white;">
+<div style="width:794px;padding:20px 35px;background:white;">
 
-  <!-- HEADER -->
-  <div style="display:flex;justify-content:space-between;border-bottom:3px solid ${COLORS.main};padding-bottom:12px;margin-bottom:15px;">
-    <div style="display:flex;align-items:center;gap:15px;">
-      <div style="width:55px;height:55px;border-radius:50%;background:${COLORS.lightBg};display:flex;align-items:center;justify-content:center;border:2px solid ${COLORS.lightBorder};overflow:hidden;">
-        <img src="/logo.png" alt="Logo" style="width:80%;height:80%;object-fit:contain;" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:20px;font-weight:bold;color:${COLORS.main}>NG</span>'" />
+  <!-- HEADER - Compact -->
+  <div style="display:flex;justify-content:space-between;border-bottom:3px solid ${COLORS.main};padding-bottom:8px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:45px;height:45px;border-radius:50%;background:${COLORS.lightBg};display:flex;align-items:center;justify-content:center;border:2px solid ${COLORS.lightBorder};overflow:hidden;flex-shrink:0;">
+        <img src="/logo.png" alt="Logo" style="width:80%;height:80%;object-fit:contain;" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:18px;font-weight:bold;color:${COLORS.main}>NG</span>'" />
       </div>
       <div>
-        <h1 style="font-size:24px;font-weight:bold;color:${COLORS.dark};margin:0;">${COMPANY.name}</h1>
-        <p style="font-size:11px;color:#64748b;margin:2px 0;">${COMPANY.tagline}</p>
-        <p style="font-size:9px;color:#94a3b8;margin:0;">${COMPANY.address} | Tel: ${COMPANY.phone} | ${COMPANY.email}</p>
+        <h1 style="font-size:${headerFont}px;font-weight:bold;color:${COLORS.dark};margin:0;line-height:1.1;">${COMPANY.name}</h1>
+        <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;">${COMPANY.tagline}</p>
+        <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:0;">${COMPANY.address} | Tel: ${COMPANY.phone} | ${COMPANY.email}</p>
       </div>
     </div>
-    <div style="text-align:right;">
-      <h2 style="font-size:30px;font-weight:bold;color:${COLORS.dark};margin:0;letter-spacing:2px;">QUOTATION</h2>
-      <p style="font-size:18px;color:${COLORS.main};margin:3px 0;font-weight:bold;">#${quoteNumber}</p>
-      <div style="margin-top:5px;font-size:10px;color:#64748b;">
+    <div style="text-align:right;flex-shrink:0;">
+      <h2 style="font-size:${bigFont}px;font-weight:bold;color:${COLORS.dark};margin:0;letter-spacing:1px;line-height:1;">QUOTATION</h2>
+      <p style="font-size:${Math.round(16 * s)}px;color:${COLORS.main};margin:2px 0;font-weight:bold;">#${quoteNumber}</p>
+      <div style="margin-top:3px;font-size:${tinyFont}px;color:#64748b;">
         <p style="margin:1px 0;">Date: ${quoteDate}</p>
         <p style="margin:1px 0;">Valid Until: ${validUntil}</p>
       </div>
     </div>
   </div>
 
-  <!-- BILL TO & DETAILS -->
-  <div style="display:flex;gap:30px;margin-bottom:15px;">
+  <!-- BILL TO & DETAILS - Compact -->
+  <div style="display:flex;gap:20px;margin-bottom:10px;">
     <div style="flex:1;">
-      <h3 style="font-size:10px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:4px;letter-spacing:1px;">Bill To:</h3>
-      <p style="font-size:15px;font-weight:bold;color:#1e293b;margin:0;">${clientName}</p>
-      ${clientEmail ? `<p style="font-size:10px;color:#64748b;margin:2px 0;">${clientEmail}</p>` : ''}
-      <p style="font-size:10px;color:#64748b;margin:2px 0;white-space:pre-line;">${clientAddress}</p>
+      <h3 style="font-size:${tinyFont}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:2px;letter-spacing:1px;">Bill To:</h3>
+      <p style="font-size:${Math.round(13 * s)}px;font-weight:bold;color:#1e293b;margin:0;">${clientName}</p>
+      ${clientEmail ? `<p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;">${clientEmail}</p>` : ''}
+      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;white-space:pre-line;">${clientAddress}</p>
     </div>
     <div style="flex:1;">
-      <h3 style="font-size:10px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:4px;letter-spacing:1px;">Details:</h3>
-      <p style="font-size:12px;color:#1e293b;margin:2px 0;"><strong>Prepared By:</strong> ${creatorName}</p>
-      <p style="font-size:11px;color:#64748b;margin:2px 0;"><strong>Payment Terms:</strong> ${paymentTerms}</p>
-      <p style="font-size:11px;color:#64748b;margin:2px 0;"><strong>Validity:</strong> 30 Days from date of issue</p>
+      <h3 style="font-size:${tinyFont}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:2px;letter-spacing:1px;">Details:</h3>
+      <p style="font-size:${Math.round(11 * s)}px;color:#1e293b;margin:1px 0;"><strong>Prepared By:</strong> ${creatorName}</p>
+      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;"><strong>Payment Terms:</strong> ${paymentTerms}</p>
+      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;"><strong>Validity:</strong> 30 Days from date of issue</p>
     </div>
   </div>
 
-  <!-- ITEMS TABLE -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
+  <!-- ITEMS TABLE - Compact -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
     <thead>
       <tr style="background:${COLORS.tableHeader};color:white;">
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:bold;text-transform:uppercase;">#</th>
-        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:bold;text-transform:uppercase;">Description</th>
-        <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:bold;text-transform:uppercase;width:50px;">Qty</th>
-        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:bold;text-transform:uppercase;width:100px;">Unit Price</th>
-        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:bold;text-transform:uppercase;width:100px;">Total</th>
+        <th style="padding:${rowPad}px 8px;text-align:left;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;">#</th>
+        <th style="padding:${rowPad}px 8px;text-align:left;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;">Description</th>
+        <th style="padding:${rowPad}px 8px;text-align:center;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:40px;">Qty</th>
+        <th style="padding:${rowPad}px 8px;text-align:right;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:85px;">Unit Price</th>
+        <th style="padding:${rowPad}px 8px;text-align:right;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:85px;">Total</th>
       </tr>
     </thead>
     <tbody>
-      ${itemsHTML || '<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8;">No items</td></tr>'}
+      ${itemsHTML || '<tr><td colspan="5" style="padding:15px;text-align:center;color:#94a3b8;font-size:' + tinyFont + 'px;">No items</td></tr>'}
     </tbody>
   </table>
 
-  <!-- TOTALS -->
-  <div style="display:flex;justify-content:flex-end;margin-bottom:15px;">
-    <div style="width:280px;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;">
-      <div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;font-size:10px;background:#f8fafc;">
+  <!-- TOTALS - Compact -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <div style="width:240px;border:1px solid #e2e8f0;border-radius:3px;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;padding:${rowPad}px 10px;border-bottom:1px solid #e2e8f0;font-size:${tinyFont}px;background:#f8fafc;">
         <span style="color:#64748b;">Subtotal (Excl. VAT):</span>
         <span style="color:#1e293b;font-weight:600;">${formatCurrency(subtotal)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;font-size:10px;background:#f8fafc;">
+      <div style="display:flex;justify-content:space-between;padding:${rowPad}px 10px;border-bottom:1px solid #e2e8f0;font-size:${tinyFont}px;background:#f8fafc;">
         <span style="color:#64748b;">VAT (15%):</span>
         <span style="color:#1e293b;">${formatCurrency(vatAmount)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:12px 14px;font-size:15px;font-weight:bold;background:${COLORS.totalBg};">
+      <div style="display:flex;justify-content:space-between;padding:${Math.round(8 * s)}px 10px;font-size:${Math.round(13 * s)}px;font-weight:bold;background:${COLORS.totalBg};">
         <span style="color:${COLORS.dark};">TOTAL (Incl. VAT):</span>
-        <span style="color:${COLORS.dark};font-size:17px;">${formatCurrency(totalAmount)}</span>
+        <span style="color:${COLORS.dark};font-size:${Math.round(15 * s)}px;">${formatCurrency(totalAmount)}</span>
       </div>
     </div>
   </div>
 
-  <!-- TERMS -->
-  <div style="margin-bottom:10px;">
-    <h3 style="font-size:9px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:3px;letter-spacing:1px;">Terms & Conditions</h3>
-    <p style="font-size:8px;color:#94a3b8;line-height:1.4;margin:0;">
-      1. This quotation is valid for 30 days from the date of issue. 2. Payment Terms: ${paymentTerms}. 3. All prices include VAT at 15%. 4. Services will be rendered as per the agreed schedule. 5. Cancellation requires 30 days written notice. 6. Ndanduleni Group reserves the right to adjust pricing for any changes in scope of work.
+  <!-- TERMS - Compact -->
+  <div style="margin-bottom:${sectionPad}px;">
+    <h3 style="font-size:${tinyFont - 1}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:1px;letter-spacing:1px;">Terms & Conditions</h3>
+    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;line-height:1.3;margin:0;">
+      1. Valid 30 days. 2. Payment: ${paymentTerms}. 3. Prices include 15% VAT. 4. Services per agreed schedule. 5. 30 days cancellation notice. 6. Ndanduleni Group reserves right to adjust pricing for scope changes.
     </p>
   </div>
 
-  <!-- BANKING -->
-  <div style="margin-bottom:10px;padding:10px 14px;background:#f8fafc;border-radius:4px;border:1px solid #e2e8f0;">
-    <h3 style="font-size:9px;font-weight:bold;color:${COLORS.main};margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Banking Details</h3>
-    <div style="display:flex;gap:25px;font-size:8px;color:#64748b;">
-      <div>
-        <p style="margin:1px 0;"><strong>Bank:</strong> ${COMPANY.bank}</p>
-        <p style="margin:1px 0;"><strong>Account Name:</strong> ${COMPANY.accountName}</p>
-      </div>
-      <div>
-        <p style="margin:1px 0;"><strong>Account Number:</strong> ${COMPANY.accountNumber}</p>
-        <p style="margin:1px 0;"><strong>Branch Code:</strong> ${COMPANY.branchCode}</p>
-      </div>
-      <div>
-        <p style="margin:1px 0;"><strong>Reference:</strong> ${quoteNumber}</p>
-      </div>
+  <!-- BANKING - Compact -->
+  <div style="margin-bottom:${sectionPad}px;padding:${sectionPad}px 10px;background:#f8fafc;border-radius:3px;border:1px solid #e2e8f0;">
+    <h3 style="font-size:${tinyFont - 1}px;font-weight:bold;color:${COLORS.main};margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Banking Details</h3>
+    <div style="display:flex;gap:20px;font-size:${tinyFont - 1}px;color:#64748b;">
+      <div><p style="margin:0;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="margin:0;"><strong>Account:</strong> ${COMPANY.accountName}</p></div>
+      <div><p style="margin:0;"><strong>Acc #:</strong> ${COMPANY.accountNumber}</p><p style="margin:0;"><strong>Branch:</strong> ${COMPANY.branchCode}</p></div>
+      <div><p style="margin:0;"><strong>Ref:</strong> ${quoteNumber}</p></div>
     </div>
   </div>
 
   ${notes ? `
-  <div style="margin-bottom:10px;padding:8px 12px;background:#f8fafc;border-radius:4px;">
-    <p style="font-size:8px;color:#64748b;margin:0;"><strong>Notes:</strong> ${notes}</p>
+  <div style="margin-bottom:${sectionPad}px;padding:${sectionPad - 1}px 10px;background:#f8fafc;border-radius:3px;">
+    <p style="font-size:${tinyFont - 1}px;color:#64748b;margin:0;"><strong>Notes:</strong> ${notes}</p>
   </div>` : ''}
 
-  <!-- FOOTER -->
-  <div style="margin-top:auto;border-top:2px solid ${COLORS.main};padding-top:10px;text-align:center;">
-    <p style="font-size:8px;color:#94a3b8;margin:0;">
-      ${COMPANY.name} (Pty) Ltd | Registration: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}
+  <!-- FOOTER - Directly below content, no auto margin -->
+  <div style="margin-top:15px;border-top:2px solid ${COLORS.main};padding-top:6px;text-align:center;">
+    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:0;">
+      ${COMPANY.name} (Pty) Ltd | Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}
     </p>
-    <p style="font-size:8px;color:#94a3b8;margin:2px 0;">
-      ${COMPANY.address} | Tel: ${COMPANY.phone} | Email: ${COMPANY.email} | ${COMPANY.website}
+    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:1px 0;">
+      ${COMPANY.address} | Tel: ${COMPANY.phone} | Email: ${COMPANY.email}
     </p>
-    <p style="font-size:12px;color:${COLORS.main};margin:8px 0 0 0;font-weight:bold;letter-spacing:1px;">
-      Thank you for your business! We appreciate the opportunity to serve you.
+    <p style="font-size:${Math.round(10 * s)}px;color:${COLORS.main};margin:4px 0 0 0;font-weight:bold;">
+      Thank you for your business!
     </p>
   </div>
 
 </div>
 </body>
 </html>`
+}
+
+// ═══════════════════════════════════════════════
+// Auto-compress layout if content exceeds one page
+// ═══════════════════════════════════════════════
+async function autoCompressLayout(quotation, items) {
+  const A4_HEIGHT = 1123
+  let scale = 1
+  let fits = false
+  let attempts = 0
+
+  while (!fits && attempts < 10) {
+    const html = buildQuotationHTML(quotation, items, scale)
+    const height = await measureContentHeight(html)
+    
+    if (height <= A4_HEIGHT) {
+      fits = true
+    } else {
+      scale -= 0.05 // Reduce by 5% each attempt
+      attempts++
+    }
+  }
+
+  return Math.max(scale, 0.7) // Don't go below 70%
+}
+
+async function measureContentHeight(html) {
+  return new Promise((resolve) => {
+    const container = document.createElement('div')
+    container.innerHTML = html
+    container.style.position = 'absolute'
+    container.style.left = '-9999px'
+    container.style.top = '0'
+    container.style.width = '794px'
+    container.style.visibility = 'hidden'
+    document.body.appendChild(container)
+    
+    // Wait for render
+    setTimeout(() => {
+      const height = container.scrollHeight
+      document.body.removeChild(container)
+      resolve(height)
+    }, 300)
+  })
 }
 
 // ═══════════════════════════════════════════════
@@ -253,20 +292,11 @@ export default function CreateQuotation() {
   const navigate = useNavigate()
 
   const [quotationData, setQuotationData] = useState({
-    client_id: '',
-    client_name: '',
-    client_email: '',
-    client_phone: '',
-    client_address: '',
+    client_id: '', client_name: '', client_email: '', client_phone: '', client_address: '',
     valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    payment_terms: '50% Deposit, Balance on Completion',
-    tax_rate: 15,
-    discount_type: 'none',
-    discount_value: 0,
-    notes: '',
-    status: 'draft',
-    created_by_name: '',
-    prepared_by_name: ''
+    payment_terms: '50% Deposit, Balance on Completion', tax_rate: 15,
+    discount_type: 'none', discount_value: 0, notes: '', status: 'draft',
+    created_by_name: '', prepared_by_name: ''
   })
 
   const [items, setItems] = useState([
@@ -284,19 +314,13 @@ export default function CreateQuotation() {
   const setCurrentUserName = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single()
+      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
       const userName = profile?.full_name || user.email?.split('@')[0] || 'Unknown'
       setQuotationData(prev => ({ ...prev, created_by_name: userName, prepared_by_name: userName }))
     }
   }
 
-  useEffect(() => {
-    if (id) loadExistingQuotation(id)
-  }, [id])
+  useEffect(() => { if (id) loadExistingQuotation(id) }, [id])
 
   const loadExistingQuotation = async (quotationId) => {
     setLoadingQuote(true)
@@ -304,36 +328,26 @@ export default function CreateQuotation() {
     if (result.success && result.data) {
       const quote = result.data
       setQuotationData({
-        client_id: quote.client_id || '',
-        client_name: quote.client_name || quote.clients?.company_name || '',
+        client_id: quote.client_id || '', client_name: quote.client_name || quote.clients?.company_name || '',
         client_email: quote.client_email || quote.clients?.email || '',
         client_phone: quote.client_phone || quote.clients?.phone || '',
         client_address: quote.client_address || '',
         valid_until: quote.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         payment_terms: quote.payment_terms || '50% Deposit, Balance on Completion',
-        tax_rate: quote.tax_rate || 15,
-        discount_type: quote.discount_type || 'none',
-        discount_value: quote.discount_value || 0,
-        notes: quote.notes || '',
-        status: quote.status || 'draft',
+        tax_rate: quote.tax_rate || 15, discount_type: quote.discount_type || 'none',
+        discount_value: quote.discount_value || 0, notes: quote.notes || '', status: quote.status || 'draft',
         created_by_name: quote.created_by_name || quote.prepared_by_name || '',
         prepared_by_name: quote.prepared_by_name || quote.created_by_name || ''
       })
       if (quote.quotation_items?.length > 0) {
         setItems(quote.quotation_items.map(item => ({
-          description: item.description || '',
-          quantity: item.quantity || 1,
-          unit: item.unit || 'per_service',
-          unit_price: item.unit_price || 0,
-          tax_percent: item.tax_percent || 15,
-          discount_percent: item.discount_percent || 0
+          description: item.description || '', quantity: item.quantity || 1,
+          unit: item.unit || 'per_service', unit_price: item.unit_price || 0,
+          tax_percent: item.tax_percent || 15, discount_percent: item.discount_percent || 0
         })))
       }
       setSavedQuotationId(quote.id)
-    } else {
-      toast.error('Failed to load quotation')
-      navigate('/sales/quotations')
-    }
+    } else { toast.error('Failed to load'); navigate('/sales/quotations') }
     setLoadingQuote(false)
   }
 
@@ -348,16 +362,7 @@ export default function CreateQuotation() {
 
   const handleClientSelect = (clientId) => {
     const client = clients.find((c) => c.id === clientId)
-    if (client) {
-      setQuotationData({
-        ...quotationData,
-        client_id: client.id,
-        client_name: client.company_name || '',
-        client_email: client.email || '',
-        client_phone: client.phone || '',
-        client_address: `${client.address_line1 || ''}, ${client.city || ''}, ${client.postal_code || ''}`
-      })
-    }
+    if (client) setQuotationData({ ...quotationData, client_id: client.id, client_name: client.company_name || '', client_email: client.email || '', client_phone: client.phone || '', client_address: `${client.address_line1 || ''}, ${client.city || ''}, ${client.postal_code || ''}` })
   }
 
   const handleServiceSelect = (index, serviceName) => {
@@ -371,16 +376,11 @@ export default function CreateQuotation() {
 
   const addItem = () => setItems([...items, { description: '', quantity: 1, unit: 'per_service', unit_price: 0, tax_percent: 15, discount_percent: 0 }])
   const removeItem = (index) => { if (items.length > 1) setItems(items.filter((_, i) => i !== index)) }
-  const updateItem = (index, field, value) => {
-    const newItems = [...items]
-    newItems[index] = { ...newItems[index], [field]: value }
-    setItems(newItems)
-  }
+  const updateItem = (index, field, value) => { const newItems = [...items]; newItems[index] = { ...newItems[index], [field]: value }; setItems(newItems) }
 
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) { toast.error('Please select a client'); return }
-    const hasItems = items.some((item) => item.description && item.unit_price > 0)
-    if (!hasItems) { toast.error('Please add at least one service with a price'); return }
+    if (!items.some(i => i.description && i.unit_price > 0)) { toast.error('Add at least one service'); return }
 
     const { data: { user } } = await supabase.auth.getUser()
     let userName = quotationData.created_by_name || 'Unknown'
@@ -389,9 +389,9 @@ export default function CreateQuotation() {
       userName = profile?.full_name || user.email?.split('@')[0] || 'Unknown'
     }
 
-    const cleanItems = items.filter((item) => item.description).map((item) => ({
-      description: item.description, quantity: item.quantity || 1, unit: item.unit || 'per_service',
-      unit_price: item.unit_price || 0, tax_percent: item.tax_percent ?? 15, discount_percent: item.discount_percent ?? 0
+    const cleanItems = items.filter(i => i.description).map(i => ({
+      description: i.description, quantity: i.quantity || 1, unit: i.unit || 'per_service',
+      unit_price: i.unit_price || 0, tax_percent: i.tax_percent ?? 15, discount_percent: i.discount_percent ?? 0
     }))
 
     const quotePayload = { ...quotationData, subtotal, tax_amount: vatAmount, discount_amount: 0, total_amount: totalAmount, status, created_by: user?.id, created_by_name: userName, prepared_by: user?.id, prepared_by_name: userName }
@@ -400,39 +400,38 @@ export default function CreateQuotation() {
       const result = await updateQuotation(id, quotePayload)
       if (!result.success) { toast.error('Failed to update'); return }
       toast.success(status === 'sent' ? 'Updated & sent!' : 'Updated!')
-      navigate(`/sales/quotations/${id}`)
     } else {
       const result = await createQuotation(quotePayload, cleanItems)
       if (!result.success) { toast.error('Failed to save'); return }
       setSavedQuotationId(result.data.id)
-      toast.success(status === 'sent' ? 'Quotation sent!' : 'Saved as draft!')
+      toast.success(status === 'sent' ? 'Sent!' : 'Saved!')
     }
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - Fresh full-size render
+  // PDF DOWNLOAD - Auto-compress to fit one page
   // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       const html2pdf = (await import('html2pdf.js')).default
       toast.loading('Generating PDF...')
 
-      // Build fresh HTML with current data
-      const htmlContent = buildQuotationHTML(
-        { ...quotationData, quotation_number: quotationData.quotation_number || 'DRAFT' },
-        items.filter(item => item.description)
-      )
+      const activeItems = items.filter(item => item.description)
+      
+      // Auto-compress to fit single page
+      const optimalScale = await autoCompressLayout(quotationData, activeItems)
+      
+      // Build final HTML at optimal scale
+      const htmlContent = buildQuotationHTML(quotationData, activeItems, optimalScale)
 
-      // Create temporary container
       const container = document.createElement('div')
       container.innerHTML = htmlContent
       container.style.position = 'absolute'
       container.style.left = '-9999px'
-      container.style.top = '0'
       container.style.width = '794px'
       document.body.appendChild(container)
 
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 400))
 
       const opt = {
         margin: [0, 0, 0, 0],
@@ -440,7 +439,7 @@ export default function CreateQuotation() {
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, letterRendering: true, width: 794 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        pagebreak: { mode: ['css'] }
       }
 
       await html2pdf().set(opt).from(container).save()
@@ -461,11 +460,7 @@ export default function CreateQuotation() {
   const serviceCategories = [...new Set(SERVICES.map((s) => s.category))]
 
   if (loadingQuote) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
-      </div>
-    )
+    return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div></div>
   }
 
   return (
@@ -491,17 +486,17 @@ export default function CreateQuotation() {
         </div>
 
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit Quotation' : 'Create Quotation'}</h1>
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-3">
-            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">Download PDF</span></button>
-            <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700"><Save className="w-4 h-4" /><span className="hidden sm:inline">Save Draft</span></button>
-            <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Send className="w-4 h-4" /><span className="hidden sm:inline">Save & Send</span></button>
+            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">PDF</span></button>
+            <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700"><Save className="w-4 h-4" /><span className="hidden sm:inline">Save</span></button>
+            <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Send className="w-4 h-4" /><span className="hidden sm:inline">Send</span></button>
           </div>
         </div>
 
         {savedQuotationId && !isEditMode && (
           <div className="mb-6 p-4 neu-raised rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 flex items-center justify-between">
-            <div><p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Quotation Saved!</p><p className="text-xs text-orange-600 dark:text-orange-400">You can now convert this quotation to a job.</p></div>
+            <div><p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Saved!</p></div>
             <button onClick={() => navigate('/operations/jobs/new')} className="px-5 py-2.5 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2"><Briefcase className="w-4 h-4" /><span>Convert to Job</span></button>
           </div>
         )}
@@ -509,7 +504,7 @@ export default function CreateQuotation() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="space-y-6">
             <div className="neu-raised rounded-3xl p-6">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Client Information</h2>
+              <h2 className="text-lg font-semibold mb-4">Client Information</h2>
               <div className="space-y-4">
                 <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl"><option value="">Select Client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
                 <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({...quotationData, client_name: e.target.value})} placeholder="Client Name" className="w-full p-3 neu-inset rounded-xl" />
@@ -548,10 +543,7 @@ export default function CreateQuotation() {
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.33)', transformOrigin: 'top left', width: '303%' }}>
-                  <div dangerouslySetInnerHTML={{ __html: buildQuotationHTML(
-                    { ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' },
-                    items.filter(item => item.description)
-                  )}} />
+                  <div dangerouslySetInnerHTML={{ __html: buildQuotationHTML({ ...quotationData, quotation_number: 'PREVIEW' }, items.filter(i => i.description)) }} />
                 </div>
               </div>
             </div>
