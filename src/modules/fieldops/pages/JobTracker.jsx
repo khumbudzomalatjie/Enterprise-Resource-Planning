@@ -9,7 +9,7 @@ import {
   Search, FileText, Clock, User, CheckCircle2, XCircle,
   AlertTriangle, DollarSign, Sun, Moon, Sparkles, ChevronRight,
   Users, Calendar, MapPin, Briefcase, Phone, Mail,
-  Shield, History, List, RefreshCw
+  Shield, History, List, RefreshCw, Info
 } from 'lucide-react'
 
 export default function JobTracker() {
@@ -17,7 +17,7 @@ export default function JobTracker() {
   const { isDark, toggleTheme } = useThemeStore()
   const [searchInput, setSearchInput] = useState('')
   const [allJobs, setAllJobs] = useState([])
-  const [showJobList, setShowJobList] = useState(false)
+  const [showJobList, setShowJobList] = useState(true) // Show by default
   const [searchError, setSearchError] = useState('')
 
   useEffect(() => {
@@ -25,12 +25,19 @@ export default function JobTracker() {
   }, [])
 
   const loadAllJobs = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('jobs')
       .select('job_number, title, status, clients(company_name), scheduled_date')
       .order('created_at', { ascending: false })
-      .limit(50)
-    if (data) setAllJobs(data)
+      .limit(100)
+    
+    if (data) {
+      setAllJobs(data)
+      console.log('Jobs loaded:', data.length)
+    }
+    if (error) {
+      console.error('Error loading jobs:', error)
+    }
   }
 
   const handleSearch = async (e) => {
@@ -42,6 +49,8 @@ export default function JobTracker() {
     const result = await fetchJobAuditTrail(searchInput.trim())
     if (!result.success) {
       setSearchError(result.error || 'Job not found')
+      // Show job list to help user
+      setShowJobList(true)
     }
   }
 
@@ -102,7 +111,7 @@ export default function JobTracker() {
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3 mb-2">
             <History className="w-8 h-8 text-purple-600" />Job Tracker
           </h1>
-          <p className="text-slate-500">Search by job number, title, or client name</p>
+          <p className="text-slate-500">Click any job below or search by number, title, or client</p>
         </motion.div>
 
         {/* Search Bar */}
@@ -114,14 +123,14 @@ export default function JobTracker() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Job number, title, or client name..."
+                placeholder="Type job number, title, or client name..."
                 className="w-full pl-12 pr-4 py-4 text-lg neu-inset rounded-2xl text-slate-700 dark:text-slate-300"
               />
             </div>
             <button type="submit" disabled={loading} className="neu-raised neu-btn px-6 py-4 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 font-semibold disabled:opacity-50">
               {loading ? '...' : 'Track'}
             </button>
-            <button type="button" onClick={() => { setShowJobList(!showJobList); if (!showJobList) loadAllJobs() }} className="neu-raised neu-btn px-4 py-4 rounded-2xl bg-slate-600 text-white hover:bg-slate-700">
+            <button type="button" onClick={() => { setShowJobList(!showJobList); if (!showJobList) loadAllJobs() }} className="neu-raised neu-btn px-4 py-4 rounded-2xl bg-slate-600 text-white hover:bg-slate-700" title="Toggle job list">
               <List className="w-5 h-5" />
             </button>
           </form>
@@ -129,42 +138,75 @@ export default function JobTracker() {
           {searchError && (
             <div className="mt-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800">
               <p className="text-amber-700 dark:text-amber-400 text-sm flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" />{searchError}
+                <Info className="w-4 h-4" />{searchError}
               </p>
+              <p className="text-xs text-slate-500 mt-1">Select a job from the list below or try a different search term.</p>
             </div>
           )}
         </motion.div>
 
-        {/* Job List Dropdown */}
+        {/* Job List - Always visible by default */}
         {showJobList && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold flex items-center gap-2"><List className="w-5 h-5 text-emerald-600" />All Jobs ({allJobs.length})</h3>
-              <button onClick={loadAllJobs} className="text-sm text-emerald-600 flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Refresh</button>
+              <h3 className="font-semibold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                <List className="w-5 h-5 text-emerald-600" />
+                Available Jobs ({allJobs.length})
+              </h3>
+              <button onClick={loadAllJobs} className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" /> Refresh
+              </button>
             </div>
+            
             {allJobs.length > 0 ? (
-              <div className="max-h-72 overflow-y-auto space-y-2">
+              <div className="max-h-96 overflow-y-auto space-y-2">
                 {allJobs.map(job => (
                   <div key={job.job_number}
                     onClick={() => handleSelectJob(job.job_number)}
-                    className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer">
-                    <div>
-                      <p className="font-medium text-sm text-slate-800 dark:text-white">{job.job_number}</p>
-                      <p className="text-xs text-slate-500 truncate max-w-xs">{job.title || 'No title'}</p>
+                    className="flex items-center justify-between p-4 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/10 cursor-pointer border border-slate-100 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all">
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-slate-800 dark:text-white">{job.job_number}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{job.title || 'No title'}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        {job.clients?.company_name && (
+                          <span className="text-xs text-slate-500">🏢 {job.clients.company_name}</span>
+                        )}
+                        {job.scheduled_date && (
+                          <span className="text-xs text-slate-500">📅 {formatDate(job.scheduled_date)}</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 hidden sm:inline">{job.clients?.company_name || ''}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>{job.status?.replace('_', ' ')}</span>
+                    <div className="flex items-center gap-2 ml-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                        {job.status?.replace('_', ' ')}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">No jobs found in the system</p>
-                <p className="text-xs text-slate-400 mt-1">Create jobs in Operations module first</p>
-                <Link to="/operations/jobs/new" className="inline-block mt-3 text-sm text-emerald-600 hover:text-emerald-700">Create New Job →</Link>
+              <div className="text-center py-12">
+                <Briefcase className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg font-medium">No jobs found in the database</p>
+                <p className="text-slate-400 text-sm mt-2">You need to create jobs first before you can track them.</p>
+                <div className="mt-4 p-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-left">
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Run this SQL in Supabase to create test jobs:</p>
+                  <pre className="text-xs text-slate-500 overflow-auto max-h-32 bg-slate-200 dark:bg-slate-900 p-3 rounded-lg">
+{`INSERT INTO public.jobs (job_number, title, description, site_address, 
+site_city, scheduled_date, scheduled_start_time, scheduled_end_time, 
+priority, status, cleaners_required, notes)
+VALUES 
+  ('JOB-2606-0001', 'Office Cleaning - Sandton', 'Daily cleaning', 
+   '100 Rivonia Road', 'Sandton', '2026-06-25', '08:00', '17:00', 
+   'high', 'scheduled', 3, 'Test job');`}
+                  </pre>
+                </div>
+                <div className="flex gap-3 justify-center mt-4">
+                  <Link to="/operations/jobs/new" className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700">
+                    Create Job in Operations
+                  </Link>
+                </div>
               </div>
             )}
           </motion.div>
@@ -174,27 +216,29 @@ export default function JobTracker() {
         {loading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-            <p className="text-slate-500">Loading audit trail...</p>
+            <p className="text-slate-500">Loading complete audit trail...</p>
           </div>
         )}
 
-        {/* Results */}
+        {/* Results - Job Audit Data */}
         {jobAuditData && !loading && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             
-            {/* Job Summary */}
+            {/* Job Summary Card */}
             <div className="neu-raised rounded-3xl p-6 border-l-4 border-purple-500">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">📋 Job Summary</h2>
-                <button onClick={clearAuditData} className="text-sm text-slate-500 hover:text-slate-700">Clear</button>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">📋 {jobAuditData.job.job_number}</h2>
+                <button onClick={clearAuditData} className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                  <XCircle className="w-4 h-4" /> Clear
+                </button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div><p className="text-xs text-slate-500">Job Number</p><p className="font-bold text-lg">{jobAuditData.job.job_number}</p></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div><p className="text-xs text-slate-500">Title</p><p className="font-medium text-sm">{jobAuditData.job.title || 'N/A'}</p></div>
                 <div><p className="text-xs text-slate-500">Status</p><span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(jobAuditData.job.status)}`}>{jobAuditData.job.status?.replace('_', ' ')}</span></div>
                 <div><p className="text-xs text-slate-500">Priority</p><p className="font-semibold capitalize">{jobAuditData.job.priority || 'N/A'}</p></div>
+                <div><p className="text-xs text-slate-500">Value</p><p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.job.quoted_amount)}</p></div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-1 text-sm text-slate-500"><Calendar className="w-4 h-4" />{formatDate(jobAuditData.job.scheduled_date)}</div>
                 <div className="flex items-center gap-1 text-sm text-slate-500"><MapPin className="w-4 h-4" />{jobAuditData.job.site_city || 'N/A'}</div>
                 <div className="flex items-center gap-1 text-sm text-slate-500"><Briefcase className="w-4 h-4" />{jobAuditData.job.cleaners_required || 1} cleaners</div>
@@ -207,22 +251,24 @@ export default function JobTracker() {
               )}
             </div>
 
-            {/* Client */}
+            {/* Client Info */}
             {jobAuditData.client && (
               <div className="neu-raised rounded-3xl p-6">
-                <h2 className="text-lg font-bold mb-3">🏢 Client</h2>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <h2 className="text-lg font-bold mb-3 text-slate-800 dark:text-white">🏢 Client</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <p><span className="text-slate-500">Name:</span> <span className="font-medium">{jobAuditData.client.company_name}</span></p>
                   <p><span className="text-slate-500">Code:</span> {jobAuditData.client.client_code || 'N/A'}</p>
-                  <p className="flex items-center gap-1"><Phone className="w-3 h-3" />{jobAuditData.client.phone || 'N/A'}</p>
-                  <p className="flex items-center gap-1"><Mail className="w-3 h-3" />{jobAuditData.client.email || 'N/A'}</p>
+                  <p className="flex items-center gap-1"><Phone className="w-3 h-3 text-slate-400" />{jobAuditData.client.phone || 'N/A'}</p>
+                  <p className="flex items-center gap-1"><Mail className="w-3 h-3 text-slate-400" />{jobAuditData.client.email || 'N/A'}</p>
                 </div>
               </div>
             )}
 
             {/* Audit Timeline */}
             <div className="neu-raised rounded-3xl p-6">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><History className="w-5 h-5 text-purple-600" />Audit Trail ({jobAuditData.auditLogs?.length || 0} events)</h2>
+              <h2 className="text-xl font-bold mb-6 text-slate-800 dark:text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-purple-600" />Audit Trail ({jobAuditData.auditLogs?.length || 0} events)
+              </h2>
               {jobAuditData.auditLogs?.length > 0 ? (
                 <div className="relative">
                   <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-purple-500 via-blue-500 to-emerald-500"></div>
@@ -240,14 +286,17 @@ export default function JobTracker() {
                           </div>
                           <p className="text-sm text-slate-600 dark:text-slate-400">{log.action_description}</p>
                           <div className="flex items-center gap-2 mt-2">
-                            <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center"><User className="w-3 h-3 text-purple-600" /></div>
+                            <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                              <User className="w-3 h-3 text-purple-600" />
+                            </div>
                             <span className="text-xs font-medium">{log.performed_by_name || 'System'}</span>
                             <span className="text-xs text-slate-500">({log.performed_by_role?.replace('_', ' ') || 'N/A'})</span>
                           </div>
                           {log.field_changed && (
                             <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-900/10 text-xs">
                               <span className="font-medium">{log.field_changed}:</span>{' '}
-                              <span className="line-through text-red-600">{log.old_value || 'N/A'}</span> → <span className="text-emerald-600">{log.new_value || 'N/A'}</span>
+                              <span className="line-through text-red-600">{log.old_value || 'N/A'}</span> →{' '}
+                              <span className="text-emerald-600">{log.new_value || 'N/A'}</span>
                             </div>
                           )}
                         </div>
@@ -256,19 +305,31 @@ export default function JobTracker() {
                   </div>
                 </div>
               ) : (
-                <p className="text-slate-500 text-center py-8">No audit logs yet. Actions on this job will appear here.</p>
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">No audit logs yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Perform actions on this job (assign staff, change status) to generate audit logs</p>
+                </div>
               )}
             </div>
 
-            {/* Assignments */}
+            {/* Staff Assignments */}
             {jobAuditData.assignments?.length > 0 && (
               <div className="neu-raised rounded-3xl p-6">
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Users className="w-5 h-5 text-blue-600" />Staff ({jobAuditData.assignments.length})</h2>
+                <h2 className="text-lg font-bold mb-3 text-slate-800 dark:text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-600" />Staff ({jobAuditData.assignments.length})
+                </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {jobAuditData.assignments.map(a => (
                     <div key={a.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex justify-between items-center">
-                      <div><p className="font-medium text-sm">{a.employees?.first_name} {a.employees?.last_name}</p><p className="text-xs text-slate-500">{a.employees?.employee_code}</p></div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${a.assignment_status === 'completed' ? 'bg-emerald-100 text-emerald-700' : a.assignment_status === 'released' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{a.assignment_status}</span>
+                      <div>
+                        <p className="font-medium text-sm">{a.employees?.first_name} {a.employees?.last_name}</p>
+                        <p className="text-xs text-slate-500">{a.employees?.employee_code}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        a.assignment_status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 
+                        a.assignment_status === 'released' ? 'bg-red-100 text-red-700' : 
+                        'bg-blue-100 text-blue-700'}`}>{a.assignment_status}</span>
                     </div>
                   ))}
                 </div>
@@ -278,24 +339,28 @@ export default function JobTracker() {
             {/* Financial */}
             {(jobAuditData.quotation || jobAuditData.invoice) && (
               <div className="neu-raised rounded-3xl p-6">
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-600" />Financial</h2>
+                <h2 className="text-lg font-bold mb-3 text-slate-800 dark:text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />Financial
+                </h2>
                 <div className="grid grid-cols-2 gap-4">
-                  {jobAuditData.quotation && <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30"><p className="text-xs">Quotation</p><p className="font-medium">{jobAuditData.quotation.quotation_number}</p><p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.quotation.total_amount)}</p></div>}
-                  {jobAuditData.invoice && <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30"><p className="text-xs">Invoice</p><p className="font-medium">{jobAuditData.invoice.invoice_number}</p><p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.invoice.total_amount)}</p></div>}
+                  {jobAuditData.quotation && (
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
+                      <p className="text-xs text-slate-500">Quotation</p>
+                      <p className="font-medium">{jobAuditData.quotation.quotation_number}</p>
+                      <p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.quotation.total_amount)}</p>
+                    </div>
+                  )}
+                  {jobAuditData.invoice && (
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
+                      <p className="text-xs text-slate-500">Invoice</p>
+                      <p className="font-medium">{jobAuditData.invoice.invoice_number}</p>
+                      <p className="font-bold text-emerald-600">{formatCurrency(jobAuditData.invoice.total_amount)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </motion.div>
-        )}
-
-        {/* Empty State */}
-        {!loading && !jobAuditData && !showJobList && allJobs.length === 0 && (
-          <div className="text-center py-12 neu-raised rounded-3xl">
-            <History className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 text-lg">No jobs in the system yet</p>
-            <p className="text-slate-400 text-sm mt-2">Create jobs in the Operations module first</p>
-            <Link to="/operations/jobs/new" className="mt-4 inline-block neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">Create First Job</Link>
-          </div>
         )}
       </main>
     </div>
