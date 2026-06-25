@@ -5,6 +5,7 @@ import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
 import useCRMStore from '../../crm/store/crmStore'
 import useThemeStore from '../../../store/themeStore'
+import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import {
   FileText, Plus, Trash2, Download, Eye,
@@ -110,7 +111,7 @@ function QuotationTemplate({ quotation, items }) {
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '1px' }}>Details:</h3>
-          <p style={{ fontSize: '11px', color: '#1e293b', margin: '1px 0' }}><strong>Prepared By:</strong> Ndanduleni Group Sales</p>
+          <p style={{ fontSize: '11px', color: '#1e293b', margin: '1px 0' }}><strong>Prepared By:</strong> {quotation?.created_by_name || quotation?.prepared_by_name || 'Ndanduleni Group Sales'}</p>
           <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Payment Terms:</strong> {quotation?.payment_terms || '50% Deposit, Balance on Completion'}</p>
           <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Validity:</strong> 30 Days from date of issue</p>
         </div>
@@ -365,6 +366,18 @@ export default function CreateQuotation() {
       return
     }
 
+    // Get current user info
+    const { data: { user } } = await supabase.auth.getUser()
+    let userName = 'Unknown'
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
+      userName = profile?.full_name || user.email?.split('@')[0] || 'Unknown'
+    }
+
     const cleanItems = items
       .filter((item) => item.description)
       .map((item) => ({
@@ -382,7 +395,11 @@ export default function CreateQuotation() {
       tax_amount: vatAmount,
       discount_amount: 0,
       total_amount: totalAmount,
-      status
+      status,
+      created_by: user?.id,
+      created_by_name: userName,
+      prepared_by: user?.id,
+      prepared_by_name: userName
     }
 
     if (isEditMode) {
@@ -404,9 +421,6 @@ export default function CreateQuotation() {
     }
   }
 
-  // ═══════════════════════════════════════════
-  // PDF DOWNLOAD - Captures preview as single A4 page
-  // ═══════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       const previewContainer = document.querySelector('.preview-container')
@@ -420,7 +434,6 @@ export default function CreateQuotation() {
 
       toast.loading('Generating PDF...')
 
-      // Clone the preview element at full A4 size
       const clone = previewContainer.cloneNode(true)
       clone.style.position = 'absolute'
       clone.style.left = '-9999px'
@@ -431,7 +444,6 @@ export default function CreateQuotation() {
       clone.style.overflow = 'hidden'
       clone.style.maxHeight = '1123px'
       
-      // Remove the inner scale transform so it renders at full size
       const innerDiv = clone.querySelector('div')
       if (innerDiv) {
         innerDiv.style.transform = 'none'
@@ -442,7 +454,6 @@ export default function CreateQuotation() {
 
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Capture as single canvas
       const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
@@ -457,7 +468,6 @@ export default function CreateQuotation() {
 
       document.body.removeChild(clone)
 
-      // Create single-page A4 PDF
       const imgData = canvas.toDataURL('image/jpeg', 0.95)
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -636,13 +646,12 @@ export default function CreateQuotation() {
               </div>
             </div>
 
-            {/* Preview with className for PDF capture */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div className="preview-container bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.35)', transformOrigin: 'top left', width: '285%' }}>
                   <QuotationTemplate
-                    quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW' }}
+                    quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW', created_by_name: quotationData.created_by_name }}
                     items={items.filter((item) => item.description)}
                   />
                 </div>
