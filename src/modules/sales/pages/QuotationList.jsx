@@ -9,7 +9,7 @@ import {
   FileText, Search, Eye, Edit, ChevronRight,
   Sun, Moon, Sparkles, Download, MoreVertical,
   CheckCircle, XCircle, Send, Trash2, AlertTriangle,
-  Briefcase, Lock, User  // ← ADDED User icon
+  Briefcase, Lock, User
 } from 'lucide-react'
 
 export default function QuotationList() {
@@ -41,13 +41,16 @@ export default function QuotationList() {
 
   const handleStatusChange = async (id, newStatus) => {
     setActionMenu(null)
+    
     if (newStatus === 'accepted') {
       setAcceptConfirm(id)
       return
     }
+
     setProcessingId(id)
     const result = await updateQuotationStatus(id, newStatus)
     setProcessingId(null)
+    
     if (result.success) {
       toast.success(`Quotation marked as ${newStatus.replace('_', ' ')}`)
       loadQuotations()
@@ -58,9 +61,11 @@ export default function QuotationList() {
 
   const handleAcceptQuotation = async () => {
     if (!acceptConfirm) return
+    
     setProcessingId(acceptConfirm)
     const result = await updateQuotationStatus(acceptConfirm, 'accepted')
     setProcessingId(null)
+    
     if (result.success) {
       toast.success('Quotation accepted! ✅')
       loadQuotations()
@@ -101,15 +106,16 @@ export default function QuotationList() {
       const tempDiv = document.createElement('div')
       tempDiv.innerHTML = `
         <div style="padding:20px;font-family:Arial;width:210mm;">
-          <h2 style="color:#2563eb;">NDANDULENI GROUP</h2>
+          <h2 style="color:#1B5080;">NDANDULENI GROUP</h2>
           <h3>Quotation ${quotation.quotation_number}</h3>
           <p><strong>Client:</strong> ${quotation.client_name || quotation.clients?.company_name || 'N/A'}</p>
           <p><strong>Date:</strong> ${formatDate(quotation.quotation_date)}</p>
-          <p><strong>Created By:</strong> ${quotation.created_by_name || quotation.prepared_by_name || 'Unknown'}</p>
+          <p><strong>Created By:</strong> ${quotation.created_by_name || 'Unknown'}</p>
           <p><strong>Total:</strong> ${formatCurrency(quotation.total_amount)}</p>
           <p><strong>Status:</strong> ${quotation.status}</p>
         </div>
       `
+      
       const opt = {
         margin: 10,
         filename: `Quotation_${quotation.quotation_number}.pdf`,
@@ -117,6 +123,7 @@ export default function QuotationList() {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       }
+
       await html2pdf().set(opt).from(tempDiv).save()
       toast.success('PDF downloaded')
     } catch (error) {
@@ -156,6 +163,15 @@ export default function QuotationList() {
   const canEdit = (status) => status === 'draft' || status === 'sent'
   const canChangeStatus = (status) => status === 'draft' || status === 'sent'
   const canDelete = (status) => status === 'draft' || status === 'sent'
+
+  const filteredQuotations = quotations.filter(q => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    return (q.quotation_number || '').toLowerCase().includes(s) ||
+           (q.client_name || '').toLowerCase().includes(s) ||
+           (q.clients?.company_name || '').toLowerCase().includes(s) ||
+           (q.created_by_name || '').toLowerCase().includes(s)
+  })
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -219,47 +235,56 @@ export default function QuotationList() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl overflow-hidden">
           {loading ? (
             <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
-          ) : quotations.length === 0 ? (
+          ) : filteredQuotations.length === 0 ? (
             <div className="text-center py-12"><FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" /><p className="text-slate-500 text-lg">No quotations found</p></div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Quote #</th>
-                    <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Client</th>
-                    <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Date</th>
-                    {/* ADDED: Created By Column */}
-                    <th className="text-left text-xs font-medium text-slate-500 py-4 px-4">Created By</th>
-                    <th className="text-right text-xs font-medium text-slate-500 py-4 px-4">Total</th>
-                    <th className="text-center text-xs font-medium text-slate-500 py-4 px-4">Status</th>
-                    <th className="text-right text-xs font-medium text-slate-500 py-4 px-4">Actions</th>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Quote #</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Client</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Date</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Created By</th>
+                    <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Total</th>
+                    <th className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Status</th>
+                    <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider py-4 px-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {quotations.map((quote) => (
-                    <tr key={quote.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${processingId === quote.id ? 'opacity-50' : ''}`}>
-                      <td className="py-3 px-4"><p className="font-medium text-slate-800 dark:text-white text-sm">{quote.quotation_number}</p></td>
-                      <td className="py-3 px-4"><p className="text-sm text-slate-700 dark:text-slate-300">{quote.clients?.company_name || quote.client_name || 'N/A'}</p></td>
-                      <td className="py-3 px-4"><p className="text-sm text-slate-600">{formatDate(quote.quotation_date)}</p></td>
-                      {/* ADDED: Created By Cell */}
-                      <td className="py-3 px-4">
+                  {filteredQuotations.map((quote) => (
+                    <tr key={quote.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer ${processingId === quote.id ? 'opacity-50' : ''}`}
+                      onClick={() => handleView(quote)}>
+                      <td className="py-4 px-4">
+                        <p className="font-semibold text-sm text-slate-800 dark:text-white">{quote.quotation_number}</p>
+                        <p className="text-xs text-slate-500">Valid: {formatDate(quote.valid_until)}</p>
+                      </td>
+                      <td className="py-4 px-4">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{quote.clients?.company_name || quote.client_name || 'N/A'}</p>
+                        {quote.client_email && <p className="text-xs text-slate-500">{quote.client_email}</p>}
+                      </td>
+                      <td className="py-4 px-4">
+                        <p className="text-sm text-slate-600 dark:text-slate-400">{formatDate(quote.quotation_date || quote.created_at)}</p>
+                      </td>
+                      <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                            <User className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                          <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                            <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                           </div>
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            {quote.created_by_name || quote.prepared_by_name || 'Unknown'}
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {quote.created_by_name || 'Unknown'}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-right"><p className="font-semibold text-sm text-slate-800 dark:text-white">{formatCurrency(quote.total_amount)}</p></td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-4 px-4 text-right">
+                        <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{formatCurrency(quote.total_amount)}</p>
+                      </td>
+                      <td className="py-4 px-4 text-center">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(quote.status)}`}>
                           {quote.status?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Details">
                             <Eye className="w-4 h-4" />
@@ -269,7 +294,7 @@ export default function QuotationList() {
                               <Edit className="w-4 h-4" />
                             </button>
                           ) : (
-                            <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit accepted/converted quotations" disabled>
+                            <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit" disabled>
                               <Lock className="w-4 h-4" />
                             </button>
                           )}
