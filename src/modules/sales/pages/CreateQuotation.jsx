@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
@@ -37,7 +37,21 @@ const SERVICES = [
   { category: 'Monthly Contract (3x Week)', name: '5 Bedroom - 3x Week', unit_price: 4782.61, unit: 'per_month' },
 ]
 
-// Steel Blue Color Palette
+// Company Info - Centralized for easy updates
+const COMPANY_INFO = {
+  name: 'NDANDULENI GROUP',
+  tagline: 'Professional Cleaning & Hygiene Services',
+  address: '2220 Manthata Street, Midrand',
+  phone: '070 419 9457',
+  email: 'account@ndandulenigroup.co.za',
+  registration: '2020/123456/07',
+  vat: '4567890123',
+  bank: 'First National Bank (FNB)',
+  accountName: 'Ndanduleni Group (Pty) Ltd',
+  accountNumber: '6277 123 45678',
+  branchCode: '250655',
+}
+
 const COLORS = {
   main: '#1B5080',
   dark: '#0D2D4A',
@@ -64,19 +78,19 @@ function QuotationTemplate({ quotation, items }) {
   const vatAmount = subtotal * 0.15
   const totalAmount = subtotal + vatAmount
 
+  // Use the creator name passed in, or fall back
+  const creatorName = quotation?.created_by_name || quotation?.prepared_by_name || 'Ndanduleni Group Sales'
+
   return (
     <div style={{
       width: '794px',
-      height: '1123px',
+      minHeight: '1123px',
       padding: '28px 42px',
       backgroundColor: 'white',
       fontFamily: 'Inter, Arial, sans-serif',
       color: '#1e293b',
       boxSizing: 'border-box',
-      overflow: 'hidden',
       position: 'relative',
-      display: 'flex',
-      flexDirection: 'column'
     }}>
       {/* Header with Logo */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', borderBottom: `3px solid ${COLORS.main}`, paddingBottom: '10px' }}>
@@ -86,9 +100,9 @@ function QuotationTemplate({ quotation, items }) {
               onError={(e) => { e.target.style.display = 'none'; if (e.target.parentElement) e.target.parentElement.innerHTML = '<span style="font-size:18px;font-weight:bold;color:' + COLORS.main + '">NG</span>' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 manthata street,midrand | Tel: 070 419 9457| account@ndanduleni.co.za</p>
+            <h1 style={{ fontSize: '22px', fontWeight: 'bold', color: COLORS.dark, margin: '0' }}>{COMPANY_INFO.name}</h1>
+            <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>{COMPANY_INFO.tagline}</p>
+            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>{COMPANY_INFO.address} | Tel: {COMPANY_INFO.phone} | {COMPANY_INFO.email}</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -111,7 +125,7 @@ function QuotationTemplate({ quotation, items }) {
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '1px' }}>Details:</h3>
-          <p style={{ fontSize: '11px', color: '#1e293b', margin: '1px 0' }}><strong>Prepared By:</strong> {quotation?.created_by_name || quotation?.prepared_by_name || 'Ndanduleni Group Sales'}</p>
+          <p style={{ fontSize: '11px', color: '#1e293b', margin: '1px 0' }}><strong>Prepared By:</strong> {creatorName}</p>
           <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Payment Terms:</strong> {quotation?.payment_terms || '50% Deposit, Balance on Completion'}</p>
           <p style={{ fontSize: '10px', color: '#64748b', margin: '1px 0' }}><strong>Validity:</strong> 30 Days from date of issue</p>
         </div>
@@ -167,17 +181,17 @@ function QuotationTemplate({ quotation, items }) {
         </p>
       </div>
 
-      {/* Payment Info */}
+      {/* Banking Details */}
       <div style={{ marginBottom: '8px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
         <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: COLORS.main, marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '1px' }}>Banking Details</h3>
         <div style={{ display: 'flex', gap: '20px', fontSize: '7px', color: '#64748b' }}>
           <div>
-            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> First National Bank (FNB)</p>
-            <p style={{ margin: '1px 0' }}><strong>Account Name:</strong> Ndanduleni Group (Pty) Ltd</p>
+            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> {COMPANY_INFO.bank}</p>
+            <p style={{ margin: '1px 0' }}><strong>Account Name:</strong> {COMPANY_INFO.accountName}</p>
           </div>
           <div>
-            <p style={{ margin: '1px 0' }}><strong>Account Number:</strong> 6277 123 45678</p>
-            <p style={{ margin: '1px 0' }}><strong>Branch Code:</strong> 250655</p>
+            <p style={{ margin: '1px 0' }}><strong>Account Number:</strong> {COMPANY_INFO.accountNumber}</p>
+            <p style={{ margin: '1px 0' }}><strong>Branch Code:</strong> {COMPANY_INFO.branchCode}</p>
           </div>
           <div>
             <p style={{ margin: '1px 0' }}><strong>Reference:</strong> {quotation?.quotation_number || 'Quote Ref'}</p>
@@ -192,12 +206,12 @@ function QuotationTemplate({ quotation, items }) {
       )}
 
       {/* Footer */}
-      <div style={{ marginTop: 'auto', borderTop: `2px solid ${COLORS.main}`, paddingTop: '8px', textAlign: 'center' }}>
+      <div style={{ marginTop: '20px', borderTop: `2px solid ${COLORS.main}`, paddingTop: '8px', textAlign: 'center' }}>
         <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>
-          Ndanduleni Group (Pty) Ltd | Registration: 2020/123456/07 | VAT: 4567890123
+          {COMPANY_INFO.name} (Pty) Ltd | Registration: {COMPANY_INFO.registration} | VAT: {COMPANY_INFO.vat}
         </p>
         <p style={{ fontSize: '7px', color: '#94a3b8', margin: '1px 0' }}>
-          123 Main Street, Johannesburg, 2000 | Tel: +27 11 234 5678 | Email: info@ndanduleni.co.za
+          {COMPANY_INFO.address} | Tel: {COMPANY_INFO.phone} | Email: {COMPANY_INFO.email}
         </p>
         <p style={{ fontSize: '11px', color: COLORS.main, margin: '6px 0 0 0', fontWeight: 'bold', letterSpacing: '1px' }}>
           Thank you for your business! We appreciate the opportunity to serve you.
@@ -235,7 +249,9 @@ export default function CreateQuotation() {
     discount_type: 'none',
     discount_value: 0,
     notes: '',
-    status: 'draft'
+    status: 'draft',
+    created_by_name: '',
+    prepared_by_name: ''
   })
 
   const [items, setItems] = useState([
@@ -247,7 +263,22 @@ export default function CreateQuotation() {
 
   useEffect(() => {
     fetchClients({ status: 'active' })
+    // Set current user name immediately for preview
+    setCurrentUserName()
   }, [fetchClients])
+
+  const setCurrentUserName = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
+      const userName = profile?.full_name || user.email?.split('@')[0] || 'Unknown'
+      setQuotationData(prev => ({ ...prev, created_by_name: userName, prepared_by_name: userName }))
+    }
+  }
 
   useEffect(() => {
     if (id) {
@@ -274,7 +305,9 @@ export default function CreateQuotation() {
           discount_type: quote.discount_type || 'none',
           discount_value: quote.discount_value || 0,
           notes: quote.notes || '',
-          status: quote.status || 'draft'
+          status: quote.status || 'draft',
+          created_by_name: quote.created_by_name || quote.prepared_by_name || '',
+          prepared_by_name: quote.prepared_by_name || quote.created_by_name || ''
         })
 
         if (quote.quotation_items && quote.quotation_items.length > 0) {
@@ -368,8 +401,8 @@ export default function CreateQuotation() {
 
     // Get current user info
     const { data: { user } } = await supabase.auth.getUser()
-    let userName = 'Unknown'
-    if (user) {
+    let userName = quotationData.created_by_name || 'Unknown'
+    if (user && !quotationData.created_by_name) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -434,25 +467,31 @@ export default function CreateQuotation() {
 
       toast.loading('Generating PDF...')
 
-      const clone = previewContainer.cloneNode(true)
+      // Create a fresh full-size clone for PDF
+      const clone = document.createElement('div')
       clone.style.position = 'absolute'
       clone.style.left = '-9999px'
       clone.style.top = '0'
       clone.style.width = '794px'
-      clone.style.height = '1123px'
-      clone.style.transform = 'none'
-      clone.style.overflow = 'hidden'
-      clone.style.maxHeight = '1123px'
-      
-      const innerDiv = clone.querySelector('div')
-      if (innerDiv) {
-        innerDiv.style.transform = 'none'
-        innerDiv.style.width = '100%'
-      }
-      
+      clone.style.backgroundColor = 'white'
       document.body.appendChild(clone)
 
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Render the template at full size into the clone
+      const { createRoot } = await import('react-dom/client')
+      const root = createRoot(clone)
+      root.render(
+        <QuotationTemplate
+          quotation={{ 
+            ...quotationData, 
+            quotation_number: quotationData.quotation_number || 'DRAFT',
+            created_by_name: quotationData.created_by_name,
+            prepared_by_name: quotationData.prepared_by_name
+          }}
+          items={items.filter((item) => item.description)}
+        />
+      )
+
+      await new Promise(resolve => setTimeout(resolve, 800))
 
       const canvas = await html2canvas(clone, {
         scale: 2,
@@ -460,12 +499,10 @@ export default function CreateQuotation() {
         allowTaint: true,
         backgroundColor: '#ffffff',
         width: 794,
-        height: 1123,
-        windowWidth: 794,
-        windowHeight: 1123,
         logging: false
       })
 
+      root.unmount()
       document.body.removeChild(clone)
 
       const imgData = canvas.toDataURL('image/jpeg', 0.95)
@@ -476,8 +513,26 @@ export default function CreateQuotation() {
         compress: true
       })
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
-      
+      const pageWidth = 210
+      const pageHeight = 297
+      const imgWidth = pageWidth
+      const imgHeight = (canvas.height * pageWidth) / canvas.width
+
+      let heightLeft = imgHeight
+      let position = 0
+
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
       const filename = `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`
       pdf.save(filename)
 
@@ -575,6 +630,7 @@ export default function CreateQuotation() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Left Column - Form */}
           <div className="space-y-6">
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Client Information</h2>
@@ -636,6 +692,7 @@ export default function CreateQuotation() {
             </div>
           </div>
 
+          {/* Right Column - Preview & Summary */}
           <div className="lg:sticky lg:top-24 h-fit space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Quotation Summary</h3>
@@ -651,7 +708,12 @@ export default function CreateQuotation() {
               <div className="preview-container bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '550px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.35)', transformOrigin: 'top left', width: '285%' }}>
                   <QuotationTemplate
-                    quotation={{ ...quotationData, quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW', created_by_name: quotationData.created_by_name }}
+                    quotation={{ 
+                      ...quotationData, 
+                      quotation_number: isEditMode ? (quotationData.quotation_number || 'QUOTE') : 'PREVIEW',
+                      created_by_name: quotationData.created_by_name,
+                      prepared_by_name: quotationData.prepared_by_name
+                    }}
                     items={items.filter((item) => item.description)}
                   />
                 </div>
