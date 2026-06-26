@@ -13,7 +13,7 @@ import {
   Save, Send, Briefcase
 } from 'lucide-react'
 
-// Pre-defined services with prices
+// Pre-defined services
 const SERVICES = [
   { category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
   { category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
@@ -52,227 +52,149 @@ const COMPANY = {
   branchCode: '250655',
 }
 
-const COLORS = {
-  main: '#1B5080', dark: '#0D2D4A', light: '#2B6FA8',
-  lightBg: '#e8f0f8', lightBorder: '#c5d5e8',
-  tableHeader: '#1B5080', totalBg: '#eaf1f8',
-}
-
 // ═══════════════════════════════════════════════
-// Build compact single-page A4 quotation HTML
+// BUILD FRESH HTML FOR PDF - EVERY TIME
 // ═══════════════════════════════════════════════
-function buildQuotationHTML(quotation, items, scale = 1) {
-  const formatCurrency = (amount) =>
-    new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
-  const formatDate = (date) => {
-    if (!date) return '__________'
-    return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
+function buildPDFHTML(quotation, items) {
+  const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
+  const fmtDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : '__________'
 
-  const calcLineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
-  const subtotal = (items || []).reduce((s, i) => s + calcLineTotal(i), 0)
-  const vatAmount = subtotal * 0.15
-  const totalAmount = subtotal + vatAmount
+  const lineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
+  const subtotal = (items || []).reduce((s, i) => s + lineTotal(i), 0)
+  const vat = subtotal * 0.15
+  const total = subtotal + vat
 
-  const creatorName = quotation?.created_by_name || quotation?.prepared_by_name || 'Ndanduleni Group Sales'
-  const quoteNumber = quotation?.quotation_number || 'DRAFT'
-  const clientName = quotation?.client_name || 'Client'
+  const creator = quotation?.created_by_name || quotation?.prepared_by_name || 'Ndanduleni Group Sales'
+  const qNum = quotation?.quotation_number || 'DRAFT'
+  const client = quotation?.client_name || 'Client'
   const clientEmail = quotation?.client_email || ''
-  const clientAddress = quotation?.client_address || ''
-  const paymentTerms = quotation?.payment_terms || '50% Deposit, Balance on Completion'
-  const validUntil = formatDate(quotation?.valid_until)
-  const quoteDate = formatDate(quotation?.quotation_date || new Date())
+  const clientAddr = quotation?.client_address || ''
+  const payTerms = quotation?.payment_terms || '50% Deposit, Balance on Completion'
+  const vUntil = fmtDate(quotation?.valid_until)
+  const qDate = fmtDate(quotation?.quotation_date || new Date())
   const notes = quotation?.notes || ''
 
-  // Scale factor for fonts and spacing
-  const s = scale
-  const baseFont = Math.round(10 * s)
-  const smallFont = Math.round(8 * s)
-  const tinyFont = Math.round(7 * s)
-  const headerFont = Math.round(22 * s)
-  const bigFont = Math.round(28 * s)
-  const sectionPad = Math.round(6 * s)
-  const rowPad = Math.round(4 * s)
-
-  const itemsHTML = (items || []).filter(item => item.description).map((item, i) => `
+  const itemRows = (items || []).filter(i => i.description).map((item, i) => `
     <tr>
-      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#64748b;border-bottom:1px solid #e2e8f0;">${i + 1}</td>
-      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;font-weight:500;border-bottom:1px solid #e2e8f0;">${item.description}</td>
-      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td>
-      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:right;border-bottom:1px solid #e2e8f0;">${formatCurrency(item.unit_price)}</td>
-      <td style="padding:${rowPad}px 8px;font-size:${smallFont}px;color:#1e293b;text-align:right;font-weight:600;border-bottom:1px solid #e2e8f0;">${formatCurrency(calcLineTotal(item))}</td>
+      <td class="td">${i + 1}</td>
+      <td class="td" style="font-weight:500;">${item.description}</td>
+      <td class="td" style="text-align:center;">${item.quantity}</td>
+      <td class="td" style="text-align:right;">${fmt(item.unit_price)}</td>
+      <td class="td" style="text-align:right;font-weight:600;">${fmt(lineTotal(item))}</td>
     </tr>
   `).join('')
 
-  return `
-<!DOCTYPE html>
+  // Build COMPLETELY fresh HTML string
+  return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', Arial, sans-serif; color: #1e293b; }
-  </style>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;background:white}
+  .td{padding:4px 8px;font-size:9px;color:#1e293b;border-bottom:1px solid #e2e8f0}
+  .th{padding:5px 8px;font-size:8px;font-weight:bold;text-transform:uppercase;text-align:left}
+  .section-title{font-size:8px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:2px;letter-spacing:1px}
+  .small-text{font-size:7px;color:#94a3b8}
+  .tiny-text{font-size:6px;color:#94a3b8}
+</style>
 </head>
 <body>
-<div style="width:794px;padding:20px 35px;background:white;">
+<div style="width:794px;padding:18px 32px;background:white;">
 
-  <!-- HEADER - Compact -->
-  <div style="display:flex;justify-content:space-between;border-bottom:3px solid ${COLORS.main};padding-bottom:8px;margin-bottom:10px;">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:45px;height:45px;border-radius:50%;background:${COLORS.lightBg};display:flex;align-items:center;justify-content:center;border:2px solid ${COLORS.lightBorder};overflow:hidden;flex-shrink:0;">
-        <img src="/logo.png" alt="Logo" style="width:80%;height:80%;object-fit:contain;" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:18px;font-weight:bold;color:${COLORS.main}>NG</span>'" />
-      </div>
+  <!-- HEADER -->
+  <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1B5080;padding-bottom:6px;margin-bottom:8px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:40px;height:40px;border-radius:50%;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border:2px solid #c5d5e8;font-size:16px;font-weight:bold;color:#1B5080;">NG</div>
       <div>
-        <h1 style="font-size:${headerFont}px;font-weight:bold;color:${COLORS.dark};margin:0;line-height:1.1;">${COMPANY.name}</h1>
-        <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;">${COMPANY.tagline}</p>
-        <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:0;">${COMPANY.address} | Tel: ${COMPANY.phone} | ${COMPANY.email}</p>
+        <h1 style="font-size:20px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1;">${COMPANY.name}</h1>
+        <p class="tiny-text" style="margin:1px 0;">${COMPANY.tagline}</p>
+        <p class="tiny-text" style="margin:0;">${COMPANY.address} | Tel: ${COMPANY.phone} | ${COMPANY.email}</p>
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0;">
-      <h2 style="font-size:${bigFont}px;font-weight:bold;color:${COLORS.dark};margin:0;letter-spacing:1px;line-height:1;">QUOTATION</h2>
-      <p style="font-size:${Math.round(16 * s)}px;color:${COLORS.main};margin:2px 0;font-weight:bold;">#${quoteNumber}</p>
-      <div style="margin-top:3px;font-size:${tinyFont}px;color:#64748b;">
-        <p style="margin:1px 0;">Date: ${quoteDate}</p>
-        <p style="margin:1px 0;">Valid Until: ${validUntil}</p>
-      </div>
+    <div style="text-align:right;">
+      <h2 style="font-size:26px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:1px;line-height:1;">QUOTATION</h2>
+      <p style="font-size:14px;color:#1B5080;margin:2px 0;font-weight:bold;">#${qNum}</p>
+      <p class="tiny-text" style="margin:1px 0;">Date: ${qDate}</p>
+      <p class="tiny-text" style="margin:1px 0;">Valid Until: ${vUntil}</p>
     </div>
   </div>
 
-  <!-- BILL TO & DETAILS - Compact -->
-  <div style="display:flex;gap:20px;margin-bottom:10px;">
+  <!-- BILL TO & DETAILS -->
+  <div style="display:flex;gap:20px;margin-bottom:8px;">
     <div style="flex:1;">
-      <h3 style="font-size:${tinyFont}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:2px;letter-spacing:1px;">Bill To:</h3>
-      <p style="font-size:${Math.round(13 * s)}px;font-weight:bold;color:#1e293b;margin:0;">${clientName}</p>
-      ${clientEmail ? `<p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;">${clientEmail}</p>` : ''}
-      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;white-space:pre-line;">${clientAddress}</p>
+      <p class="section-title">Bill To:</p>
+      <p style="font-size:13px;font-weight:bold;margin:0;">${client}</p>
+      ${clientEmail ? `<p class="tiny-text" style="margin:1px 0;">${clientEmail}</p>` : ''}
+      <p class="tiny-text" style="margin:1px 0;white-space:pre-line;">${clientAddr}</p>
     </div>
     <div style="flex:1;">
-      <h3 style="font-size:${tinyFont}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:2px;letter-spacing:1px;">Details:</h3>
-      <p style="font-size:${Math.round(11 * s)}px;color:#1e293b;margin:1px 0;"><strong>Prepared By:</strong> ${creatorName}</p>
-      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;"><strong>Payment Terms:</strong> ${paymentTerms}</p>
-      <p style="font-size:${tinyFont}px;color:#64748b;margin:1px 0;"><strong>Validity:</strong> 30 Days from date of issue</p>
+      <p class="section-title">Details:</p>
+      <p style="font-size:10px;margin:1px 0;"><strong>Prepared By:</strong> ${creator}</p>
+      <p class="tiny-text" style="margin:1px 0;"><strong>Payment Terms:</strong> ${payTerms}</p>
+      <p class="tiny-text" style="margin:1px 0;"><strong>Validity:</strong> 30 Days</p>
     </div>
   </div>
 
-  <!-- ITEMS TABLE - Compact -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+  <!-- ITEMS TABLE -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:6px;">
     <thead>
-      <tr style="background:${COLORS.tableHeader};color:white;">
-        <th style="padding:${rowPad}px 8px;text-align:left;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;">#</th>
-        <th style="padding:${rowPad}px 8px;text-align:left;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;">Description</th>
-        <th style="padding:${rowPad}px 8px;text-align:center;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:40px;">Qty</th>
-        <th style="padding:${rowPad}px 8px;text-align:right;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:85px;">Unit Price</th>
-        <th style="padding:${rowPad}px 8px;text-align:right;font-size:${tinyFont}px;font-weight:bold;text-transform:uppercase;width:85px;">Total</th>
+      <tr style="background:#1B5080;color:white;">
+        <th class="th">#</th>
+        <th class="th">Description</th>
+        <th class="th" style="text-align:center;width:35px;">Qty</th>
+        <th class="th" style="text-align:right;width:80px;">Unit Price</th>
+        <th class="th" style="text-align:right;width:80px;">Total</th>
       </tr>
     </thead>
     <tbody>
-      ${itemsHTML || '<tr><td colspan="5" style="padding:15px;text-align:center;color:#94a3b8;font-size:' + tinyFont + 'px;">No items</td></tr>'}
+      ${itemRows || '<tr><td colspan="5" style="padding:12px;text-align:center;font-size:9px;color:#94a3b8;">No items</td></tr>'}
     </tbody>
   </table>
 
-  <!-- TOTALS - Compact -->
-  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-    <div style="width:240px;border:1px solid #e2e8f0;border-radius:3px;overflow:hidden;">
-      <div style="display:flex;justify-content:space-between;padding:${rowPad}px 10px;border-bottom:1px solid #e2e8f0;font-size:${tinyFont}px;background:#f8fafc;">
-        <span style="color:#64748b;">Subtotal (Excl. VAT):</span>
-        <span style="color:#1e293b;font-weight:600;">${formatCurrency(subtotal)}</span>
+  <!-- TOTALS -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <div style="width:220px;border:1px solid #e2e8f0;border-radius:3px;">
+      <div style="display:flex;justify-content:space-between;padding:4px 10px;border-bottom:1px solid #e2e8f0;font-size:8px;background:#f8fafc;">
+        <span>Subtotal (Excl. VAT):</span><span style="font-weight:600;">${fmt(subtotal)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:${rowPad}px 10px;border-bottom:1px solid #e2e8f0;font-size:${tinyFont}px;background:#f8fafc;">
-        <span style="color:#64748b;">VAT (15%):</span>
-        <span style="color:#1e293b;">${formatCurrency(vatAmount)}</span>
+      <div style="display:flex;justify-content:space-between;padding:4px 10px;border-bottom:1px solid #e2e8f0;font-size:8px;background:#f8fafc;">
+        <span>VAT (15%):</span><span>${fmt(vat)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:${Math.round(8 * s)}px 10px;font-size:${Math.round(13 * s)}px;font-weight:bold;background:${COLORS.totalBg};">
-        <span style="color:${COLORS.dark};">TOTAL (Incl. VAT):</span>
-        <span style="color:${COLORS.dark};font-size:${Math.round(15 * s)}px;">${formatCurrency(totalAmount)}</span>
+      <div style="display:flex;justify-content:space-between;padding:7px 10px;font-size:13px;font-weight:bold;background:#eaf1f8;">
+        <span style="color:#0D2D4A;">TOTAL (Incl. VAT):</span><span style="color:#0D2D4A;font-size:14px;">${fmt(total)}</span>
       </div>
     </div>
   </div>
 
-  <!-- TERMS - Compact -->
-  <div style="margin-bottom:${sectionPad}px;">
-    <h3 style="font-size:${tinyFont - 1}px;font-weight:bold;color:#64748b;text-transform:uppercase;margin-bottom:1px;letter-spacing:1px;">Terms & Conditions</h3>
-    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;line-height:1.3;margin:0;">
-      1. Valid 30 days. 2. Payment: ${paymentTerms}. 3. Prices include 15% VAT. 4. Services per agreed schedule. 5. 30 days cancellation notice. 6. Ndanduleni Group reserves right to adjust pricing for scope changes.
-    </p>
+  <!-- TERMS -->
+  <div style="margin-bottom:5px;">
+    <p class="section-title">Terms & Conditions</p>
+    <p class="small-text" style="line-height:1.3;margin:0;">1. Valid 30 days. 2. Payment: ${payTerms}. 3. Prices include 15% VAT. 4. Services per agreed schedule. 5. 30 days cancellation notice. 6. Ndanduleni Group reserves right to adjust pricing for scope changes.</p>
   </div>
 
-  <!-- BANKING - Compact -->
-  <div style="margin-bottom:${sectionPad}px;padding:${sectionPad}px 10px;background:#f8fafc;border-radius:3px;border:1px solid #e2e8f0;">
-    <h3 style="font-size:${tinyFont - 1}px;font-weight:bold;color:${COLORS.main};margin-bottom:2px;text-transform:uppercase;letter-spacing:1px;">Banking Details</h3>
-    <div style="display:flex;gap:20px;font-size:${tinyFont - 1}px;color:#64748b;">
-      <div><p style="margin:0;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="margin:0;"><strong>Account:</strong> ${COMPANY.accountName}</p></div>
-      <div><p style="margin:0;"><strong>Acc #:</strong> ${COMPANY.accountNumber}</p><p style="margin:0;"><strong>Branch:</strong> ${COMPANY.branchCode}</p></div>
-      <div><p style="margin:0;"><strong>Ref:</strong> ${quoteNumber}</p></div>
+  <!-- BANKING -->
+  <div style="margin-bottom:5px;padding:4px 10px;background:#f8fafc;border-radius:3px;border:1px solid #e2e8f0;">
+    <p class="section-title" style="color:#1B5080;">Banking Details</p>
+    <div style="display:flex;gap:18px;">
+      <div class="tiny-text"><p style="margin:0;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="margin:0;"><strong>Account:</strong> ${COMPANY.accountName}</p></div>
+      <div class="tiny-text"><p style="margin:0;"><strong>Acc #:</strong> ${COMPANY.accountNumber}</p><p style="margin:0;"><strong>Branch:</strong> ${COMPANY.branchCode}</p></div>
+      <div class="tiny-text"><p style="margin:0;"><strong>Ref:</strong> ${qNum}</p></div>
     </div>
   </div>
 
-  ${notes ? `
-  <div style="margin-bottom:${sectionPad}px;padding:${sectionPad - 1}px 10px;background:#f8fafc;border-radius:3px;">
-    <p style="font-size:${tinyFont - 1}px;color:#64748b;margin:0;"><strong>Notes:</strong> ${notes}</p>
-  </div>` : ''}
+  ${notes ? `<div style="margin-bottom:5px;padding:3px 10px;background:#f8fafc;border-radius:3px;"><p class="tiny-text" style="margin:0;"><strong>Notes:</strong> ${notes}</p></div>` : ''}
 
-  <!-- FOOTER - Directly below content, no auto margin -->
-  <div style="margin-top:15px;border-top:2px solid ${COLORS.main};padding-top:6px;text-align:center;">
-    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:0;">
-      ${COMPANY.name} (Pty) Ltd | Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}
-    </p>
-    <p style="font-size:${tinyFont - 1}px;color:#94a3b8;margin:1px 0;">
-      ${COMPANY.address} | Tel: ${COMPANY.phone} | Email: ${COMPANY.email}
-    </p>
-    <p style="font-size:${Math.round(10 * s)}px;color:${COLORS.main};margin:4px 0 0 0;font-weight:bold;">
-      Thank you for your business!
-    </p>
+  <!-- FOOTER -->
+  <div style="margin-top:10px;border-top:2px solid #1B5080;padding-top:5px;text-align:center;">
+    <p class="tiny-text" style="margin:0;">${COMPANY.name} (Pty) Ltd | Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}</p>
+    <p class="tiny-text" style="margin:1px 0;">${COMPANY.address} | Tel: ${COMPANY.phone} | Email: ${COMPANY.email}</p>
+    <p style="font-size:9px;color:#1B5080;margin:3px 0 0 0;font-weight:bold;">Thank you for your business!</p>
   </div>
 
 </div>
 </body>
 </html>`
-}
-
-// ═══════════════════════════════════════════════
-// Auto-compress layout if content exceeds one page
-// ═══════════════════════════════════════════════
-async function autoCompressLayout(quotation, items) {
-  const A4_HEIGHT = 1123
-  let scale = 1
-  let fits = false
-  let attempts = 0
-
-  while (!fits && attempts < 10) {
-    const html = buildQuotationHTML(quotation, items, scale)
-    const height = await measureContentHeight(html)
-    
-    if (height <= A4_HEIGHT) {
-      fits = true
-    } else {
-      scale -= 0.05 // Reduce by 5% each attempt
-      attempts++
-    }
-  }
-
-  return Math.max(scale, 0.7) // Don't go below 70%
-}
-
-async function measureContentHeight(html) {
-  return new Promise((resolve) => {
-    const container = document.createElement('div')
-    container.innerHTML = html
-    container.style.position = 'absolute'
-    container.style.left = '-9999px'
-    container.style.top = '0'
-    container.style.width = '794px'
-    container.style.visibility = 'hidden'
-    document.body.appendChild(container)
-    
-    // Wait for render
-    setTimeout(() => {
-      const height = container.scrollHeight
-      document.body.removeChild(container)
-      resolve(height)
-    }, 300)
-  })
 }
 
 // ═══════════════════════════════════════════════
@@ -351,14 +273,10 @@ export default function CreateQuotation() {
     setLoadingQuote(false)
   }
 
-  const calculateLineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
-  const calculateSubtotal = () => items.reduce((sum, item) => sum + calculateLineTotal(item), 0)
-  const calculateVAT = () => calculateSubtotal() * 0.15
-  const calculateTotal = () => calculateSubtotal() + calculateVAT()
-
-  const subtotal = calculateSubtotal()
-  const vatAmount = calculateVAT()
-  const totalAmount = calculateTotal()
+  const calcLineTotal = (item) => (item.quantity || 0) * (item.unit_price || 0)
+  const calcSubtotal = () => items.reduce((sum, item) => sum + calcLineTotal(item), 0)
+  const calcVAT = () => calcSubtotal() * 0.15
+  const calcTotal = () => calcSubtotal() + calcVAT()
 
   const handleClientSelect = (clientId) => {
     const client = clients.find((c) => c.id === clientId)
@@ -384,83 +302,89 @@ export default function CreateQuotation() {
 
     const { data: { user } } = await supabase.auth.getUser()
     let userName = quotationData.created_by_name || 'Unknown'
-    if (user && !quotationData.created_by_name) {
-      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
-      userName = profile?.full_name || user.email?.split('@')[0] || 'Unknown'
-    }
 
     const cleanItems = items.filter(i => i.description).map(i => ({
       description: i.description, quantity: i.quantity || 1, unit: i.unit || 'per_service',
       unit_price: i.unit_price || 0, tax_percent: i.tax_percent ?? 15, discount_percent: i.discount_percent ?? 0
     }))
 
-    const quotePayload = { ...quotationData, subtotal, tax_amount: vatAmount, discount_amount: 0, total_amount: totalAmount, status, created_by: user?.id, created_by_name: userName, prepared_by: user?.id, prepared_by_name: userName }
+    const payload = { ...quotationData, subtotal: calcSubtotal(), tax_amount: calcVAT(), discount_amount: 0, total_amount: calcTotal(), status, created_by: user?.id, created_by_name: userName, prepared_by: user?.id, prepared_by_name: userName }
 
     if (isEditMode) {
-      const result = await updateQuotation(id, quotePayload)
+      const result = await updateQuotation(id, payload)
       if (!result.success) { toast.error('Failed to update'); return }
-      toast.success(status === 'sent' ? 'Updated & sent!' : 'Updated!')
+      toast.success('Updated!')
     } else {
-      const result = await createQuotation(quotePayload, cleanItems)
+      const result = await createQuotation(payload, cleanItems)
       if (!result.success) { toast.error('Failed to save'); return }
       setSavedQuotationId(result.data.id)
-      toast.success(status === 'sent' ? 'Sent!' : 'Saved!')
+      toast.success('Saved!')
     }
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - Auto-compress to fit one page
+  // PDF DOWNLOAD - FRESH BUILD EVERY TIME
   // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
-      const html2pdf = (await import('html2pdf.js')).default
       toast.loading('Generating PDF...')
 
-      const activeItems = items.filter(item => item.description)
-      
-      // Auto-compress to fit single page
-      const optimalScale = await autoCompressLayout(quotationData, activeItems)
-      
-      // Build final HTML at optimal scale
-      const htmlContent = buildQuotationHTML(quotationData, activeItems, optimalScale)
+      // Build FRESH HTML from current state
+      const freshHTML = buildPDFHTML(quotationData, items.filter(i => i.description))
 
+      // Create a unique container
+      const containerId = 'pdf-container-' + Date.now()
       const container = document.createElement('div')
-      container.innerHTML = htmlContent
+      container.id = containerId
+      container.innerHTML = freshHTML
       container.style.position = 'absolute'
       container.style.left = '-9999px'
+      container.style.top = '0'
       container.style.width = '794px'
+      container.style.backgroundColor = 'white'
       document.body.appendChild(container)
 
-      await new Promise(resolve => setTimeout(resolve, 400))
+      // Wait for fonts/images to load
+      await new Promise(resolve => setTimeout(resolve, 600))
+
+      const html2pdf = (await import('html2pdf.js')).default
 
       const opt = {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${(quotationData.client_name || 'client').replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, width: 794 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          letterRendering: true, 
+          width: 794,
+          windowWidth: 794,
+          logging: false
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css'] }
       }
 
       await html2pdf().set(opt).from(container).save()
-      document.body.removeChild(container)
 
+      // Clean up
+      document.body.removeChild(container)
       toast.dismiss()
       toast.success('PDF downloaded! 📄')
     } catch (error) {
       console.error('PDF error:', error)
       toast.dismiss()
-      toast.error('Failed to generate PDF')
+      toast.error('Failed to generate PDF: ' + error.message)
     }
   }
 
   const formatCurrency = (amount) =>
-    new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount || 0)
+    new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
 
   const serviceCategories = [...new Set(SERVICES.map((s) => s.category))]
 
   if (loadingQuote) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div></div>
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
   }
 
   return (
@@ -469,7 +393,7 @@ export default function CreateQuotation() {
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">Enterprise Resource Planning</span>
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
         </div>
         <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
           {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
@@ -482,68 +406,56 @@ export default function CreateQuotation() {
           <ChevronRight className="w-4 h-4 text-slate-400" />
           <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
-          <span className="text-slate-800 dark:text-white font-medium">{isEditMode ? 'Edit' : 'New Quotation'}</span>
+          <span className="font-medium">{isEditMode ? 'Edit' : 'New'}</span>
         </div>
 
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-3">
-            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">PDF</span></button>
-            <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700"><Save className="w-4 h-4" /><span className="hidden sm:inline">Save</span></button>
-            <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Send className="w-4 h-4" /><span className="hidden sm:inline">Send</span></button>
+            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
+            <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2"><Save className="w-4 h-4" />Save</button>
+            <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"><Send className="w-4 h-4" />Send</button>
           </div>
         </div>
 
-        {savedQuotationId && !isEditMode && (
-          <div className="mb-6 p-4 neu-raised rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 flex items-center justify-between">
-            <div><p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Saved!</p></div>
-            <button onClick={() => navigate('/operations/jobs/new')} className="px-5 py-2.5 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2"><Briefcase className="w-4 h-4" /><span>Convert to Job</span></button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-6">
             <div className="neu-raised rounded-3xl p-6">
-              <h2 className="text-lg font-semibold mb-4">Client Information</h2>
-              <div className="space-y-4">
-                <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl"><option value="">Select Client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
-                <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({...quotationData, client_name: e.target.value})} placeholder="Client Name" className="w-full p-3 neu-inset rounded-xl" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" />
-                  <input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" />
-                </div>
-                <textarea value={quotationData.client_address} onChange={(e) => setQuotationData({...quotationData, client_address: e.target.value})} placeholder="Address" rows={2} className="w-full p-3 neu-inset rounded-xl" />
-              </div>
+              <h2 className="text-lg font-semibold mb-4">Client</h2>
+              <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-3"><option value="">Select Client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+              <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({...quotationData, client_name: e.target.value})} placeholder="Client Name" className="w-full p-3 neu-inset rounded-xl mb-3" />
+              <div className="grid grid-cols-2 gap-3 mb-3"><input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" /><input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" /></div>
+              <textarea value={quotationData.client_address} onChange={(e) => setQuotationData({...quotationData, client_address: e.target.value})} placeholder="Address" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
             <div className="neu-raised rounded-3xl p-6">
-              <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Services</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" /> Add</button></div>
-              <div className="space-y-4">
-                {items.map((item, index) => (
-                  <div key={index} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 space-y-3">
-                    <div className="flex justify-between"><span className="text-sm">Service {index+1}</span><button onClick={() => removeItem(index)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
-                    <select value={item.description} onChange={(e) => handleServiceSelect(index, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm"><option value="">Select Service</option>{serviceCategories.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.name} - {formatCurrency(s.unit_price)}</option>))}</optgroup>))}</select>
-                    <div className="grid grid-cols-2 gap-2"><div><label className="text-xs">Qty</label><input type="number" value={item.quantity} onChange={(e) => updateItem(index,'quantity',parseInt(e.target.value)||1)} min="1" className="w-full p-2 neu-inset rounded-lg text-sm mt-1" /></div><div><label className="text-xs">Unit Price</label><input type="number" value={item.unit_price} onChange={(e) => updateItem(index,'unit_price',parseFloat(e.target.value)||0)} className="w-full p-2 neu-inset rounded-lg text-sm mt-1" /></div></div>
-                    <div className="flex justify-between pt-2 border-t"><span className="text-xs">Line Total:</span><span className="text-sm font-bold">{formatCurrency(calculateLineTotal(item))}</span></div>
-                  </div>
-                ))}
-              </div>
+              <div className="flex justify-between mb-4"><h2 className="text-lg font-semibold">Services</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
+              {items.map((item, i) => (
+                <div key={i} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
+                  <div className="flex justify-between mb-2"><span>Service {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
+                  <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{serviceCategories.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.name}</option>))}</optgroup>))}</select>
+                  <div className="grid grid-cols-2 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /></div>
+                  <p className="text-right text-sm font-bold mt-2">{formatCurrency(calcLineTotal(item))}</p>
+                </div>
+              ))}
             </div>
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold mb-4">Details</h2>
-              <div className="space-y-4"><div><label className="text-sm">Valid Until</label><input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({...quotationData, valid_until: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" /></div>
-              <textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Additional notes..." rows={2} className="w-full p-3 neu-inset rounded-xl" /></div>
+              <input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({...quotationData, valid_until: e.target.value})} className="w-full p-3 neu-inset rounded-xl mb-3" />
+              <textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Notes" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
           </div>
-          <div className="lg:sticky lg:top-24 h-fit space-y-4">
+          <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-4">Summary</h3>
-              <div className="space-y-3"><div className="flex justify-between text-sm"><span>Subtotal:</span><span className="font-medium">{formatCurrency(subtotal)}</span></div><div className="flex justify-between text-sm"><span>VAT (15%):</span><span className="font-medium">{formatCurrency(vatAmount)}</span></div><div className="flex justify-between text-base font-bold pt-2 border-t"><span>Total:</span><span className="text-emerald-600">{formatCurrency(totalAmount)}</span></div></div>
+              <p className="flex justify-between text-sm mb-2"><span>Subtotal:</span><span>{formatCurrency(calcSubtotal())}</span></p>
+              <p className="flex justify-between text-sm mb-2"><span>VAT (15%):</span><span>{formatCurrency(calcVAT())}</span></p>
+              <p className="flex justify-between text-base font-bold pt-2 border-t"><span>Total:</span><span className="text-emerald-600">{formatCurrency(calcTotal())}</span></p>
             </div>
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div className="bg-white rounded-xl overflow-hidden shadow-inner" style={{ maxHeight: '500px', overflow: 'auto' }}>
                 <div style={{ transform: 'scale(0.33)', transformOrigin: 'top left', width: '303%' }}>
-                  <div dangerouslySetInnerHTML={{ __html: buildQuotationHTML({ ...quotationData, quotation_number: 'PREVIEW' }, items.filter(i => i.description)) }} />
+                  <div dangerouslySetInnerHTML={{ __html: buildPDFHTML(quotationData, items.filter(i => i.description)) }} />
                 </div>
               </div>
             </div>
