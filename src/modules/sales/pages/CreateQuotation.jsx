@@ -12,9 +12,6 @@ import {
   Save, Send
 } from 'lucide-react'
 
-// ═══════════════════════════════════════════════
-// SERVICES & COMPANY CONFIG
-// ═══════════════════════════════════════════════
 const SERVICES = [
   { code: 'CLN-001', category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
   { code: 'CLN-002', category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
@@ -65,7 +62,8 @@ const DEFAULT_TERMS = [
 const A4_WIDTH_PX = 794
 
 // ═══════════════════════════════════════════════
-// BUILD A4 QUOTATION HTML
+// SINGLE QUOTATION HTML BUILDER
+// Used by BOTH preview and PDF - they will be IDENTICAL
 // ═══════════════════════════════════════════════
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
@@ -87,89 +85,90 @@ function buildQuotationHTML(quotation, items) {
 
   const productRows = items.map((item, i) => `
     <tr>
-      <td class="td-c">${i + 1}</td>
-      <td class="td-c">${item.code || ''}</td>
-      <td class="td-l">${item.description}${item.unit_price === 0 ? ' <span style="color:#059669;font-weight:bold;">(FREE)</span>' : ''}</td>
-      <td class="td-c">${item.quantity}</td>
-      <td class="td-c">${item.unit || 'each'}</td>
-      <td class="td-r">${fmt(item.unit_price)}</td>
-      <td class="td-c">${item.discount_percent || 0}%</td>
-      <td class="td-c">${item.tax_percent || 15}%</td>
-      <td class="td-r"><strong>${fmt(lineGrandTotal(item))}</strong></td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${i + 1}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.code || ''}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:left">${item.description}${item.unit_price === 0 ? ' <span style="color:#059669;font-weight:bold;">(FREE)</span>' : ''}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.quantity}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.unit || 'each'}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(item.unit_price)}</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.discount_percent || 0}%</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.tax_percent || 15}%</td>
+      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;background:#fff;line-height:1.3}
-.page{width:${A4_WIDTH_PX}px;padding:28px 40px;background:#fff}
-.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px}
-.hdr-l{display:flex;align-items:flex-start;gap:14px}
-.logo-img{width:90px;height:auto;object-fit:contain;flex-shrink:0}
-.logo-fallback{width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0}
-.cn{font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1}
-.cd{font-size:7px;color:#64748b;margin:0}
-.hdr-r{text-align:right;flex-shrink:0}
-.qt{font-size:26px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px}
-.qn{font-size:12px;color:#1B5080;font-weight:bold;margin:2px 0}
-.qi{font-size:7px;color:#64748b}
-.qi p{margin:0}
-.row{display:flex;gap:6px;margin-bottom:5px}
-.box{flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px}
-.bt{font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px}
-.box p{font-size:7px;margin:1px 0}
-table{width:100%;border-collapse:collapse;margin-bottom:5px}
-th{background:#1B5080;color:#fff;padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center}
-.td-l{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:left}
-.td-c{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center}
-.td-r{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right}
-.tr{display:flex;justify-content:flex-end;margin-bottom:5px}
-.tb{width:220px;border:1px solid #d1d5db;border-radius:3px;overflow:hidden}
-.tl{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px}
-.tlg{display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;font-weight:bold;background:#eaf1f8}
-.br{display:flex;gap:6px;margin-bottom:3px}
-.bb{flex:1;font-size:6px}
-.bbt{font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px}
-.ft{border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px}
-</style></head><body>
-<div class="page">
-<div class="hdr">
-<div class="hdr-l">
-<img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div class=logo-fallback>NG</div>')" />
+  // This HTML is used for BOTH the form preview AND the PDF download
+  return `<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;box-sizing:border-box">
+<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px">
+<div style="display:flex;align-items:flex-start;gap:14px">
+<img src="/logo.png" alt="Logo" style="width:90px;height:auto;object-fit:contain" onerror="this.style.display='none'" />
 <div>
-<h1 class="cn">${COMPANY.name}</h1>
-<p class="cd">${COMPANY.tagline}</p>
-<p class="cd">${COMPANY.address}</p>
-<p class="cd">Tel: ${COMPANY.phone} | Fax: ${COMPANY.fax}</p>
-<p class="cd">Email: ${COMPANY.email} | Web: ${COMPANY.website}</p>
-<p class="cd">Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}</p>
+<h1 style="font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1">${COMPANY.name}</h1>
+<p style="font-size:7px;color:#64748b;margin:0">${COMPANY.tagline}</p>
+<p style="font-size:7px;color:#64748b;margin:0">${COMPANY.address}</p>
+<p style="font-size:7px;color:#64748b;margin:0">Tel: ${COMPANY.phone} | Fax: ${COMPANY.fax}</p>
+<p style="font-size:7px;color:#64748b;margin:0">Email: ${COMPANY.email} | Web: ${COMPANY.website}</p>
+<p style="font-size:7px;color:#64748b;margin:0">Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}</p>
 </div>
 </div>
-<div class="hdr-r">
-<h2 class="qt">QUOTATION</h2>
-<p class="qn">Quotation No: ${quoteNum}</p>
-<div class="qi">
-<p>Date: ${fmtDate(quotation?.quotation_date || new Date())}</p>
-<p>Expiry: ${fmtDate(quotation?.valid_until)}</p>
-<p>Salesperson: ${creatorName}</p>
-<p>Branch: Johannesburg</p>
-<p>Currency: ZAR</p>
-<p>Status: ${quotation?.status || 'Draft'}</p>
+<div style="text-align:right">
+<h2 style="font-size:26px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px">QUOTATION</h2>
+<p style="font-size:12px;color:#1B5080;font-weight:bold;margin:2px 0">Quotation No: ${quoteNum}</p>
+<div style="font-size:7px;color:#64748b">
+<p style="margin:0">Date: ${fmtDate(quotation?.quotation_date || new Date())}</p>
+<p style="margin:0">Expiry: ${fmtDate(quotation?.valid_until)}</p>
+<p style="margin:0">Salesperson: ${creatorName}</p>
+<p style="margin:0">Branch: Johannesburg</p>
+<p style="margin:0">Currency: ZAR</p>
+<p style="margin:0">Status: ${quotation?.status || 'Draft'}</p>
 </div>
 </div>
 </div>
-<div class="row">
-<div class="box"><div class="bt">Customer Details</div><p><strong>Customer:</strong> ${quotation?.client_name || ''}</p><p><strong>Phone:</strong> ${quotation?.client_phone || ''}</p><p><strong>Email:</strong> ${quotation?.client_email || ''}</p><p><strong>Address:</strong> ${quotation?.client_address || ''}</p></div>
-<div class="box"><div class="bt">Quote Information</div><p><strong>Quote No:</strong> ${quoteNum}</p><p><strong>Date:</strong> ${fmtDate(quotation?.quotation_date || new Date())}</p><p><strong>Terms:</strong> ${quotation?.payment_terms || '50% Deposit'}</p><p><strong>Sales Rep:</strong> ${creatorName}</p><p><strong>Branch:</strong> Johannesburg</p></div>
+<div style="display:flex;gap:6px;margin-bottom:5px">
+<div style="flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px">
+<div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Customer Details</div>
+<p style="font-size:7px;margin:1px 0"><strong>Customer:</strong> ${quotation?.client_name || ''}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Phone:</strong> ${quotation?.client_phone || ''}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Email:</strong> ${quotation?.client_email || ''}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Address:</strong> ${quotation?.client_address || ''}</p>
 </div>
-<table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${productRows || '<tr><td colspan="9" class="td-c" style="padding:15px;color:#94a3b8;">No items</td></tr>'}</tbody></table>
-<div class="tr"><div class="tb"><div class="tl"><span>Subtotal</span><span>${fmt(subtotal)}</span></div><div class="tl"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div><div class="tl"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div><div class="tlg"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div></div></div>
-${quotation?.notes ? `<div class="box" style="margin-bottom:4px;"><div class="bt">Notes</div><p style="font-size:7px;white-space:pre-line;">${quotation.notes}</p></div>` : ''}
-<div class="br">
-<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:6px;color:#64748b;">${quotation?.terms_and_conditions || DEFAULT_TERMS.join('\n')}</p></div>
-<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:6px;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;"><strong>Ref:</strong> ${quoteNum}</p></div>
+<div style="flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px">
+<div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Quote Information</div>
+<p style="font-size:7px;margin:1px 0"><strong>Quote No:</strong> ${quoteNum}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Date:</strong> ${fmtDate(quotation?.quotation_date || new Date())}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Terms:</strong> ${quotation?.payment_terms || '50% Deposit'}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Sales Rep:</strong> ${creatorName}</p>
+<p style="font-size:7px;margin:1px 0"><strong>Branch:</strong> Johannesburg</p>
 </div>
-<div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p>Page 1 of 1</p></div>
-</div></body></html>`
+</div>
+<table style="width:100%;border-collapse:collapse;margin-bottom:5px">
+<thead><tr style="background:#1B5080;color:#fff">
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">No</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Code</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:left">Description</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Qty</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Unit</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:right">Unit Price</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Disc</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">VAT</th>
+<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:right">Total</th>
+</tr></thead>
+<tbody>${productRows || '<tr><td colspan="9" style="padding:15px;text-align:center;font-size:7px;color:#94a3b8">No items</td></tr>'}</tbody>
+</table>
+<div style="display:flex;justify-content:flex-end;margin-bottom:5px">
+<div style="width:220px;border:1px solid #d1d5db;border-radius:3px;overflow:hidden">
+<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;font-weight:bold;background:#eaf1f8"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div>
+</div>
+</div>
+${quotation?.notes ? `<div style="border:1px solid #d1d5db;border-radius:3px;padding:5px 7px;margin-bottom:4px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Notes</div><p style="font-size:7px;white-space:pre-line;margin:0">${quotation.notes}</p></div>` : ''}
+<div style="display:flex;gap:6px;margin-bottom:3px">
+<div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Terms & Conditions</div><p style="white-space:pre-line;font-size:6px;color:#64748b;margin:0">${quotation?.terms_and_conditions || DEFAULT_TERMS.join('\n')}</p></div>
+<div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Banking Details</div><p style="font-size:6px;margin:0"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;margin:0"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;margin:0"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;margin:0"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;margin:0"><strong>Ref:</strong> ${quoteNum}</p></div>
+</div>
+<div style="border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px"><p style="margin:0">${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p style="margin:0">Page 1 of 1</p></div>
+</div>`
 }
 
 // ═══════════════════════════════════════════════
@@ -270,9 +269,6 @@ export default function CreateQuotation() {
   const removeItem = (i) => { if (items.length > 1) setItems(items.filter((_, idx) => idx !== i)) }
   const updateItem = (i, f, v) => { const ni = [...items]; ni[i] = { ...ni[i], [f]: v }; setItems(ni) }
 
-  // ═══════════════════════════════════════════════
-  // SAVE - Only uses columns that exist in DB
-  // ═══════════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) { toast.error('Please select a client first'); return }
     if (!items.some(i => i.description && i.unit_price > 0)) { toast.error('Please add at least one service with a price'); return }
@@ -282,13 +278,9 @@ export default function CreateQuotation() {
       if (!user) { toast.error('You must be logged in'); setSaving(false); return }
 
       const cleanItems = items.filter(i => i.description).map((item, i) => ({
-        item_number: i + 1,
-        description: item.description,
-        quantity: item.quantity || 1,
-        unit: item.unit || 'per_service',
-        unit_price: item.unit_price || 0,
-        tax_percent: item.tax_percent ?? 15,
-        discount_percent: item.discount_percent ?? 0
+        item_number: i + 1, description: item.description, quantity: item.quantity || 1,
+        unit: item.unit || 'per_service', unit_price: item.unit_price || 0,
+        tax_percent: item.tax_percent ?? 15, discount_percent: item.discount_percent ?? 0
       }))
 
       const lt = (i) => i.quantity * i.unit_price
@@ -301,7 +293,7 @@ export default function CreateQuotation() {
       const grandTotal = subtotal - totalDisc + totalVAT
 
       if (isEditMode) {
-        const { error: updateError } = await supabase.from('quotations').update({
+        const { error: ue } = await supabase.from('quotations').update({
           client_name: quotationData.client_name, client_email: quotationData.client_email,
           client_phone: quotationData.client_phone, client_address: quotationData.client_address,
           valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
@@ -309,15 +301,12 @@ export default function CreateQuotation() {
           subtotal, tax_amount: totalVAT, discount_amount: totalDisc, total_amount: grandTotal,
           status, prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
         }).eq('id', id)
-        if (updateError) throw updateError
+        if (ue) throw ue
         await supabase.from('quotation_items').delete().eq('quotation_id', id)
-        if (cleanItems.length > 0) {
-          const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id })))
-          if (itemsError) throw itemsError
-        }
+        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id })))
         toast.success('Quotation updated! ✅')
       } else {
-        const { data: newQuote, error: createError } = await supabase.from('quotations').insert([{
+        const { data: nq, error: ce } = await supabase.from('quotations').insert([{
           client_id: quotationData.client_id || null, client_name: quotationData.client_name,
           client_email: quotationData.client_email, client_phone: quotationData.client_phone,
           client_address: quotationData.client_address, valid_until: quotationData.valid_until,
@@ -329,20 +318,17 @@ export default function CreateQuotation() {
           created_by: user.id, created_by_name: quotationData.created_by_name,
           prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name
         }]).select().single()
-        if (createError) throw createError
-        if (cleanItems.length > 0) {
-          const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: newQuote.id })))
-          if (itemsError) throw itemsError
-        }
+        if (ce) throw ce
+        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: nq.id })))
         toast.success('Quotation saved! ✅')
       }
       navigate('/sales/quotations')
     } catch (error) {
-      console.error('Save error:', error)
       toast.error('Failed to save: ' + (error.message || 'Unknown error'))
     } finally { setSaving(false) }
   }
 
+  // PDF download uses the SAME buildQuotationHTML function
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
@@ -367,6 +353,9 @@ export default function CreateQuotation() {
   const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
   const cats = [...new Set(SERVICES.map(s => s.category))]
   const calcLine = (i) => (i.quantity || 0) * (i.unit_price || 0)
+
+  // Generate the HTML ONCE per render - used by BOTH preview and PDF
+  const quotationHTML = buildQuotationHTML(quotationData, items.filter(i => i.description))
 
   if (loadingQuote) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
 
@@ -438,25 +427,33 @@ export default function CreateQuotation() {
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-3">Totals</h3>
               {(() => {
-                const activeItems = items.filter(i => i.description)
-                const subtotal = activeItems.reduce((s,i) => s + (i.quantity||0)*(i.unit_price||0), 0)
-                const disc = activeItems.reduce((s,i) => s + (i.quantity||0)*(i.unit_price||0)*(i.discount_percent||0)/100, 0)
-                const afterDisc = subtotal - disc
-                const vat = activeItems.reduce((s,i) => {const lt=(i.quantity||0)*(i.unit_price||0);const ad=lt-lt*(i.discount_percent||0)/100;return s+ad*(i.tax_percent||15)/100}, 0)
+                const ai = items.filter(i => i.description)
+                const st = ai.reduce((s,i) => s + (i.quantity||0)*(i.unit_price||0), 0)
+                const dc = ai.reduce((s,i) => s + (i.quantity||0)*(i.unit_price||0)*(i.discount_percent||0)/100, 0)
+                const ad = st - dc
+                const vt = ai.reduce((s,i) => {const lt=(i.quantity||0)*(i.unit_price||0);const a=lt-lt*(i.discount_percent||0)/100;return s+a*(i.tax_percent||15)/100}, 0)
                 return <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Subtotal:</span><span>{fmt(subtotal)}</span></div>
-                  <div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(disc)}</span></div>
-                  <div className="flex justify-between"><span>VAT:</span><span>{fmt(vat)}</span></div>
-                  <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(afterDisc+vat)}</span></div>
+                  <div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div>
+                  <div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div>
+                  <div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div>
+                  <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div>
                 </div>
               })()}
             </div>
 
+            {/* PREVIEW - Uses the SAME HTML as PDF */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{ minHeight: '400px', maxHeight: '600px' }}>
-                <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'center center', width: A4_WIDTH_PX + 'px', backgroundColor: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '10px 0' }}
-                  dangerouslySetInnerHTML={{ __html: buildQuotationHTML(quotationData, items.filter(i => i.description)) }} />
+                <div 
+                  style={{ 
+                    transform: `scale(${previewScale})`, 
+                    transformOrigin: 'center center', 
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)', 
+                    margin: '10px 0' 
+                  }}
+                  dangerouslySetInnerHTML={{ __html: quotationHTML }} 
+                />
               </div>
             </div>
           </div>
