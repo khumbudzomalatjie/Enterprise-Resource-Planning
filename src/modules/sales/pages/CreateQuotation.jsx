@@ -184,8 +184,6 @@ export default function CreateQuotation() {
   const [previewScale, setPreviewScale] = useState(0.4)
   const [saving, setSaving] = useState(false)
 
-  const createQuotation = useSalesStore((state) => state.createQuotation)
-  const updateQuotation = useSalesStore((state) => state.updateQuotation)
   const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
   const fetchClients = useCRMStore((state) => state.fetchClients)
@@ -248,7 +246,7 @@ export default function CreateQuotation() {
         status: q.status || 'draft', created_by_name: q.created_by_name || '', prepared_by_name: q.prepared_by_name || ''
       })
       if (q.quotation_items?.length) setItems(q.quotation_items.map(i => ({
-        code: i.code || '', description: i.description || '', quantity: i.quantity || 1,
+        code: '', description: i.description || '', quantity: i.quantity || 1,
         unit: i.unit || 'per_service', unit_price: i.unit_price || 0,
         tax_percent: i.tax_percent || 15, discount_percent: i.discount_percent || 0
       })))
@@ -275,7 +273,7 @@ export default function CreateQuotation() {
   const updateItem = (i, f, v) => { const ni = [...items]; ni[i] = { ...ni[i], [f]: v }; setItems(ni) }
 
   // ═══════════════════════════════════════════════
-  // DIRECT SAVE TO SUPABASE - BYPASSES STORE
+  // DIRECT SAVE TO SUPABASE
   // ═══════════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) { toast.error('Please select a client first'); return }
@@ -287,10 +285,8 @@ export default function CreateQuotation() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { toast.error('You must be logged in'); setSaving(false); return }
 
-      // Calculate totals
       const cleanItems = items.filter(i => i.description).map((item, i) => ({
         item_number: i + 1,
-        code: item.code || '',
         description: item.description,
         quantity: item.quantity || 1,
         unit: item.unit || 'per_service',
@@ -309,87 +305,46 @@ export default function CreateQuotation() {
       const grandTotal = subtotal - totalDisc + totalVAT
 
       if (isEditMode) {
-        // UPDATE existing quotation
-        const { error: updateError } = await supabase
-          .from('quotations')
-          .update({
-            client_name: quotationData.client_name,
-            client_email: quotationData.client_email,
-            client_phone: quotationData.client_phone,
-            client_address: quotationData.client_address,
-            valid_until: quotationData.valid_until,
-            payment_terms: quotationData.payment_terms,
-            notes: quotationData.notes,
-            terms_and_conditions: quotationData.terms_and_conditions,
-            subtotal: subtotal,
-            tax_amount: totalVAT,
-            discount_amount: totalDisc,
-            total_amount: grandTotal,
-            status: status,
-            prepared_by_name: quotationData.prepared_by_name,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', id)
-
+        const { error: updateError } = await supabase.from('quotations').update({
+          client_name: quotationData.client_name, client_email: quotationData.client_email,
+          client_phone: quotationData.client_phone, client_address: quotationData.client_address,
+          valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
+          notes: quotationData.notes, terms_and_conditions: quotationData.terms_and_conditions,
+          subtotal, tax_amount: totalVAT, discount_amount: totalDisc, total_amount: grandTotal,
+          status, prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
+        }).eq('id', id)
         if (updateError) throw updateError
 
-        // Delete old items and re-insert
         await supabase.from('quotation_items').delete().eq('quotation_id', id)
-        
-        const itemsToInsert = cleanItems.map(item => ({
-          ...item,
-          quotation_id: id
-        }))
-        
-        const { error: itemsError } = await supabase.from('quotation_items').insert(itemsToInsert)
-        if (itemsError) throw itemsError
-
+        if (cleanItems.length > 0) {
+          const { error: itemsError } = await supabase.from('quotation_items').insert(
+            cleanItems.map(item => ({ ...item, quotation_id: id }))
+          )
+          if (itemsError) throw itemsError
+        }
         toast.success('Quotation updated! ✅')
         navigate('/sales/quotations')
       } else {
-        // CREATE new quotation
-        const { data: newQuote, error: createError } = await supabase
-          .from('quotations')
-          .insert([{
-            client_id: quotationData.client_id || null,
-            client_name: quotationData.client_name,
-            client_email: quotationData.client_email,
-            client_phone: quotationData.client_phone,
-            client_address: quotationData.client_address,
-            valid_until: quotationData.valid_until,
-            payment_terms: quotationData.payment_terms,
-            notes: quotationData.notes,
-            terms_and_conditions: quotationData.terms_and_conditions,
-            subtotal: subtotal,
-            tax_amount: totalVAT,
-            tax_rate: 15,
-            discount_amount: totalDisc,
-            discount_type: 'none',
-            discount_value: 0,
-            total_amount: grandTotal,
-            status: status,
-            quotation_date: new Date().toISOString().split('T')[0],
-            created_by: user.id,
-            created_by_name: quotationData.created_by_name,
-            prepared_by: user.id,
-            prepared_by_name: quotationData.prepared_by_name
-          }])
-          .select()
-          .single()
-
+        const { data: newQuote, error: createError } = await supabase.from('quotations').insert([{
+          client_id: quotationData.client_id || null,
+          client_name: quotationData.client_name, client_email: quotationData.client_email,
+          client_phone: quotationData.client_phone, client_address: quotationData.client_address,
+          valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
+          notes: quotationData.notes, terms_and_conditions: quotationData.terms_and_conditions,
+          subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
+          discount_type: 'none', discount_value: 0, total_amount: grandTotal,
+          status, quotation_date: new Date().toISOString().split('T')[0],
+          created_by: user.id, created_by_name: quotationData.created_by_name,
+          prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name
+        }]).select().single()
         if (createError) throw createError
 
-        // Insert quotation items
         if (cleanItems.length > 0) {
-          const itemsToInsert = cleanItems.map(item => ({
-            ...item,
-            quotation_id: newQuote.id
-          }))
-          
-          const { error: itemsError } = await supabase.from('quotation_items').insert(itemsToInsert)
+          const { error: itemsError } = await supabase.from('quotation_items').insert(
+            cleanItems.map(item => ({ ...item, quotation_id: newQuote.id }))
+          )
           if (itemsError) throw itemsError
         }
-
         toast.success('Quotation saved! ✅')
         navigate('/sales/quotations')
       }
@@ -404,16 +359,12 @@ export default function CreateQuotation() {
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
-      const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      
       const container = document.createElement('div')
-      container.innerHTML = html
+      container.innerHTML = buildQuotationHTML(quotationData, items.filter(i => i.description))
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
       document.body.appendChild(container)
       await new Promise(r => setTimeout(r, 500))
-
       const html2pdf = (await import('html2pdf.js')).default
-      
       await html2pdf().set({
         margin: [0, 0, 0, 0],
         filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
@@ -422,10 +373,8 @@ export default function CreateQuotation() {
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css'] }
       }).from(container).save()
-      
       document.body.removeChild(container)
-      toast.dismiss()
-      toast.success('PDF downloaded! 📄')
+      toast.dismiss(); toast.success('PDF downloaded! 📄')
     } catch (e) { toast.dismiss(); toast.error('PDF failed') }
   }
 
