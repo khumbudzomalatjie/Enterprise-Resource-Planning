@@ -63,9 +63,6 @@ const DEFAULT_TERMS = [
   'Errors and omissions excepted (E&OE).',
 ]
 
-// ═══════════════════════════════════════════════
-// A4 DIMENSIONS
-// ═══════════════════════════════════════════════
 const A4_WIDTH_PX = 794
 const A4_HEIGHT_PX = 1123
 
@@ -185,6 +182,7 @@ export default function CreateQuotation() {
   const isEditMode = Boolean(id)
   const previewRef = useRef(null)
   const [previewScale, setPreviewScale] = useState(0.4)
+  const [saving, setSaving] = useState(false)
 
   const createQuotation = useSalesStore((state) => state.createQuotation)
   const updateQuotation = useSalesStore((state) => state.updateQuotation)
@@ -206,7 +204,6 @@ export default function CreateQuotation() {
   const [items, setItems] = useState([
     { code: '', description: '', quantity: 1, unit: 'per_service', unit_price: 0, tax_percent: 15, discount_percent: 0 }
   ])
-  const [savedQuotationId, setSavedQuotationId] = useState(null)
   const [loadingQuote, setLoadingQuote] = useState(false)
 
   const updatePreviewScale = useCallback(() => {
@@ -255,7 +252,6 @@ export default function CreateQuotation() {
         unit: i.unit || 'per_service', unit_price: i.unit_price || 0,
         tax_percent: i.tax_percent || 15, discount_percent: i.discount_percent || 0
       })))
-      setSavedQuotationId(q.id)
     }
     setLoadingQuote(false)
   }
@@ -278,36 +274,130 @@ export default function CreateQuotation() {
   const removeItem = (i) => { if (items.length > 1) setItems(items.filter((_, idx) => idx !== i)) }
   const updateItem = (i, f, v) => { const ni = [...items]; ni[i] = { ...ni[i], [f]: v }; setItems(ni) }
 
+  // ═══════════════════════════════════════════════
+  // DIRECT SAVE TO SUPABASE - BYPASSES STORE
+  // ═══════════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
-    if (!quotationData.client_name) { toast.error('Select a client'); return }
-    if (!items.some(i => i.description)) { toast.error('Add at least one service'); return }
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    const cleanItems = items.filter(i => i.description).map(i => ({
-      code: i.code, description: i.description, quantity: i.quantity || 1,
-      unit: i.unit || 'per_service', unit_price: i.unit_price || 0,
-      tax_percent: i.tax_percent ?? 15, discount_percent: i.discount_percent ?? 0
-    }))
-    
-    const lt = (i) => i.quantity * i.unit_price
-    const disc = (i) => lt(i) * (i.discount_percent / 100)
-    const ad = (i) => lt(i) - disc(i)
-    const vat = (i) => ad(i) * (i.tax_percent / 100)
-    const subtotal = cleanItems.reduce((s, i) => s + lt(i), 0)
-    const totalDisc = cleanItems.reduce((s, i) => s + disc(i), 0)
-    const totalVAT = cleanItems.reduce((s, i) => s + vat(i), 0)
-    
-    const payload = { ...quotationData, subtotal, tax_amount: totalVAT, discount_amount: totalDisc, total_amount: subtotal - totalDisc + totalVAT, status, created_by: user?.id, created_by_name: quotationData.created_by_name, prepared_by: user?.id, prepared_by_name: quotationData.prepared_by_name }
+    if (!quotationData.client_name) { toast.error('Please select a client first'); return }
+    if (!items.some(i => i.description && i.unit_price > 0)) { toast.error('Please add at least one service with a price'); return }
 
-    if (isEditMode) {
-      const r = await updateQuotation(id, payload)
-      if (!r.success) { toast.error('Update failed'); return }
-      toast.success('Updated!')
-    } else {
-      const r = await createQuotation(payload, cleanItems)
-      if (!r.success) { toast.error('Save failed'); return }
-      setSavedQuotationId(r.data.id)
-      toast.success('Saved!')
+    setSaving(true)
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { toast.error('You must be logged in'); setSaving(false); return }
+
+      // Calculate totals
+      const cleanItems = items.filter(i => i.description).map((item, i) => ({
+        item_number: i + 1,
+        code: item.code || '',
+        description: item.description,
+        quantity: item.quantity || 1,
+        unit: item.unit || 'per_service',
+        unit_price: item.unit_price || 0,
+        tax_percent: item.tax_percent ?? 15,
+        discount_percent: item.discount_percent ?? 0
+      }))
+
+      const lt = (i) => i.quantity * i.unit_price
+      const disc = (i) => lt(i) * (i.discount_percent / 100)
+      const ad = (i) => lt(i) - disc(i)
+      const vat = (i) => ad(i) * (i.tax_percent / 100)
+      const subtotal = cleanItems.reduce((s, i) => s + lt(i), 0)
+      const totalDisc = cleanItems.reduce((s, i) => s + disc(i), 0)
+      const totalVAT = cleanItems.reduce((s, i) => s + vat(i), 0)
+      const grandTotal = subtotal - totalDisc + totalVAT
+
+      if (isEditMode) {
+        // UPDATE existing quotation
+        const { error: updateError } = await supabase
+          .from('quotations')
+          .update({
+            client_name: quotationData.client_name,
+            client_email: quotationData.client_email,
+            client_phone: quotationData.client_phone,
+            client_address: quotationData.client_address,
+            valid_until: quotationData.valid_until,
+            payment_terms: quotationData.payment_terms,
+            notes: quotationData.notes,
+            terms_and_conditions: quotationData.terms_and_conditions,
+            subtotal: subtotal,
+            tax_amount: totalVAT,
+            discount_amount: totalDisc,
+            total_amount: grandTotal,
+            status: status,
+            prepared_by_name: quotationData.prepared_by_name,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id)
+
+        if (updateError) throw updateError
+
+        // Delete old items and re-insert
+        await supabase.from('quotation_items').delete().eq('quotation_id', id)
+        
+        const itemsToInsert = cleanItems.map(item => ({
+          ...item,
+          quotation_id: id
+        }))
+        
+        const { error: itemsError } = await supabase.from('quotation_items').insert(itemsToInsert)
+        if (itemsError) throw itemsError
+
+        toast.success('Quotation updated! ✅')
+        navigate('/sales/quotations')
+      } else {
+        // CREATE new quotation
+        const { data: newQuote, error: createError } = await supabase
+          .from('quotations')
+          .insert([{
+            client_id: quotationData.client_id || null,
+            client_name: quotationData.client_name,
+            client_email: quotationData.client_email,
+            client_phone: quotationData.client_phone,
+            client_address: quotationData.client_address,
+            valid_until: quotationData.valid_until,
+            payment_terms: quotationData.payment_terms,
+            notes: quotationData.notes,
+            terms_and_conditions: quotationData.terms_and_conditions,
+            subtotal: subtotal,
+            tax_amount: totalVAT,
+            tax_rate: 15,
+            discount_amount: totalDisc,
+            discount_type: 'none',
+            discount_value: 0,
+            total_amount: grandTotal,
+            status: status,
+            quotation_date: new Date().toISOString().split('T')[0],
+            created_by: user.id,
+            created_by_name: quotationData.created_by_name,
+            prepared_by: user.id,
+            prepared_by_name: quotationData.prepared_by_name
+          }])
+          .select()
+          .single()
+
+        if (createError) throw createError
+
+        // Insert quotation items
+        if (cleanItems.length > 0) {
+          const itemsToInsert = cleanItems.map(item => ({
+            ...item,
+            quotation_id: newQuote.id
+          }))
+          
+          const { error: itemsError } = await supabase.from('quotation_items').insert(itemsToInsert)
+          if (itemsError) throw itemsError
+        }
+
+        toast.success('Quotation saved! ✅')
+        navigate('/sales/quotations')
+      }
+    } catch (error) {
+      console.error('Save error:', error)
+      toast.error('Failed to save: ' + (error.message || 'Unknown error'))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -316,30 +406,21 @@ export default function CreateQuotation() {
       toast.loading('Generating PDF...')
       const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
       
-      const measureDiv = document.createElement('div')
-      measureDiv.innerHTML = html
-      measureDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;visibility:hidden;'
-      document.body.appendChild(measureDiv)
-      await new Promise(r => setTimeout(r, 500))
-      const contentHeight = measureDiv.scrollHeight
-      document.body.removeChild(measureDiv)
-      
       const container = document.createElement('div')
       container.innerHTML = html
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
       document.body.appendChild(container)
-      await new Promise(r => setTimeout(r, 400))
+      await new Promise(r => setTimeout(r, 500))
 
       const html2pdf = (await import('html2pdf.js')).default
-      const needsOnePage = contentHeight <= A4_HEIGHT_PX + 50
       
       await html2pdf().set({
         margin: [0, 0, 0, 0],
-        filename: `Quotation_${quotationData.quotation_number || 'draft'}.pdf`,
+        filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX, windowWidth: A4_WIDTH_PX, height: needsOnePage ? contentHeight + 20 : undefined, windowHeight: needsOnePage ? contentHeight + 20 : undefined },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: needsOnePage ? ['avoid-all'] : ['css'] }
+        pagebreak: { mode: ['css'] }
       }).from(container).save()
       
       document.body.removeChild(container)
@@ -378,8 +459,8 @@ export default function CreateQuotation() {
           <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-2">
             <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
-            <button onClick={() => handleSave('draft')} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2"><Save className="w-4 h-4" />Save</button>
-            <button onClick={() => handleSave('sent')} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"><Send className="w-4 h-4" />Send</button>
+            <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? 'Saving...' : 'Save'}</button>
+            <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? 'Saving...' : 'Send'}</button>
           </div>
         </div>
 
