@@ -64,11 +64,14 @@ const DEFAULT_TERMS = [
 ]
 
 // ═══════════════════════════════════════════════
-// A4 QUOTATION HTML BUILDER
+// A4 DIMENSIONS
 // ═══════════════════════════════════════════════
-const A4_WIDTH_PX = 794 // 210mm at 96dpi
-const A4_HEIGHT_PX = 1123 // 297mm at 96dpi
+const A4_WIDTH_PX = 794
+const A4_HEIGHT_PX = 1123
 
+// ═══════════════════════════════════════════════
+// BUILD A4 QUOTATION HTML
+// ═══════════════════════════════════════════════
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
   const fmtDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -106,7 +109,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;backgrou
 .page{width:${A4_WIDTH_PX}px;padding:28px 40px;background:#fff}
 .hdr{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:6px;margin-bottom:5px}
 .hdr-l{display:flex;align-items:center;gap:10px}
-.logo{width:44px;height:44px;border-radius:50%;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border:2px solid #c5d5e8;font-size:16px;font-weight:bold;color:#1B5080;flex-shrink:0}
+.logo-box{width:48px;height:48px;border-radius:50%;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border:2px solid #c5d5e8;overflow:hidden;flex-shrink:0}
+.logo-box img{width:80%;height:80%;object-fit:contain}
 .cn{font-size:17px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1}
 .cd{font-size:6.5px;color:#64748b;margin:0}
 .hdr-r{text-align:right;flex-shrink:0}
@@ -135,7 +139,7 @@ th{background:#1B5080;color:#fff;padding:4px 5px;font-size:6.5px;font-weight:bol
 <div class="page">
 <div class="hdr">
 <div class="hdr-l">
-<div class="logo">NG</div>
+<div class="logo-box"><img src="/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:18px;font-weight:bold;color:#1B5080;>NG</span>'" /></div>
 <div>
 <h1 class="cn">${COMPANY.name}</h1>
 <p class="cd">${COMPANY.tagline}</p>
@@ -208,9 +212,9 @@ export default function CreateQuotation() {
   // Calculate responsive preview scale
   const updatePreviewScale = useCallback(() => {
     if (previewRef.current) {
-      const containerWidth = previewRef.current.clientWidth - 8 // minus padding
+      const containerWidth = previewRef.current.clientWidth - 8
       const scale = containerWidth / A4_WIDTH_PX
-      setPreviewScale(Math.min(scale, 0.7)) // cap at 70%
+      setPreviewScale(Math.min(scale, 0.7))
     }
   }, [])
 
@@ -309,25 +313,20 @@ export default function CreateQuotation() {
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - TRUE A4 SINGLE PAGE
+  // PDF DOWNLOAD - TRUE A4 SINGLE PAGE WITH LOGO
   // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
       
-      // Build fresh HTML
       const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
       
-      // Create measurement container at TRUE A4 size
+      // Measure content height
       const measureDiv = document.createElement('div')
       measureDiv.innerHTML = html
       measureDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;visibility:hidden;'
       document.body.appendChild(measureDiv)
-      
-      // Wait for render
-      await new Promise(r => setTimeout(r, 400))
-      
-      // Measure actual content height
+      await new Promise(r => setTimeout(r, 500))
       const contentHeight = measureDiv.scrollHeight
       document.body.removeChild(measureDiv)
       
@@ -336,13 +335,10 @@ export default function CreateQuotation() {
       container.innerHTML = html
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
       document.body.appendChild(container)
-      
-      await new Promise(r => setTimeout(r, 300))
+      await new Promise(r => setTimeout(r, 400))
 
       const html2pdf = (await import('html2pdf.js')).default
-      
-      // If content fits on one page, force single page
-      const needsOnePage = contentHeight <= A4_HEIGHT_PX + 50 // 50px tolerance
+      const needsOnePage = contentHeight <= A4_HEIGHT_PX + 50
       
       await html2pdf().set({
         margin: [0, 0, 0, 0],
@@ -350,22 +346,16 @@ export default function CreateQuotation() {
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2, 
-          useCORS: true, 
+          useCORS: true,
+          allowTaint: true,
           letterRendering: true,
           width: A4_WIDTH_PX,
           windowWidth: A4_WIDTH_PX,
           height: needsOnePage ? contentHeight + 20 : undefined,
           windowHeight: needsOnePage ? contentHeight + 20 : undefined
         },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait' 
-        },
-        pagebreak: { 
-          mode: needsOnePage ? ['avoid-all'] : ['css'],
-          before: needsOnePage ? '.avoid-break' : undefined
-        }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: needsOnePage ? ['avoid-all'] : ['css'] }
       }).from(container).save()
       
       document.body.removeChild(container)
@@ -468,7 +458,7 @@ export default function CreateQuotation() {
               })()}
             </div>
 
-            {/* RESPONSIVE PREVIEW - Fills entire container */}
+            {/* RESPONSIVE PREVIEW WITH LOGO */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div 
