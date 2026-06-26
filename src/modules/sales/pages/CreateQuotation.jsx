@@ -107,39 +107,39 @@ function buildQuotationHTML(quotation, items) {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;background:#fff;line-height:1.3}
 .page{width:${A4_WIDTH_PX}px;padding:28px 40px;background:#fff}
-.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:6px;margin-bottom:5px}
-.hdr-l{display:flex;align-items:center;gap:10px}
-.logo-box{width:48px;height:48px;border-radius:50%;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border:2px solid #c5d5e8;overflow:hidden;flex-shrink:0}
-.logo-box img{width:80%;height:80%;object-fit:contain}
-.cn{font-size:17px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1}
-.cd{font-size:6.5px;color:#64748b;margin:0}
+.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px}
+.hdr-l{display:flex;align-items:flex-start;gap:14px}
+.logo-img{width:90px;height:auto;object-fit:contain;flex-shrink:0}
+.logo-fallback{width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0}
+.cn{font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1}
+.cd{font-size:7px;color:#64748b;margin:0}
 .hdr-r{text-align:right;flex-shrink:0}
-.qt{font-size:24px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px}
-.qn{font-size:11px;color:#1B5080;font-weight:bold;margin:1px 0}
-.qi{font-size:6.5px;color:#64748b}
+.qt{font-size:26px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px}
+.qn{font-size:12px;color:#1B5080;font-weight:bold;margin:2px 0}
+.qi{font-size:7px;color:#64748b}
 .qi p{margin:0}
 .row{display:flex;gap:6px;margin-bottom:5px}
 .box{flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px}
-.bt{font-size:6.5px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px}
-.box p{font-size:6.5px;margin:1px 0}
+.bt{font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px}
+.box p{font-size:7px;margin:1px 0}
 table{width:100%;border-collapse:collapse;margin-bottom:5px}
-th{background:#1B5080;color:#fff;padding:4px 5px;font-size:6.5px;font-weight:bold;text-transform:uppercase;text-align:center}
-.td-l{padding:3px 5px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:left}
-.td-c{padding:3px 5px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:center}
-.td-r{padding:3px 5px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:right}
+th{background:#1B5080;color:#fff;padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center}
+.td-l{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:left}
+.td-c{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center}
+.td-r{padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right}
 .tr{display:flex;justify-content:flex-end;margin-bottom:5px}
 .tb{width:220px;border:1px solid #d1d5db;border-radius:3px;overflow:hidden}
-.tl{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:6.5px}
-.tlg{display:flex;justify-content:space-between;padding:6px 8px;font-size:11px;font-weight:bold;background:#eaf1f8}
+.tl{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px}
+.tlg{display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;font-weight:bold;background:#eaf1f8}
 .br{display:flex;gap:6px;margin-bottom:3px}
 .bb{flex:1;font-size:6px}
-.bbt{font-size:6.5px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px}
+.bbt{font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px}
 .ft{border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px}
 </style></head><body>
 <div class="page">
 <div class="hdr">
 <div class="hdr-l">
-<div class="logo-box"><img src="/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:18px;font-weight:bold;color:#1B5080;>NG</span>'" /></div>
+<img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div class=logo-fallback>NG</div>')" />
 <div>
 <h1 class="cn">${COMPANY.name}</h1>
 <p class="cd">${COMPANY.tagline}</p>
@@ -168,10 +168,10 @@ th{background:#1B5080;color:#fff;padding:4px 5px;font-size:6.5px;font-weight:bol
 </div>
 <table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${productRows || '<tr><td colspan="9" class="td-c" style="padding:15px;color:#94a3b8;">No items</td></tr>'}</tbody></table>
 <div class="tr"><div class="tb"><div class="tl"><span>Subtotal</span><span>${fmt(subtotal)}</span></div><div class="tl"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div><div class="tl"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div><div class="tlg"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div></div></div>
-${quotation?.notes ? `<div class="box" style="margin-bottom:4px;"><div class="bt">Notes</div><p style="font-size:6.5px;white-space:pre-line;">${quotation.notes}</p></div>` : ''}
+${quotation?.notes ? `<div class="box" style="margin-bottom:4px;"><div class="bt">Notes</div><p style="font-size:7px;white-space:pre-line;">${quotation.notes}</p></div>` : ''}
 <div class="br">
-<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:5.5px;color:#64748b;">${quotation?.terms_and_conditions || DEFAULT_TERMS.join('\n')}</p></div>
-<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:5.5px;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:5.5px;"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:5.5px;"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:5.5px;"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:5.5px;"><strong>Ref:</strong> ${quoteNum}</p></div>
+<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:6px;color:#64748b;">${quotation?.terms_and_conditions || DEFAULT_TERMS.join('\n')}</p></div>
+<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:6px;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;"><strong>Ref:</strong> ${quoteNum}</p></div>
 </div>
 <div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p>Page 1 of 1</p></div>
 </div></body></html>`
@@ -209,7 +209,6 @@ export default function CreateQuotation() {
   const [savedQuotationId, setSavedQuotationId] = useState(null)
   const [loadingQuote, setLoadingQuote] = useState(false)
 
-  // Calculate responsive preview scale
   const updatePreviewScale = useCallback(() => {
     if (previewRef.current) {
       const containerWidth = previewRef.current.clientWidth - 8
@@ -312,16 +311,11 @@ export default function CreateQuotation() {
     }
   }
 
-  // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - TRUE A4 SINGLE PAGE WITH LOGO
-  // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
-      
       const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
       
-      // Measure content height
       const measureDiv = document.createElement('div')
       measureDiv.innerHTML = html
       measureDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;visibility:hidden;'
@@ -330,7 +324,6 @@ export default function CreateQuotation() {
       const contentHeight = measureDiv.scrollHeight
       document.body.removeChild(measureDiv)
       
-      // Create final container
       const container = document.createElement('div')
       container.innerHTML = html
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
@@ -344,16 +337,7 @@ export default function CreateQuotation() {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${quotationData.quotation_number || 'draft'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true,
-          allowTaint: true,
-          letterRendering: true,
-          width: A4_WIDTH_PX,
-          windowWidth: A4_WIDTH_PX,
-          height: needsOnePage ? contentHeight + 20 : undefined,
-          windowHeight: needsOnePage ? contentHeight + 20 : undefined
-        },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX, windowWidth: A4_WIDTH_PX, height: needsOnePage ? contentHeight + 20 : undefined, windowHeight: needsOnePage ? contentHeight + 20 : undefined },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: needsOnePage ? ['avoid-all'] : ['css'] }
       }).from(container).save()
@@ -361,11 +345,7 @@ export default function CreateQuotation() {
       document.body.removeChild(container)
       toast.dismiss()
       toast.success('PDF downloaded! 📄')
-    } catch (e) {
-      console.error('PDF error:', e)
-      toast.dismiss()
-      toast.error('PDF generation failed')
-    }
+    } catch (e) { toast.dismiss(); toast.error('PDF failed') }
   }
 
   const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
@@ -404,7 +384,6 @@ export default function CreateQuotation() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* LEFT: Form */}
           <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold mb-3">Customer</h2>
@@ -439,7 +418,6 @@ export default function CreateQuotation() {
             </div>
           </div>
 
-          {/* RIGHT: Preview + Totals */}
           <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-3">Totals</h3>
@@ -458,25 +436,11 @@ export default function CreateQuotation() {
               })()}
             </div>
 
-            {/* RESPONSIVE PREVIEW WITH LOGO */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
-              <div 
-                ref={previewRef}
-                className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center"
-                style={{ minHeight: '400px', maxHeight: '600px' }}
-              >
-                <div 
-                  style={{
-                    transform: `scale(${previewScale})`,
-                    transformOrigin: 'center center',
-                    width: A4_WIDTH_PX + 'px',
-                    backgroundColor: 'white',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                    margin: '10px 0'
-                  }}
-                  dangerouslySetInnerHTML={{ __html: buildQuotationHTML(quotationData, items.filter(i => i.description)) }}
-                />
+              <div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{ minHeight: '400px', maxHeight: '600px' }}>
+                <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'center center', width: A4_WIDTH_PX + 'px', backgroundColor: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '10px 0' }}
+                  dangerouslySetInnerHTML={{ __html: buildQuotationHTML(quotationData, items.filter(i => i.description)) }} />
               </div>
             </div>
           </div>
