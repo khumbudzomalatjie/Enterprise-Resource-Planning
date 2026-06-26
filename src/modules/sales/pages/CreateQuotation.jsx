@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
-import useSalesStore from '../store/salesStore'
 import useCRMStore from '../../crm/store/crmStore'
+import useSalesStore from '../store/salesStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import {
   FileText, Plus, Trash2, Download, Eye,
   Sun, Moon, Sparkles, ChevronRight,
-  Save, Send, Briefcase
+  Save, Send
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════
@@ -64,7 +63,6 @@ const DEFAULT_TERMS = [
 ]
 
 const A4_WIDTH_PX = 794
-const A4_HEIGHT_PX = 1123
 
 // ═══════════════════════════════════════════════
 // BUILD A4 QUOTATION HTML
@@ -87,10 +85,10 @@ function buildQuotationHTML(quotation, items) {
   const quoteNum = quotation?.quotation_number || 'DRAFT'
   const creatorName = quotation?.created_by_name || 'Sales Department'
 
-  const productRows = items.filter(i => i.description).map((item, i) => `
+  const productRows = items.map((item, i) => `
     <tr>
       <td class="td-c">${i + 1}</td>
-      <td class="td-l">${item.code || ''}</td>
+      <td class="td-c">${item.code || ''}</td>
       <td class="td-l">${item.description}${item.unit_price === 0 ? ' <span style="color:#059669;font-weight:bold;">(FREE)</span>' : ''}</td>
       <td class="td-c">${item.quantity}</td>
       <td class="td-c">${item.unit || 'each'}</td>
@@ -273,14 +271,12 @@ export default function CreateQuotation() {
   const updateItem = (i, f, v) => { const ni = [...items]; ni[i] = { ...ni[i], [f]: v }; setItems(ni) }
 
   // ═══════════════════════════════════════════════
-  // DIRECT SAVE TO SUPABASE
+  // SAVE - Only uses columns that exist in DB
   // ═══════════════════════════════════════════════
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) { toast.error('Please select a client first'); return }
     if (!items.some(i => i.description && i.unit_price > 0)) { toast.error('Please add at least one service with a price'); return }
-
     setSaving(true)
-    
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { toast.error('You must be logged in'); setSaving(false); return }
@@ -314,64 +310,54 @@ export default function CreateQuotation() {
           status, prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
         }).eq('id', id)
         if (updateError) throw updateError
-
         await supabase.from('quotation_items').delete().eq('quotation_id', id)
         if (cleanItems.length > 0) {
-          const { error: itemsError } = await supabase.from('quotation_items').insert(
-            cleanItems.map(item => ({ ...item, quotation_id: id }))
-          )
+          const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id })))
           if (itemsError) throw itemsError
         }
         toast.success('Quotation updated! ✅')
-        navigate('/sales/quotations')
       } else {
         const { data: newQuote, error: createError } = await supabase.from('quotations').insert([{
-          client_id: quotationData.client_id || null,
-          client_name: quotationData.client_name, client_email: quotationData.client_email,
-          client_phone: quotationData.client_phone, client_address: quotationData.client_address,
-          valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
-          notes: quotationData.notes, terms_and_conditions: quotationData.terms_and_conditions,
+          client_id: quotationData.client_id || null, client_name: quotationData.client_name,
+          client_email: quotationData.client_email, client_phone: quotationData.client_phone,
+          client_address: quotationData.client_address, valid_until: quotationData.valid_until,
+          payment_terms: quotationData.payment_terms, notes: quotationData.notes,
+          terms_and_conditions: quotationData.terms_and_conditions,
           subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
-          discount_type: 'none', discount_value: 0, total_amount: grandTotal,
-          status, quotation_date: new Date().toISOString().split('T')[0],
+          discount_type: 'none', discount_value: 0, total_amount: grandTotal, status,
+          quotation_date: new Date().toISOString().split('T')[0],
           created_by: user.id, created_by_name: quotationData.created_by_name,
           prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name
         }]).select().single()
         if (createError) throw createError
-
         if (cleanItems.length > 0) {
-          const { error: itemsError } = await supabase.from('quotation_items').insert(
-            cleanItems.map(item => ({ ...item, quotation_id: newQuote.id }))
-          )
+          const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: newQuote.id })))
           if (itemsError) throw itemsError
         }
         toast.success('Quotation saved! ✅')
-        navigate('/sales/quotations')
       }
+      navigate('/sales/quotations')
     } catch (error) {
       console.error('Save error:', error)
       toast.error('Failed to save: ' + (error.message || 'Unknown error'))
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
+      const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
       const container = document.createElement('div')
-      container.innerHTML = buildQuotationHTML(quotationData, items.filter(i => i.description))
+      container.innerHTML = html
       container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
       document.body.appendChild(container)
       await new Promise(r => setTimeout(r, 500))
       const html2pdf = (await import('html2pdf.js')).default
       await html2pdf().set({
-        margin: [0, 0, 0, 0],
-        filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
+        margin: [0, 0, 0, 0], filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css'] }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] }
       }).from(container).save()
       document.body.removeChild(container)
       toast.dismiss(); toast.success('PDF downloaded! 📄')
@@ -408,8 +394,8 @@ export default function CreateQuotation() {
           <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-2">
             <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
-            <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? 'Saving...' : 'Save'}</button>
-            <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? 'Saving...' : 'Send'}</button>
+            <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? '...' : 'Save'}</button>
+            <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? '...' : 'Send'}</button>
           </div>
         </div>
 
