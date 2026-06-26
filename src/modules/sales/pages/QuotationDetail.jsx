@@ -11,9 +11,6 @@ import {
   CheckCircle, XCircle, Send, Maximize2, Briefcase
 } from 'lucide-react'
 
-// ═══════════════════════════════════════════════
-// COMPANY CONFIG
-// ═══════════════════════════════════════════════
 const COMPANY = {
   name: 'NDANDULENI GROUP',
   tagline: 'Professional Cleaning & Hygiene Services',
@@ -41,7 +38,7 @@ const DEFAULT_TERMS = [
 const A4_WIDTH_PX = 794
 
 // ═══════════════════════════════════════════════
-// BUILD QUOTATION HTML - Same as CreateQuotation
+// BUILD QUOTATION HTML
 // ═══════════════════════════════════════════════
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
@@ -74,10 +71,20 @@ function buildQuotationHTML(quotation, items) {
       <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
-  return `<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;box-sizing:border-box">
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;background:white}
+</style>
+</head>
+<body>
+<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;margin:0 auto">
 <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px">
 <div style="display:flex;align-items:flex-start;gap:14px">
-<img src="/logo.png" alt="Logo" style="width:90px;height:auto;object-fit:contain" onerror="this.style.display='none'" />
+<div style="width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0">NG</div>
 <div>
 <h1 style="font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1">${COMPANY.name}</h1>
 <p style="font-size:7px;color:#64748b;margin:0">${COMPANY.tagline}</p>
@@ -145,7 +152,9 @@ ${quotation?.notes ? `<div style="border:1px solid #d1d5db;border-radius:3px;pad
 <div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Banking Details</div><p style="font-size:6px;margin:0"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;margin:0"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;margin:0"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;margin:0"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;margin:0"><strong>Ref:</strong> ${quoteNum}</p></div>
 </div>
 <div style="border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px"><p style="margin:0">${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p style="margin:0">Page 1 of 1</p></div>
-</div>`
+</div>
+</body>
+</html>`
 }
 
 // ═══════════════════════════════════════════════
@@ -233,61 +242,29 @@ export default function QuotationDetail() {
   }
 
   // ═══════════════════════════════════════════════
-  // PRINT - Auto-print after page loads
+  // PRINT - Direct print of current view
   // ═══════════════════════════════════════════════
   const printQuotation = () => {
     if (!selectedQuotation) return
 
     const htmlContent = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
 
-    const printWindow = window.open('', '_blank', 'width=900,height=700')
+    const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast.error('Please allow popups for this site')
       return
     }
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Quotation ${selectedQuotation.quotation_number}</title>
-        <style>
-          @page { size: A4 portrait; margin: 0; }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            margin: 0; 
-            padding: 0; 
-            display: flex; 
-            justify-content: center; 
-            background: #f1f5f9;
-            font-family: Arial, Helvetica, sans-serif;
-          }
-          @media print {
-            body { 
-              background: white; 
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        ${htmlContent}
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-              window.onafterprint = function() {
-                // Optional: close window after printing
-              };
-            }, 500);
-          };
-        </script>
-      </body>
-      </html>
-    `)
+    printWindow.document.write(htmlContent)
     printWindow.document.close()
     printWindow.focus()
+    
+    // Print after content loads
+    printWindow.onload = function() {
+      setTimeout(() => {
+        printWindow.print()
+      }, 400)
+    }
   }
 
   if (loading || !selectedQuotation) {
@@ -326,106 +303,78 @@ export default function QuotationDetail() {
         </div>
       )}
 
-      {/* Accept Confirmation Modal */}
+      {/* Accept Modal */}
       {showAcceptConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800">
             <div className="text-center">
               <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4"><Briefcase className="w-10 h-10 text-emerald-600" /></div>
-              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept & Create Job?</h3>
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left">
-                <div className="flex items-start gap-2"><AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" /><div><p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Important:</p><ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1 list-disc list-inside"><li>Quotation marked as <strong>Accepted</strong></li><li>A <strong>Job</strong> will be created</li><li>Quotation will disappear from list</li></ul></div></div>
-              </div>
-              <div className="flex gap-3"><button onClick={() => setShowAcceptConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600">Cancel</button><button onClick={handleAccept} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" />Yes, Accept & Create Job</button></div>
+              <h3 className="text-2xl font-bold mb-2">Accept & Create Job?</h3>
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left"><div className="flex items-start gap-2"><AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" /><div><p className="text-sm font-semibold text-amber-800">Important:</p><ul className="text-xs text-amber-700 mt-1 list-disc list-inside"><li>Quotation marked as <strong>Accepted</strong></li><li>A <strong>Job</strong> will be created</li></ul></div></div></div>
+              <div className="flex gap-3"><button onClick={() => setShowAcceptConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleAccept} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" />Yes, Accept</button></div>
             </div>
           </motion.div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-md w-full bg-white dark:bg-slate-800">
-            <div className="text-center"><div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><AlertTriangle className="w-8 h-8 text-red-600" /></div><h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Quotation?</h3><p className="text-slate-500 mb-6">This cannot be undone.</p>
-            <div className="flex gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600">Cancel</button><button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button></div></div>
+            <div className="text-center"><div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><AlertTriangle className="w-8 h-8 text-red-600" /></div><h3 className="text-xl font-bold mb-2">Delete?</h3><p className="text-slate-500 mb-6">Cannot be undone.</p>
+            <div className="flex gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button></div></div>
           </motion.div>
         </div>
       )}
 
       <Navbar />
-      
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span></div>
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span></div>
         <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">{isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}</button>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link><ChevronRight className="w-4 h-4 text-slate-400" />
           <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link><ChevronRight className="w-4 h-4 text-slate-400" />
-          <span className="text-slate-800 dark:text-white font-medium">{quote.quotation_number}</span>
+          <span className="font-medium">{quote.quotation_number}</span>
         </div>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{quote.quotation_number}</h1>
-            <p className="text-slate-500 mt-1">{quote.client_name} · {formatDate(quote.quotation_date)} · <span className="font-semibold text-emerald-600 ml-2">{formatCurrency(quote.total_amount)}</span></p>
-          </div>
+          <div><h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{quote.quotation_number}</h1><p className="text-slate-500 mt-1">{quote.client_name} · {formatDate(quote.quotation_date)} · <span className="font-semibold text-emerald-600 ml-2">{formatCurrency(quote.total_amount)}</span></p></div>
           <div className="flex gap-3 flex-wrap">
-            <button onClick={() => setIsFullscreen(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"><Maximize2 className="w-4 h-4" /><span className="hidden sm:inline">Full Preview</span></button>
-            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><Download className="w-4 h-4" /><span className="hidden sm:inline">PDF</span></button>
-            <button onClick={printQuotation} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-purple-600 text-white hover:bg-purple-700"><Printer className="w-4 h-4" /><span className="hidden sm:inline">Print</span></button>
-            <button onClick={() => navigate(`/sales/quotations/${id}/edit`)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-slate-600 text-white hover:bg-slate-700"><Edit className="w-4 h-4" /><span className="hidden sm:inline">Edit</span></button>
-            <button onClick={() => setShowDeleteConfirm(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl flex items-center gap-2 bg-red-600 text-white hover:bg-red-700"><Trash2 className="w-4 h-4" /><span className="hidden sm:inline">Delete</span></button>
+            <button onClick={() => setIsFullscreen(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Maximize2 className="w-4 h-4" />Full</button>
+            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
+            <button onClick={printQuotation} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2"><Printer className="w-4 h-4" />Print</button>
+            <button onClick={() => navigate(`/sales/quotations/${id}/edit`)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2"><Edit className="w-4 h-4" />Edit</button>
+            <button onClick={() => setShowDeleteConfirm(true)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2"><Trash2 className="w-4 h-4" />Delete</button>
           </div>
         </motion.div>
 
-        {/* Status Bar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6 flex flex-wrap items-center gap-4">
-          <span className="text-sm text-slate-500">Status:</span>
+          <span className="text-sm">Status:</span>
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : quote.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{quote.status?.replace('_', ' ')}</span>
           <div className="border-l border-slate-300 pl-4 flex flex-wrap gap-2">
-            {quote.status !== 'sent' && <button onClick={() => handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-100"><Send className="w-3 h-3 inline mr-1" />Mark Sent</button>}
-            {quote.status !== 'accepted' && <button onClick={() => handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-emerald-100"><Briefcase className="w-3 h-3 inline mr-1" />Accept → Create Job</button>}
-            {quote.status !== 'rejected' && <button onClick={() => handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-100"><XCircle className="w-3 h-3 inline mr-1" />Reject</button>}
+            {quote.status !== 'sent' && <button onClick={() => handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs hover:bg-blue-100"><Send className="w-3 h-3 inline mr-1" />Mark Sent</button>}
+            {quote.status !== 'accepted' && <button onClick={() => handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs hover:bg-emerald-100"><Briefcase className="w-3 h-3 inline mr-1" />Accept → Job</button>}
+            {quote.status !== 'rejected' && <button onClick={() => handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs hover:bg-red-100"><XCircle className="w-3 h-3 inline mr-1" />Reject</button>}
           </div>
         </motion.div>
 
-        {/* Summary Cards */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[{ label: 'Client', value: quote.client_name }, { label: 'Date', value: formatDate(quote.quotation_date) }, { label: 'Valid Until', value: formatDate(quote.valid_until) }, { label: 'Total (Incl. VAT)', value: formatCurrency(quote.total_amount), highlight: true }].map((card, i) => (
-            <div key={i} className="neu-raised rounded-2xl p-4"><p className="text-xs text-slate-500 uppercase">{card.label}</p><p className={`font-semibold mt-1 ${card.highlight ? 'text-emerald-600 text-lg' : 'text-slate-800 dark:text-white'}`}>{card.value}</p></div>
+          {[{ label: 'Client', value: quote.client_name }, { label: 'Date', value: formatDate(quote.quotation_date) }, { label: 'Valid Until', value: formatDate(quote.valid_until) }, { label: 'Total', value: formatCurrency(quote.total_amount), hl: true }].map((c, i) => (
+            <div key={i} className="neu-raised rounded-2xl p-4"><p className="text-xs uppercase">{c.label}</p><p className={`font-semibold mt-1 ${c.hl ? 'text-emerald-600 text-lg' : ''}`}>{c.value}</p></div>
           ))}
         </motion.div>
 
-        {/* Items Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Items</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th className="text-left text-xs font-medium text-slate-500 py-3 px-3">#</th><th className="text-left text-xs font-medium text-slate-500 py-3 px-3">Description</th><th className="text-center text-xs font-medium text-slate-500 py-3 px-3">Qty</th><th className="text-right text-xs font-medium text-slate-500 py-3 px-3">Unit Price</th><th className="text-right text-xs font-medium text-slate-500 py-3 px-3">Total</th></tr></thead>
-              <tbody>
-                {(quote.quotation_items || []).map((item, index) => (
-                  <tr key={item.id || index} className="border-b border-slate-100 dark:border-slate-700/50"><td className="py-3 px-3 text-sm text-slate-500">{index + 1}</td><td className="py-3 px-3 text-sm text-slate-800 dark:text-white font-medium">{item.description}</td><td className="py-3 px-3 text-sm text-slate-700 dark:text-slate-300 text-center">{item.quantity}</td><td className="py-3 px-3 text-sm text-slate-700 dark:text-slate-300 text-right">{formatCurrency(item.unit_price)}</td><td className="py-3 px-3 text-sm font-semibold text-slate-800 dark:text-white text-right">{formatCurrency(item.total_price || item.quantity * item.unit_price)}</td></tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-slate-200 dark:border-slate-600"><td colSpan="4" className="py-3 px-3 text-sm font-semibold text-right">Subtotal:</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(quote.subtotal)}</td></tr>
-                <tr><td colSpan="4" className="py-2 px-3 text-sm text-slate-500 text-right">VAT (15%):</td><td className="py-2 px-3 text-sm text-slate-600 text-right">{formatCurrency(quote.tax_amount)}</td></tr>
-                <tr><td colSpan="4" className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">TOTAL:</td><td className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">{formatCurrency(quote.total_amount)}</td></tr>
-              </tfoot>
-            </table>
-          </div>
+          <h2 className="text-lg font-semibold mb-4">Items</h2>
+          <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b"><th className="text-left text-xs py-3 px-3">#</th><th className="text-left text-xs py-3 px-3">Description</th><th className="text-center text-xs py-3 px-3">Qty</th><th className="text-right text-xs py-3 px-3">Unit Price</th><th className="text-right text-xs py-3 px-3">Total</th></tr></thead><tbody>{(quote.quotation_items||[]).map((item,i)=>(<tr key={i} className="border-b"><td className="py-3 px-3 text-sm">{i+1}</td><td className="py-3 px-3 text-sm font-medium">{item.description}</td><td className="py-3 px-3 text-sm text-center">{item.quantity}</td><td className="py-3 px-3 text-sm text-right">{formatCurrency(item.unit_price)}</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(item.total_price||item.quantity*item.unit_price)}</td></tr>))}</tbody><tfoot><tr className="border-t-2"><td colSpan="4" className="py-3 px-3 text-sm font-semibold text-right">Subtotal:</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(quote.subtotal)}</td></tr><tr><td colSpan="4" className="py-2 px-3 text-sm text-right">VAT (15%):</td><td className="py-2 px-3 text-sm text-right">{formatCurrency(quote.tax_amount)}</td></tr><tr><td colSpan="4" className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">TOTAL:</td><td className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">{formatCurrency(quote.total_amount)}</td></tr></tfoot></table></div>
         </motion.div>
 
-        {/* A4 Document Preview */}
+        {/* A4 Preview */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />A4 Document Preview</h2>
-            <button onClick={() => setIsFullscreen(true)} className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1"><Maximize2 className="w-4 h-4" /> Full Screen</button>
-          </div>
+          <div className="flex items-center justify-between px-6 py-4 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />A4 Document Preview</h2><button onClick={() => setIsFullscreen(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Maximize2 className="w-4 h-4" /> Full Screen</button></div>
           <div ref={previewWrapperRef} className="bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-auto" style={{ minHeight: '500px', maxHeight: '80vh', padding: '20px' }}>
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }} dangerouslySetInnerHTML={{ __html: quoteHTML }} />
           </div>
