@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
-import useCRMStore from '../../crm/store/crmStore'
 import useSalesStore from '../store/salesStore'
+import useCRMStore from '../../crm/store/crmStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import {
   FileText, Plus, Trash2, Download, Eye,
   Sun, Moon, Sparkles, ChevronRight,
-  Save, Send
+  Save, Send, Briefcase
 } from 'lucide-react'
 
 const SERVICES = [
@@ -37,34 +38,46 @@ const SERVICES = [
 
 const COMPANY = {
   name: 'NDANDULENI GROUP',
-  tagline: 'Professional Cleaning & Hygiene Services',
+  tagline: 'Innovation Without End',
   address: '2220 Manthata Street, Midrand, 1685',
   phone: '070 419 9457',
-  fax: '086 555 1234',
   email: 'account@ndandulenigroup.co.za',
   website: 'www.ndandulenigroup.co.za',
-  registration: '2020/123456/07',
-  vatNumber: '4567890123',
-  bank: 'First National Bank (FNB)',
-  branch: 'Midrand (250655)',
-  accountNumber: '6277 123 45678',
-  accountType: 'Business Cheque Account',
+  taxRegNumber: '2025/842857/07',
+  taxRefNumber: '9983138190',
+  bank: 'Capitec Business',
+  branch: '450105',
+  accountNumber: '1054498946',
+  accountType: 'Transact',
 }
 
-const DEFAULT_TERMS = [
-  'Prices subject to change without prior notice.',
-  'Goods supplied remain company property until fully paid.',
-  'Returns subject to company policy.',
-  'Quote valid for 30 days from date of issue.',
-  'Errors and omissions excepted (E&OE).',
-]
+const FULL_TERMS = `BOOKING & PAYMENT
+1. 50% deposit required to secure booking
+2. Balance payable upon completion
+3. Payment methods: EFT and card. No cash.
+
+CANCELLATION & RESCHEDULING
+1. 24-hour notice required for full refund
+2. Rescheduling subject to availability
+
+LIABILITY & INSURANCE
+Clients responsible for removing valuables and fragile items as company will not be liable for damages. The company shall not be held liable for any loss or damage to such items.
+
+CLIENT RESPONSIBILITIES
+1. Provide access to premises
+2. Ensure pets are secured or removed
+3. Remove clutter and obstacles
+
+SATISFACTION GUARANTEE
+1. 100% satisfaction guaranteed
+2. Re-cleaning provided if not satisfied
+
+TENDERS & CALL-OUTS
+The company is available for short- and long-term tenders and can provide services on an as-needed, call-out basis.`
 
 const A4_WIDTH_PX = 794
+const A4_HEIGHT_PX = 1123
 
-// ═══════════════════════════════════════════════
-// SINGLE QUOTATION HTML BUILDER
-// Used by BOTH preview and PDF - they will be IDENTICAL
-// ═══════════════════════════════════════════════
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
   const fmtDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -83,97 +96,90 @@ function buildQuotationHTML(quotation, items) {
   const quoteNum = quotation?.quotation_number || 'DRAFT'
   const creatorName = quotation?.created_by_name || 'Sales Department'
 
-  const productRows = items.map((item, i) => `
+  const productRows = items.filter(i => i.description).map((item, i) => `
     <tr>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${i + 1}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.code || ''}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:left">${item.description}${item.unit_price === 0 ? ' <span style="color:#059669;font-weight:bold;">(FREE)</span>' : ''}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.quantity}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.unit || 'each'}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(item.unit_price)}</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.discount_percent || 0}%</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:center">${item.tax_percent || 15}%</td>
-      <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>${fmt(lineGrandTotal(item))}</strong></td>
+      <td class="td-c">${i + 1}</td>
+      <td class="td-l">${item.code || ''}</td>
+      <td class="td-l">${item.description}${item.unit_price === 0 ? ' <span style="color:#000;font-weight:bold;">(FREE)</span>' : ''}</td>
+      <td class="td-c">${item.quantity}</td>
+      <td class="td-c">${item.unit || 'each'}</td>
+      <td class="td-r">${fmt(item.unit_price)}</td>
+      <td class="td-c">${item.discount_percent || 0}%</td>
+      <td class="td-c">${item.tax_percent || 15}%</td>
+      <td class="td-r"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
-  // This HTML is used for BOTH the form preview AND the PDF download
-  return `<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;box-sizing:border-box">
-<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px">
-<div style="display:flex;align-items:flex-start;gap:14px">
-<img src="/logo.png" alt="Logo" style="width:90px;height:auto;object-fit:contain" onerror="this.style.display='none'" />
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;background:#fff;line-height:1.3}
+.page{width:${A4_WIDTH_PX}px;padding:25px 35px;background:#fff}
+.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px}
+.hdr-l{display:flex;align-items:flex-start;gap:14px}
+.logo-img{width:90px;height:auto;object-fit:contain;flex-shrink:0}
+.logo-fallback{width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0}
+.cn{font-size:18px;font-weight:bold;color:#000;margin:0;line-height:1.1}
+.cd{font-size:7px;color:#000;margin:0}
+.hdr-r{text-align:right;flex-shrink:0}
+.qt{font-size:26px;font-weight:bold;color:#000;margin:0;letter-spacing:2px}
+.qn{font-size:12px;color:#000;font-weight:bold;margin:2px 0}
+.qi{font-size:7px;color:#000}
+.qi p{margin:0}
+.row{display:flex;gap:6px;margin-bottom:5px}
+.box{flex:1;border:1px solid #000;border-radius:3px;padding:5px 7px}
+.bt{font-size:7px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #000;padding-bottom:1px}
+.box p{font-size:7px;margin:1px 0;color:#000}
+.box p strong{color:#000}
+table{width:100%;border-collapse:collapse;margin-bottom:5px}
+th{background:#000;color:#fff;padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center}
+.td-l{padding:3px 5px;font-size:7px;border-bottom:1px solid #000;text-align:left;color:#000}
+.td-c{padding:3px 5px;font-size:7px;border-bottom:1px solid #000;text-align:center;color:#000}
+.td-r{padding:3px 5px;font-size:7px;border-bottom:1px solid #000;text-align:right;color:#000}
+.tr{display:flex;justify-content:flex-end;margin-bottom:5px}
+.tb{width:220px;border:1px solid #000;border-radius:3px;overflow:hidden}
+.tl{display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #000;font-size:7px;color:#000}
+.tlg{display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;font-weight:bold;background:#e8e8e8;color:#000}
+.br{display:flex;gap:6px;margin-bottom:3px}
+.bb{flex:1;font-size:6px;color:#000}
+.bbt{font-size:7px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:1px}
+.ft{border-top:1px solid #000;padding-top:3px;text-align:center;font-size:6px;color:#000;margin-top:3px}
+</style></head><body>
+<div class="page">
+<div class="hdr">
+<div class="hdr-l">
+<img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div class=logo-fallback>NG</div>')" />
 <div>
-<h1 style="font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1">${COMPANY.name}</h1>
-<p style="font-size:7px;color:#64748b;margin:0">${COMPANY.tagline}</p>
-<p style="font-size:7px;color:#64748b;margin:0">${COMPANY.address}</p>
-<p style="font-size:7px;color:#64748b;margin:0">Tel: ${COMPANY.phone} | Fax: ${COMPANY.fax}</p>
-<p style="font-size:7px;color:#64748b;margin:0">Email: ${COMPANY.email} | Web: ${COMPANY.website}</p>
-<p style="font-size:7px;color:#64748b;margin:0">Reg: ${COMPANY.registration} | VAT: ${COMPANY.vatNumber}</p>
+<h1 class="cn">${COMPANY.name}</h1>
+<p class="cd">${COMPANY.tagline}</p>
+<p class="cd">${COMPANY.address}</p>
+<p class="cd">Tel: ${COMPANY.phone} | Email: ${COMPANY.email}</p>
+<p class="cd">Web: ${COMPANY.website}</p>
+<p class="cd">Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}</p>
 </div>
 </div>
-<div style="text-align:right">
-<h2 style="font-size:26px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px">QUOTATION</h2>
-<p style="font-size:12px;color:#1B5080;font-weight:bold;margin:2px 0">Quotation No: ${quoteNum}</p>
-<div style="font-size:7px;color:#64748b">
-<p style="margin:0">Date: ${fmtDate(quotation?.quotation_date || new Date())}</p>
-<p style="margin:0">Expiry: ${fmtDate(quotation?.valid_until)}</p>
-<p style="margin:0">Salesperson: ${creatorName}</p>
-<p style="margin:0">Branch: Johannesburg</p>
-<p style="margin:0">Currency: ZAR</p>
-<p style="margin:0">Status: ${quotation?.status || 'Draft'}</p>
+<div class="hdr-r">
+<h2 class="qt">QUOTATION</h2>
+<p class="qn">Quotation No: ${quoteNum}</p>
+<div class="qi">
+<p>Date: ${fmtDate(quotation?.quotation_date || new Date())}</p>
+<p>Expiry: ${fmtDate(quotation?.valid_until)}</p>
+<p>Created By: ${creatorName}</p>
 </div>
 </div>
 </div>
-<div style="display:flex;gap:6px;margin-bottom:5px">
-<div style="flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px">
-<div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Customer Details</div>
-<p style="font-size:7px;margin:1px 0"><strong>Customer:</strong> ${quotation?.client_name || ''}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Phone:</strong> ${quotation?.client_phone || ''}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Email:</strong> ${quotation?.client_email || ''}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Address:</strong> ${quotation?.client_address || ''}</p>
+<div class="row">
+<div class="box"><div class="bt">Customer Details</div><p><strong>Customer:</strong> ${quotation?.client_name || ''}</p><p><strong>Phone:</strong> ${quotation?.client_phone || ''}</p><p><strong>Email:</strong> ${quotation?.client_email || ''}</p><p><strong>Address:</strong> ${quotation?.client_address || ''}</p></div>
 </div>
-<div style="flex:1;border:1px solid #d1d5db;border-radius:3px;padding:5px 7px">
-<div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Quote Information</div>
-<p style="font-size:7px;margin:1px 0"><strong>Quote No:</strong> ${quoteNum}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Date:</strong> ${fmtDate(quotation?.quotation_date || new Date())}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Terms:</strong> ${quotation?.payment_terms || '50% Deposit'}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Sales Rep:</strong> ${creatorName}</p>
-<p style="font-size:7px;margin:1px 0"><strong>Branch:</strong> Johannesburg</p>
+<table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${productRows || '<tr><td colspan="9" class="td-c" style="padding:15px;">No items</td></tr>'}</tbody></table>
+<div class="tr"><div class="tb"><div class="tl"><span>Subtotal</span><span>${fmt(subtotal)}</span></div><div class="tl"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div><div class="tl"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div><div class="tlg"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div></div></div>
+${quotation?.notes ? `<div class="box" style="margin-bottom:4px;"><div class="bt">Notes</div><p style="font-size:7px;white-space:pre-line;color:#000;">${quotation.notes}</p></div>` : ''}
+<div class="br">
+<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:6px;color:#000;">${FULL_TERMS}</p></div>
+<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:6px;color:#000;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;color:#000;"><strong>Branch Code:</strong> ${COMPANY.branch}</p><p style="font-size:6px;color:#000;"><strong>Account No:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;color:#000;"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;color:#000;"><strong>Ref:</strong> ${quoteNum}</p></div>
 </div>
-</div>
-<table style="width:100%;border-collapse:collapse;margin-bottom:5px">
-<thead><tr style="background:#1B5080;color:#fff">
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">No</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Code</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:left">Description</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Qty</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Unit</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:right">Unit Price</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">Disc</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:center">VAT</th>
-<th style="padding:4px 5px;font-size:7px;font-weight:bold;text-transform:uppercase;text-align:right">Total</th>
-</tr></thead>
-<tbody>${productRows || '<tr><td colspan="9" style="padding:15px;text-align:center;font-size:7px;color:#94a3b8">No items</td></tr>'}</tbody>
-</table>
-<div style="display:flex;justify-content:flex-end;margin-bottom:5px">
-<div style="width:220px;border:1px solid #d1d5db;border-radius:3px;overflow:hidden">
-<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div>
-<div style="display:flex;justify-content:space-between;padding:3px 8px;border-bottom:1px solid #e5e7eb;font-size:7px"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;font-weight:bold;background:#eaf1f8"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div>
-</div>
-</div>
-${quotation?.notes ? `<div style="border:1px solid #d1d5db;border-radius:3px;padding:5px 7px;margin-bottom:4px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #e5e7eb;padding-bottom:1px">Notes</div><p style="font-size:7px;white-space:pre-line;margin:0">${quotation.notes}</p></div>` : ''}
-<div style="display:flex;gap:6px;margin-bottom:3px">
-<div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Terms & Conditions</div><p style="white-space:pre-line;font-size:6px;color:#64748b;margin:0">${quotation?.terms_and_conditions || DEFAULT_TERMS.join('\n')}</p></div>
-<div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Banking Details</div><p style="font-size:6px;margin:0"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;margin:0"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;margin:0"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;margin:0"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;margin:0"><strong>Ref:</strong> ${quoteNum}</p></div>
-</div>
-<div style="border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px"><p style="margin:0">${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p style="margin:0">Page 1 of 1</p></div>
-</div>`
+<div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p>Page 1 of 1</p></div>
+</div></body></html>`
 }
 
-// ═══════════════════════════════════════════════
-// CREATE/EDIT QUOTATION PAGE
-// ═══════════════════════════════════════════════
 export default function CreateQuotation() {
   const { id } = useParams()
   const isEditMode = Boolean(id)
@@ -181,6 +187,8 @@ export default function CreateQuotation() {
   const [previewScale, setPreviewScale] = useState(0.4)
   const [saving, setSaving] = useState(false)
 
+  const createQuotation = useSalesStore((state) => state.createQuotation)
+  const updateQuotation = useSalesStore((state) => state.updateQuotation)
   const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
   const fetchClients = useCRMStore((state) => state.fetchClients)
@@ -192,7 +200,7 @@ export default function CreateQuotation() {
     client_id: '', client_name: '', client_email: '', client_phone: '', client_address: '',
     valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     payment_terms: '50% Deposit, Balance on Completion',
-    notes: '', terms_and_conditions: DEFAULT_TERMS.join('\n'),
+    notes: '', terms_and_conditions: FULL_TERMS,
     status: 'draft', created_by_name: '', prepared_by_name: ''
   })
 
@@ -239,11 +247,11 @@ export default function CreateQuotation() {
         client_address: q.client_address || '',
         valid_until: q.valid_until || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         payment_terms: q.payment_terms || '50% Deposit, Balance on Completion',
-        notes: q.notes || '', terms_and_conditions: q.terms_and_conditions || DEFAULT_TERMS.join('\n'),
+        notes: q.notes || '', terms_and_conditions: q.terms_and_conditions || FULL_TERMS,
         status: q.status || 'draft', created_by_name: q.created_by_name || '', prepared_by_name: q.prepared_by_name || ''
       })
       if (q.quotation_items?.length) setItems(q.quotation_items.map(i => ({
-        code: '', description: i.description || '', quantity: i.quantity || 1,
+        code: i.code || '', description: i.description || '', quantity: i.quantity || 1,
         unit: i.unit || 'per_service', unit_price: i.unit_price || 0,
         tax_percent: i.tax_percent || 15, discount_percent: i.discount_percent || 0
       })))
@@ -258,11 +266,7 @@ export default function CreateQuotation() {
 
   const handleServiceSelect = (idx, svcName) => {
     const svc = SERVICES.find(s => s.name === svcName)
-    if (svc) {
-      const ni = [...items]
-      ni[idx] = { ...ni[idx], code: svc.code, description: svc.name, unit: svc.unit, unit_price: svc.unit_price }
-      setItems(ni)
-    }
+    if (svc) { const ni = [...items]; ni[idx] = { ...ni[idx], code: svc.code, description: svc.name, unit: svc.unit, unit_price: svc.unit_price }; setItems(ni) }
   }
 
   const addItem = () => setItems([...items, { code: '', description: '', quantity: 1, unit: 'per_service', unit_price: 0, tax_percent: 15, discount_percent: 0 }])
@@ -276,13 +280,7 @@ export default function CreateQuotation() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { toast.error('You must be logged in'); setSaving(false); return }
-
-      const cleanItems = items.filter(i => i.description).map((item, i) => ({
-        item_number: i + 1, description: item.description, quantity: item.quantity || 1,
-        unit: item.unit || 'per_service', unit_price: item.unit_price || 0,
-        tax_percent: item.tax_percent ?? 15, discount_percent: item.discount_percent ?? 0
-      }))
-
+      const cleanItems = items.filter(i => i.description).map((item, i) => ({ item_number: i + 1, description: item.description, quantity: item.quantity || 1, unit: item.unit || 'per_service', unit_price: item.unit_price || 0, tax_percent: item.tax_percent ?? 15, discount_percent: item.discount_percent ?? 0 }))
       const lt = (i) => i.quantity * i.unit_price
       const disc = (i) => lt(i) * (i.discount_percent / 100)
       const ad = (i) => lt(i) - disc(i)
@@ -291,44 +289,50 @@ export default function CreateQuotation() {
       const totalDisc = cleanItems.reduce((s, i) => s + disc(i), 0)
       const totalVAT = cleanItems.reduce((s, i) => s + vat(i), 0)
       const grandTotal = subtotal - totalDisc + totalVAT
+      const validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'converted']
+      const safeStatus = validStatuses.includes(status) ? status : 'draft'
 
       if (isEditMode) {
-        const { error: ue } = await supabase.from('quotations').update({
-          client_name: quotationData.client_name, client_email: quotationData.client_email,
-          client_phone: quotationData.client_phone, client_address: quotationData.client_address,
+        const { error: updateError } = await supabase.from('quotations').update({
+          client_name: quotationData.client_name, client_email: quotationData.client_email || null,
+          client_phone: quotationData.client_phone || null, client_address: quotationData.client_address || null,
+          client_city: quotationData.client_address?.split(',').pop()?.trim() || null,
           valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
-          notes: quotationData.notes, terms_and_conditions: quotationData.terms_and_conditions,
-          subtotal, tax_amount: totalVAT, discount_amount: totalDisc, total_amount: grandTotal,
-          status, prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
-        }).eq('id', id)
-        if (ue) throw ue
-        await supabase.from('quotation_items').delete().eq('quotation_id', id)
-        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id })))
-        toast.success('Quotation updated! ✅')
-      } else {
-        const { data: nq, error: ce } = await supabase.from('quotations').insert([{
-          client_id: quotationData.client_id || null, client_name: quotationData.client_name,
-          client_email: quotationData.client_email, client_phone: quotationData.client_phone,
-          client_address: quotationData.client_address, valid_until: quotationData.valid_until,
-          payment_terms: quotationData.payment_terms, notes: quotationData.notes,
-          terms_and_conditions: quotationData.terms_and_conditions,
+          notes: quotationData.notes || null, terms_and_conditions: quotationData.terms_and_conditions || null,
           subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
-          discount_type: 'none', discount_value: 0, total_amount: grandTotal, status,
+          discount_type: totalDisc > 0 ? 'fixed' : 'none', discount_value: totalDisc,
+          total_amount: grandTotal, status: safeStatus,
+          prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
+        }).eq('id', id)
+        if (updateError) throw updateError
+        await supabase.from('quotation_items').delete().eq('quotation_id', id)
+        if (cleanItems.length > 0) { const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id }))); if (itemsError) throw itemsError }
+        toast.success('Quotation updated! ✅')
+        navigate('/sales/quotations')
+      } else {
+        const { data: newQuote, error: createError } = await supabase.from('quotations').insert([{
+          client_id: quotationData.client_id || null, client_name: quotationData.client_name,
+          client_email: quotationData.client_email || null, client_phone: quotationData.client_phone || null,
+          client_address: quotationData.client_address || null,
+          client_city: quotationData.client_address?.split(',').pop()?.trim() || null,
+          valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms || '30 Days',
+          notes: quotationData.notes || null, terms_and_conditions: quotationData.terms_and_conditions || null,
+          subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
+          discount_type: totalDisc > 0 ? 'fixed' : 'none', discount_value: totalDisc,
+          total_amount: grandTotal, status: safeStatus,
           quotation_date: new Date().toISOString().split('T')[0],
-          created_by: user.id, created_by_name: quotationData.created_by_name,
-          prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name
+          created_by: user.id, created_by_name: quotationData.created_by_name || 'Unknown',
+          prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name || quotationData.created_by_name || 'Unknown'
         }]).select().single()
-        if (ce) throw ce
-        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: nq.id })))
+        if (createError) throw createError
+        if (cleanItems.length > 0) { const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: newQuote.id }))); if (itemsError) throw itemsError }
         toast.success('Quotation saved! ✅')
+        navigate('/sales/quotations')
       }
-      navigate('/sales/quotations')
-    } catch (error) {
-      toast.error('Failed to save: ' + (error.message || 'Unknown error'))
-    } finally { setSaving(false) }
+    } catch (error) { console.error('Save error:', error); toast.error('Failed to save: ' + (error.message || 'Unknown error')) }
+    finally { setSaving(false) }
   }
 
-  // PDF download uses the SAME buildQuotationHTML function
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
@@ -339,12 +343,7 @@ export default function CreateQuotation() {
       document.body.appendChild(container)
       await new Promise(r => setTimeout(r, 500))
       const html2pdf = (await import('html2pdf.js')).default
-      await html2pdf().set({
-        margin: [0, 0, 0, 0], filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] }
-      }).from(container).save()
+      await html2pdf().set({ margin: [0, 0, 0, 0], filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] } }).from(container).save()
       document.body.removeChild(container)
       toast.dismiss(); toast.success('PDF downloaded! 📄')
     } catch (e) { toast.dismiss(); toast.error('PDF failed') }
@@ -354,31 +353,17 @@ export default function CreateQuotation() {
   const cats = [...new Set(SERVICES.map(s => s.category))]
   const calcLine = (i) => (i.quantity || 0) * (i.unit_price || 0)
 
-  // Generate the HTML ONCE per render - used by BOTH preview and PDF
-  const quotationHTML = buildQuotationHTML(quotationData, items.filter(i => i.description))
-
   if (loadingQuote) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
-        </div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
-          {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
-        </button>
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span></div>
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">{isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}</button>
       </div>
-
       <main className="max-w-7xl mx-auto px-4 pt-8 pb-16">
-        <div className="flex items-center gap-2 mb-6 text-sm">
-          <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link><ChevronRight className="w-4 h-4 text-slate-400" />
-          <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link><ChevronRight className="w-4 h-4 text-slate-400" />
-          <span className="font-medium">{isEditMode ? 'Edit' : 'New'}</span>
-        </div>
-
+        <div className="flex items-center gap-2 mb-6 text-sm"><Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link><ChevronRight className="w-4 h-4 text-slate-400" /><Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link><ChevronRight className="w-4 h-4 text-slate-400" /><span className="font-medium">{isEditMode ? 'Edit' : 'New'}</span></div>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-2">
@@ -387,7 +372,6 @@ export default function CreateQuotation() {
             <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? '...' : 'Send'}</button>
           </div>
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6">
@@ -397,32 +381,23 @@ export default function CreateQuotation() {
               <div className="grid grid-cols-2 gap-3 mb-3"><input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" /><input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" /></div>
               <textarea value={quotationData.client_address} onChange={(e) => setQuotationData({...quotationData, client_address: e.target.value})} placeholder="Address" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
-
             <div className="neu-raised rounded-3xl p-6">
               <div className="flex justify-between mb-3"><h2 className="text-lg font-semibold">Products</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
               {items.map((item, i) => (
                 <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
                   <div className="flex justify-between mb-2"><span className="text-sm font-medium">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
                   <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
-                  <div className="grid grid-cols-4 gap-2">
-                    <input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" />
-                    <input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" />
-                    <input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" />
-                    <input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" />
-                  </div>
+                  <div className="grid grid-cols-4 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" /></div>
                   <p className="text-right text-sm font-bold mt-1">{fmt(calcLine(item))}</p>
                 </div>
               ))}
             </div>
-
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-lg font-semibold mb-3">Details</h2>
               <input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({...quotationData, valid_until: e.target.value})} className="w-full p-3 neu-inset rounded-xl mb-3" />
-              <textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Notes" rows={2} className="w-full p-3 neu-inset rounded-xl mb-3" />
-              <textarea value={quotationData.terms_and_conditions} onChange={(e) => setQuotationData({...quotationData, terms_and_conditions: e.target.value})} placeholder="Terms" rows={3} className="w-full p-3 neu-inset rounded-xl text-xs" />
+              <textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Notes" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
           </div>
-
           <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-3">Totals</h3>
@@ -432,28 +407,13 @@ export default function CreateQuotation() {
                 const dc = ai.reduce((s,i) => s + (i.quantity||0)*(i.unit_price||0)*(i.discount_percent||0)/100, 0)
                 const ad = st - dc
                 const vt = ai.reduce((s,i) => {const lt=(i.quantity||0)*(i.unit_price||0);const a=lt-lt*(i.discount_percent||0)/100;return s+a*(i.tax_percent||15)/100}, 0)
-                return <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div>
-                  <div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div>
-                  <div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div>
-                  <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div>
-                </div>
+                return <div className="space-y-2 text-sm"><div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div><div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div><div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div><div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div></div>
               })()}
             </div>
-
-            {/* PREVIEW - Uses the SAME HTML as PDF */}
             <div className="neu-raised rounded-3xl p-4">
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
               <div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{ minHeight: '400px', maxHeight: '600px' }}>
-                <div 
-                  style={{ 
-                    transform: `scale(${previewScale})`, 
-                    transformOrigin: 'center center', 
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)', 
-                    margin: '10px 0' 
-                  }}
-                  dangerouslySetInnerHTML={{ __html: quotationHTML }} 
-                />
+                <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'center center', width: A4_WIDTH_PX + 'px', backgroundColor: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '10px 0' }} dangerouslySetInnerHTML={{ __html: buildQuotationHTML(quotationData, items.filter(i => i.description)) }} />
               </div>
             </div>
           </div>
