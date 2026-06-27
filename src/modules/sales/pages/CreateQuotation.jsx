@@ -109,11 +109,9 @@ function buildQuotationHTML(quotation, items) {
       <td class="td-r"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
-  // Use a base64 placeholder or text logo since /logo.png may not resolve in PDF
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-@page { size: A4 portrait; margin: 0; }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;background:#fff;line-height:1.3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;background:#fff;line-height:1.3}
 .page{width:${A4_WIDTH_PX}px;padding:25px 35px;background:#fff}
 .hdr{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px}
 .hdr-l{display:flex;align-items:flex-start;gap:14px}
@@ -144,9 +142,6 @@ th{background:#000;color:#fff;padding:4px 5px;font-size:7px;font-weight:bold;tex
 .bb{flex:1;font-size:6px;color:#000}
 .bbt{font-size:7px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:1px}
 .ft{border-top:1px solid #000;padding-top:3px;text-align:center;font-size:6px;color:#000;margin-top:3px}
-@media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-}
 </style></head><body>
 <div class="page">
 <div class="hdr">
@@ -339,29 +334,59 @@ export default function CreateQuotation() {
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - Opens in new tab for print/save
+  // PDF DOWNLOAD - Direct download, no print dialog
   // ═══════════════════════════════════════════════
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     try {
-      const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      const blob = new Blob([html], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
-      const printWindow = window.open(url, '_blank', 'width=900,height=700')
+      toast.loading('Generating PDF...')
       
-      if (printWindow) {
-        printWindow.onload = () => {
-          setTimeout(() => {
-            printWindow.print()
-          }, 500)
-        }
-      } else {
-        // Fallback: open in same window
-        window.open(url, '_blank')
+      const htmlContent = buildQuotationHTML(quotationData, items.filter(i => i.description))
+      
+      // Create hidden iframe
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:absolute;left:-9999px;top:0;width:794px;height:1123px;'
+      document.body.appendChild(iframe)
+      
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
+      iframeDoc.open()
+      iframeDoc.write(htmlContent)
+      iframeDoc.close()
+      
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(iframeDoc.body, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#ffffff', width: 794, windowWidth: 794, logging: false
+      })
+      
+      document.body.removeChild(iframe)
+      
+      const { default: jsPDF } = await import('jspdf')
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
+      
+      const imgWidth = 210
+      const imgHeight = (canvas.height * 210) / canvas.width
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight)
+      
+      // If content exceeds one page, add more
+      let heightLeft = imgHeight - 297
+      while (heightLeft > 0) {
+        pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, -(imgHeight - 297), imgWidth, imgHeight)
+        heightLeft -= 297
       }
       
-      toast.success('Quotation opened for printing! 📄 Use Ctrl+P or Cmd+P to save as PDF')
-    } catch (e) {
-      console.error('PDF error:', e)
+      const filename = `Quotation_${(quotationData.client_name || 'draft').replace(/\s+/g, '_')}.pdf`
+      pdf.save(filename)
+      
+      toast.dismiss()
+      toast.success('PDF downloaded! 📄')
+    } catch (error) {
+      console.error('PDF error:', error)
+      toast.dismiss()
       toast.error('Failed to generate PDF')
     }
   }
