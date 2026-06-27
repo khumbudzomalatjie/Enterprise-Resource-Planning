@@ -71,7 +71,7 @@ function buildQuotationHTML(quotation, items) {
   return `<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;box-sizing:border-box">
 <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px">
 <div style="display:flex;align-items:flex-start;gap:14px">
-<div style="width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0">NG</div>
+<img src="/logo.png" alt="Logo" style="width:90px;height:auto;object-fit:contain" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div style=width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8>NG</div>')" />
 <div>
 <h1 style="font-size:18px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1">${COMPANY.name}</h1>
 <p style="font-size:7px;color:#64748b;margin:0">${COMPANY.tagline}</p>
@@ -148,7 +148,6 @@ export default function QuotationDetail() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const previewWrapperRef = useRef(null)
-  const printFrameRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
@@ -190,7 +189,7 @@ export default function QuotationDetail() {
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD
+  // PDF DOWNLOAD - Works because container is visible in DOM
   // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
@@ -199,17 +198,27 @@ export default function QuotationDetail() {
 
       const container = document.createElement('div')
       container.innerHTML = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
-      container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
+      // Position off-screen but still in DOM so html2canvas can render it
+      container.style.cssText = 'position:fixed;left:0;top:0;width:' + A4_WIDTH_PX + 'px;background:white;z-index:-1;opacity:0;pointer-events:none;'
       document.body.appendChild(container)
 
-      await new Promise(r => setTimeout(r, 600))
+      // Wait for images to attempt loading
+      await new Promise(r => setTimeout(r, 800))
 
       const html2pdf = (await import('html2pdf.js')).default
       await html2pdf().set({
         margin: [0, 0, 0, 0],
         filename: `Quotation_${selectedQuotation.quotation_number || 'download'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          allowTaint: true, 
+          letterRendering: true, 
+          width: A4_WIDTH_PX,
+          logging: false,
+          backgroundColor: '#ffffff'
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css'] }
       }).from(container).save()
@@ -225,90 +234,28 @@ export default function QuotationDetail() {
   }
 
   // ═══════════════════════════════════════════════
-  // PRINT - Using hidden iframe (MOST RELIABLE)
+  // PRINT - Opens in new window
   // ═══════════════════════════════════════════════
   const printQuotation = () => {
     if (!selectedQuotation) return
-
+    
     const htmlContent = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
-
-    // Remove old iframe if exists
-    const oldFrame = document.getElementById('print-frame')
-    if (oldFrame) oldFrame.remove()
-
-    // Create hidden iframe
-    const iframe = document.createElement('iframe')
-    iframe.id = 'print-frame'
-    iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:9999;background:white;'
-    document.body.appendChild(iframe)
-
-    // Write content to iframe
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
-    iframeDoc.open()
-    iframeDoc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Print Quotation</title>
-        <style>
-          @page { size: A4 portrait; margin: 0; }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            margin: 0; 
-            padding: 0; 
-            display: flex; 
-            justify-content: center; 
-            background: white;
-            font-family: Arial, Helvetica, sans-serif;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          @media print {
-            body { background: white; }
-          }
-        </style>
-      </head>
-      <body>
-        ${htmlContent}
-      </body>
-      </html>
-    `)
-    iframeDoc.close()
-
-    // Wait for iframe to fully load, then print
-    iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow.focus()
-        iframe.contentWindow.print()
-        // Remove iframe after printing
-        setTimeout(() => {
-          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-        }, 1000)
-      }, 500)
-    }
-
-    // Fallback: if onload doesn't fire, still try to print
-    setTimeout(() => {
-      if (iframe.contentWindow) {
-        iframe.contentWindow.focus()
-        iframe.contentWindow.print()
-        setTimeout(() => {
-          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-        }, 1000)
-      }
-    }, 2000)
+    
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) { toast.error('Allow popups'); return }
+    
+    w.document.write(`<!DOCTYPE html><html><head><title>Quotation</title><style>@page{size:A4;margin:0}body{margin:0;display:flex;justify-content:center;background:white;font-family:Arial,sans-serif}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${htmlContent}</body></html>`)
+    w.document.close()
+    
+    // Wait and print
+    setTimeout(() => { w.focus(); w.print() }, 800)
   }
 
   if (loading || !selectedQuotation) {
     return (
       <div className={`min-h-screen font-['Inter'] ${isDark ? 'dark' : ''}`}>
         <Navbar />
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-500 text-lg">Loading quotation...</p>
-          </div>
-        </div>
+        <div className="flex items-center justify-center min-h-[80vh]"><div className="text-center"><div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500 text-lg">Loading...</p></div></div>
       </div>
     )
   }
@@ -318,7 +265,6 @@ export default function QuotationDetail() {
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
-      {/* Fullscreen Modal */}
       {isFullscreen && (
         <div className="fixed inset-0 z-50 bg-gray-900/95 flex flex-col">
           <div className="flex items-center justify-between px-6 py-3 bg-gray-800 border-b border-gray-700">
@@ -335,26 +281,18 @@ export default function QuotationDetail() {
         </div>
       )}
 
-      {/* Accept Modal */}
       {showAcceptConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4"><Briefcase className="w-10 h-10 text-emerald-600" /></div>
-              <h3 className="text-2xl font-bold mb-2">Accept & Create Job?</h3>
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left"><div className="flex items-start gap-2"><AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" /><div><p className="text-sm font-semibold text-amber-800">Important:</p><ul className="text-xs text-amber-700 mt-1 list-disc list-inside"><li>Quotation marked as <strong>Accepted</strong></li><li>A <strong>Job</strong> will be created</li></ul></div></div></div>
-              <div className="flex gap-3"><button onClick={() => setShowAcceptConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleAccept} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" />Yes, Accept</button></div>
-            </div>
+            <div className="text-center"><div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4"><Briefcase className="w-10 h-10 text-emerald-600" /></div><h3 className="text-2xl font-bold mb-2">Accept & Create Job?</h3><div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left"><div className="flex items-start gap-2"><AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" /><div><p className="text-sm font-semibold text-amber-800">Important:</p><ul className="text-xs text-amber-700 mt-1 list-disc list-inside"><li>Quotation marked as <strong>Accepted</strong></li><li>A <strong>Job</strong> will be created</li></ul></div></div></div><div className="flex gap-3"><button onClick={() => setShowAcceptConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleAccept} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" />Yes, Accept</button></div></div>
           </motion.div>
         </div>
       )}
 
-      {/* Delete Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-md w-full bg-white dark:bg-slate-800">
-            <div className="text-center"><div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><AlertTriangle className="w-8 h-8 text-red-600" /></div><h3 className="text-xl font-bold mb-2">Delete?</h3><p className="text-slate-500 mb-6">Cannot be undone.</p>
-            <div className="flex gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button></div></div>
+            <div className="text-center"><div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><AlertTriangle className="w-8 h-8 text-red-600" /></div><h3 className="text-xl font-bold mb-2">Delete?</h3><p className="text-slate-500 mb-6">Cannot be undone.</p><div className="flex gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleDelete} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4" />Delete</button></div></div>
           </motion.div>
         </div>
       )}
@@ -384,19 +322,16 @@ export default function QuotationDetail() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6 flex flex-wrap items-center gap-4">
-          <span className="text-sm">Status:</span>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : quote.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{quote.status?.replace('_', ' ')}</span>
+          <span className="text-sm">Status:</span><span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status==='accepted'?'bg-emerald-100 text-emerald-700':quote.status==='sent'?'bg-blue-100 text-blue-700':'bg-gray-100 text-gray-700'}`}>{quote.status?.replace('_',' ')}</span>
           <div className="border-l border-slate-300 pl-4 flex flex-wrap gap-2">
-            {quote.status !== 'sent' && <button onClick={() => handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs hover:bg-blue-100"><Send className="w-3 h-3 inline mr-1" />Mark Sent</button>}
-            {quote.status !== 'accepted' && <button onClick={() => handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs hover:bg-emerald-100"><Briefcase className="w-3 h-3 inline mr-1" />Accept → Job</button>}
-            {quote.status !== 'rejected' && <button onClick={() => handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs hover:bg-red-100"><XCircle className="w-3 h-3 inline mr-1" />Reject</button>}
+            {quote.status!=='sent'&&<button onClick={()=>handleStatusChange('sent')} className="px-3 py-1 rounded-lg text-xs hover:bg-blue-100"><Send className="w-3 h-3 inline mr-1"/>Mark Sent</button>}
+            {quote.status!=='accepted'&&<button onClick={()=>handleStatusChange('accepted')} className="px-3 py-1 rounded-lg text-xs hover:bg-emerald-100"><Briefcase className="w-3 h-3 inline mr-1"/>Accept→Job</button>}
+            {quote.status!=='rejected'&&<button onClick={()=>handleStatusChange('rejected')} className="px-3 py-1 rounded-lg text-xs hover:bg-red-100"><XCircle className="w-3 h-3 inline mr-1"/>Reject</button>}
           </div>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[{ label: 'Client', value: quote.client_name }, { label: 'Date', value: formatDate(quote.quotation_date) }, { label: 'Valid Until', value: formatDate(quote.valid_until) }, { label: 'Total', value: formatCurrency(quote.total_amount), hl: true }].map((c, i) => (
-            <div key={i} className="neu-raised rounded-2xl p-4"><p className="text-xs uppercase">{c.label}</p><p className={`font-semibold mt-1 ${c.hl ? 'text-emerald-600 text-lg' : ''}`}>{c.value}</p></div>
-          ))}
+          {[{label:'Client',value:quote.client_name},{label:'Date',value:formatDate(quote.quotation_date)},{label:'Valid Until',value:formatDate(quote.valid_until)},{label:'Total',value:formatCurrency(quote.total_amount),hl:true}].map((c,i)=>(<div key={i} className="neu-raised rounded-2xl p-4"><p className="text-xs uppercase">{c.label}</p><p className={`font-semibold mt-1 ${c.hl?'text-emerald-600 text-lg':''}`}>{c.value}</p></div>))}
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl p-6 mb-6">
@@ -404,11 +339,10 @@ export default function QuotationDetail() {
           <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b"><th className="text-left text-xs py-3 px-3">#</th><th className="text-left text-xs py-3 px-3">Description</th><th className="text-center text-xs py-3 px-3">Qty</th><th className="text-right text-xs py-3 px-3">Unit Price</th><th className="text-right text-xs py-3 px-3">Total</th></tr></thead><tbody>{(quote.quotation_items||[]).map((item,i)=>(<tr key={i} className="border-b"><td className="py-3 px-3 text-sm">{i+1}</td><td className="py-3 px-3 text-sm font-medium">{item.description}</td><td className="py-3 px-3 text-sm text-center">{item.quantity}</td><td className="py-3 px-3 text-sm text-right">{formatCurrency(item.unit_price)}</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(item.total_price||item.quantity*item.unit_price)}</td></tr>))}</tbody><tfoot><tr className="border-t-2"><td colSpan="4" className="py-3 px-3 text-sm font-semibold text-right">Subtotal:</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(quote.subtotal)}</td></tr><tr><td colSpan="4" className="py-2 px-3 text-sm text-right">VAT (15%):</td><td className="py-2 px-3 text-sm text-right">{formatCurrency(quote.tax_amount)}</td></tr><tr><td colSpan="4" className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">TOTAL:</td><td className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">{formatCurrency(quote.total_amount)}</td></tr></tfoot></table></div>
         </motion.div>
 
-        {/* A4 Preview */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />A4 Document Preview</h2><button onClick={() => setIsFullscreen(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Maximize2 className="w-4 h-4" /> Full Screen</button></div>
-          <div ref={previewWrapperRef} className="bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-auto" style={{ minHeight: '500px', maxHeight: '80vh', padding: '20px' }}>
-            <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }} dangerouslySetInnerHTML={{ __html: quoteHTML }} />
+          <div className="flex items-center justify-between px-6 py-4 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />A4 Document Preview</h2><button onClick={()=>setIsFullscreen(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Maximize2 className="w-4 h-4"/> Full Screen</button></div>
+          <div ref={previewWrapperRef} className="bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-auto" style={{minHeight:'500px',maxHeight:'80vh',padding:'20px'}}>
+            <div style={{transform:`scale(${scale})`,transformOrigin:'center center',boxShadow:'0 4px 20px rgba(0,0,0,0.15)'}} dangerouslySetInnerHTML={{__html:quoteHTML}}/>
           </div>
         </motion.div>
       </main>
