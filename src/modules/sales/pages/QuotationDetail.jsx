@@ -37,9 +37,6 @@ const DEFAULT_TERMS = [
 
 const A4_WIDTH_PX = 794
 
-// ═══════════════════════════════════════════════
-// BUILD QUOTATION HTML
-// ═══════════════════════════════════════════════
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
   const fmtDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -71,17 +68,7 @@ function buildQuotationHTML(quotation, items) {
       <td style="padding:3px 5px;font-size:7px;border-bottom:1px solid #e5e7eb;text-align:right"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:Arial,Helvetica,sans-serif;background:white}
-</style>
-</head>
-<body>
-<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;margin:0 auto">
+  return `<div style="width:${A4_WIDTH_PX}px;padding:24px 36px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;line-height:1.3;box-sizing:border-box">
 <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:8px;margin-bottom:6px">
 <div style="display:flex;align-items:flex-start;gap:14px">
 <div style="width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0">NG</div>
@@ -152,20 +139,16 @@ ${quotation?.notes ? `<div style="border:1px solid #d1d5db;border-radius:3px;pad
 <div style="flex:1;font-size:6px"><div style="font-size:7px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px">Banking Details</div><p style="font-size:6px;margin:0"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:6px;margin:0"><strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:6px;margin:0"><strong>Account:</strong> ${COMPANY.accountNumber}</p><p style="font-size:6px;margin:0"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:6px;margin:0"><strong>Ref:</strong> ${quoteNum}</p></div>
 </div>
 <div style="border-top:1px solid #d1d5db;padding-top:3px;text-align:center;font-size:6px;color:#94a3b8;margin-top:3px"><p style="margin:0">${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p><p style="margin:0">Page 1 of 1</p></div>
-</div>
-</body>
-</html>`
+</div>`
 }
 
-// ═══════════════════════════════════════════════
-// QUOTATION DETAIL PAGE
-// ═══════════════════════════════════════════════
 export default function QuotationDetail() {
   const { id } = useParams()
   const { selectedQuotation, fetchQuotation, updateQuotationStatus, deleteQuotation, acceptQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const previewWrapperRef = useRef(null)
+  const printFrameRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
@@ -242,29 +225,78 @@ export default function QuotationDetail() {
   }
 
   // ═══════════════════════════════════════════════
-  // PRINT - Direct print of current view
+  // PRINT - Using hidden iframe (MOST RELIABLE)
   // ═══════════════════════════════════════════════
   const printQuotation = () => {
     if (!selectedQuotation) return
 
     const htmlContent = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
 
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
-      toast.error('Please allow popups for this site')
-      return
+    // Remove old iframe if exists
+    const oldFrame = document.getElementById('print-frame')
+    if (oldFrame) oldFrame.remove()
+
+    // Create hidden iframe
+    const iframe = document.createElement('iframe')
+    iframe.id = 'print-frame'
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:9999;background:white;'
+    document.body.appendChild(iframe)
+
+    // Write content to iframe
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
+    iframeDoc.open()
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print Quotation</title>
+        <style>
+          @page { size: A4 portrait; margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            justify-content: center; 
+            background: white;
+            font-family: Arial, Helvetica, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          @media print {
+            body { background: white; }
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `)
+    iframeDoc.close()
+
+    // Wait for iframe to fully load, then print
+    iframe.onload = () => {
+      setTimeout(() => {
+        iframe.contentWindow.focus()
+        iframe.contentWindow.print()
+        // Remove iframe after printing
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+        }, 1000)
+      }, 500)
     }
 
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    printWindow.focus()
-    
-    // Print after content loads
-    printWindow.onload = function() {
-      setTimeout(() => {
-        printWindow.print()
-      }, 400)
-    }
+    // Fallback: if onload doesn't fire, still try to print
+    setTimeout(() => {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.focus()
+        iframe.contentWindow.print()
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+        }, 1000)
+      }
+    }, 2000)
   }
 
   if (loading || !selectedQuotation) {
