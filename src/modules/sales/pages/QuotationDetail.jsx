@@ -147,7 +147,7 @@ export default function QuotationDetail() {
   const { selectedQuotation, fetchQuotation, updateQuotationStatus, deleteQuotation, acceptQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const previewWrapperRef = useRef(null)
+  const previewRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false)
@@ -157,8 +157,8 @@ export default function QuotationDetail() {
 
   useEffect(() => {
     const calc = () => {
-      if (previewWrapperRef.current) {
-        const w = previewWrapperRef.current.clientWidth - 32
+      if (previewRef.current) {
+        const w = previewRef.current.clientWidth - 32
         setScale(Math.max(0.3, Math.min(w / A4_WIDTH_PX, 0.7)))
       }
     }
@@ -189,66 +189,61 @@ export default function QuotationDetail() {
   }
 
   // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - Works because container is visible in DOM
+  // PDF - Uses the VISIBLE preview element
   // ═══════════════════════════════════════════════
   const downloadPDF = async () => {
     try {
       if (!selectedQuotation) return
+      
+      // Get the preview element which is VISIBLE on screen
+      const previewEl = previewRef.current?.querySelector('div')
+      if (!previewEl) {
+        toast.error('Preview not loaded. Please refresh.')
+        return
+      }
+
       toast.loading('Generating PDF...')
 
-      const container = document.createElement('div')
-      container.innerHTML = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
-      // Position off-screen but still in DOM so html2canvas can render it
-      container.style.cssText = 'position:fixed;left:0;top:0;width:' + A4_WIDTH_PX + 'px;background:white;z-index:-1;opacity:0;pointer-events:none;'
-      document.body.appendChild(container)
+      // Clone the preview element so we don't modify the visible one
+      const clone = previewEl.cloneNode(true)
+      clone.style.transform = 'none'
+      clone.style.position = 'fixed'
+      clone.style.left = '0'
+      clone.style.top = '0'
+      clone.style.zIndex = '99999'
+      clone.style.width = A4_WIDTH_PX + 'px'
+      clone.style.backgroundColor = 'white'
+      document.body.appendChild(clone)
 
-      // Wait for images to attempt loading
-      await new Promise(r => setTimeout(r, 800))
+      // Small delay for render
+      await new Promise(r => setTimeout(r, 300))
 
       const html2pdf = (await import('html2pdf.js')).default
       await html2pdf().set({
         margin: [0, 0, 0, 0],
         filename: `Quotation_${selectedQuotation.quotation_number || 'download'}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          allowTaint: true, 
-          letterRendering: true, 
-          width: A4_WIDTH_PX,
-          logging: false,
-          backgroundColor: '#ffffff'
-        },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css'] }
-      }).from(container).save()
+      }).from(clone).save()
 
-      document.body.removeChild(container)
+      document.body.removeChild(clone)
       toast.dismiss()
       toast.success('PDF downloaded! 📄')
     } catch (e) {
       console.error('PDF error:', e)
       toast.dismiss()
-      toast.error('PDF failed: ' + e.message)
+      toast.error('PDF failed')
     }
   }
 
   // ═══════════════════════════════════════════════
-  // PRINT - Opens in new window
+  // PRINT
   // ═══════════════════════════════════════════════
   const printQuotation = () => {
     if (!selectedQuotation) return
-    
-    const htmlContent = buildQuotationHTML(selectedQuotation, selectedQuotation.quotation_items || [])
-    
-    const w = window.open('', '_blank', 'width=900,height=700')
-    if (!w) { toast.error('Allow popups'); return }
-    
-    w.document.write(`<!DOCTYPE html><html><head><title>Quotation</title><style>@page{size:A4;margin:0}body{margin:0;display:flex;justify-content:center;background:white;font-family:Arial,sans-serif}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${htmlContent}</body></html>`)
-    w.document.close()
-    
-    // Wait and print
-    setTimeout(() => { w.focus(); w.print() }, 800)
+    window.print()
   }
 
   if (loading || !selectedQuotation) {
@@ -271,7 +266,6 @@ export default function QuotationDetail() {
             <span className="text-white font-semibold">{quote.quotation_number}</span>
             <div className="flex gap-3">
               <button onClick={downloadPDF} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-sm"><Download className="w-4 h-4" /> PDF</button>
-              <button onClick={printQuotation} className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm"><Printer className="w-4 h-4" /> Print</button>
               <button onClick={() => setIsFullscreen(false)} className="px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2 text-sm"><X className="w-4 h-4" /> Close</button>
             </div>
           </div>
@@ -339,9 +333,10 @@ export default function QuotationDetail() {
           <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b"><th className="text-left text-xs py-3 px-3">#</th><th className="text-left text-xs py-3 px-3">Description</th><th className="text-center text-xs py-3 px-3">Qty</th><th className="text-right text-xs py-3 px-3">Unit Price</th><th className="text-right text-xs py-3 px-3">Total</th></tr></thead><tbody>{(quote.quotation_items||[]).map((item,i)=>(<tr key={i} className="border-b"><td className="py-3 px-3 text-sm">{i+1}</td><td className="py-3 px-3 text-sm font-medium">{item.description}</td><td className="py-3 px-3 text-sm text-center">{item.quantity}</td><td className="py-3 px-3 text-sm text-right">{formatCurrency(item.unit_price)}</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(item.total_price||item.quantity*item.unit_price)}</td></tr>))}</tbody><tfoot><tr className="border-t-2"><td colSpan="4" className="py-3 px-3 text-sm font-semibold text-right">Subtotal:</td><td className="py-3 px-3 text-sm font-semibold text-right">{formatCurrency(quote.subtotal)}</td></tr><tr><td colSpan="4" className="py-2 px-3 text-sm text-right">VAT (15%):</td><td className="py-2 px-3 text-sm text-right">{formatCurrency(quote.tax_amount)}</td></tr><tr><td colSpan="4" className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">TOTAL:</td><td className="py-3 px-3 text-lg font-bold text-emerald-600 text-right">{formatCurrency(quote.total_amount)}</td></tr></tfoot></table></div>
         </motion.div>
 
+        {/* A4 Preview - THIS IS WHAT GETS CAPTURED FOR PDF */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b"><h2 className="text-lg font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />A4 Document Preview</h2><button onClick={()=>setIsFullscreen(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Maximize2 className="w-4 h-4"/> Full Screen</button></div>
-          <div ref={previewWrapperRef} className="bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-auto" style={{minHeight:'500px',maxHeight:'80vh',padding:'20px'}}>
+          <div ref={previewRef} className="bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-auto" style={{minHeight:'500px',maxHeight:'80vh',padding:'20px'}}>
             <div style={{transform:`scale(${scale})`,transformOrigin:'center center',boxShadow:'0 4px 20px rgba(0,0,0,0.15)'}} dangerouslySetInnerHTML={{__html:quoteHTML}}/>
           </div>
         </motion.div>
