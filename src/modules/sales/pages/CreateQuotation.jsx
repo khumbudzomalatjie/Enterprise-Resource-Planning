@@ -109,14 +109,16 @@ function buildQuotationHTML(quotation, items) {
       <td class="td-r"><strong>${fmt(lineGrandTotal(item))}</strong></td>
     </tr>`).join('')
 
+  // Use a base64 placeholder or text logo since /logo.png may not resolve in PDF
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+@page { size: A4 portrait; margin: 0; }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;background:#fff;line-height:1.3}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;background:#fff;line-height:1.3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{width:${A4_WIDTH_PX}px;padding:25px 35px;background:#fff}
 .hdr{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:6px}
 .hdr-l{display:flex;align-items:flex-start;gap:14px}
-.logo-img{width:90px;height:auto;object-fit:contain;flex-shrink:0}
-.logo-fallback{width:90px;height:50px;background:#e8f0f8;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:16px;font-weight:bold;color:#1B5080;border:1px solid #c5d5e8;flex-shrink:0}
+.logo-box{width:90px;height:55px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:14px;font-weight:bold;color:#1B5080;border:1px solid #ccc;flex-shrink:0;overflow:hidden}
+.logo-box img{width:100%;height:100%;object-fit:contain}
 .cn{font-size:18px;font-weight:bold;color:#000;margin:0;line-height:1.1}
 .cd{font-size:7px;color:#000;margin:0}
 .hdr-r{text-align:right;flex-shrink:0}
@@ -142,11 +144,14 @@ th{background:#000;color:#fff;padding:4px 5px;font-size:7px;font-weight:bold;tex
 .bb{flex:1;font-size:6px;color:#000}
 .bbt{font-size:7px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:1px}
 .ft{border-top:1px solid #000;padding-top:3px;text-align:center;font-size:6px;color:#000;margin-top:3px}
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 </style></head><body>
 <div class="page">
 <div class="hdr">
 <div class="hdr-l">
-<img src="/logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<div class=logo-fallback>NG</div>')" />
+<div class="logo-box"><img src="/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:16px;font-weight:bold;color:#1B5080;>NDANDULENI<br>GROUP</span>'" /></div>
 <div>
 <h1 class="cn">${COMPANY.name}</h1>
 <p class="cd">${COMPANY.tagline}</p>
@@ -333,20 +338,32 @@ export default function CreateQuotation() {
     finally { setSaving(false) }
   }
 
-  const downloadPDF = async () => {
+  // ═══════════════════════════════════════════════
+  // PDF DOWNLOAD - Opens in new tab for print/save
+  // ═══════════════════════════════════════════════
+  const downloadPDF = () => {
     try {
-      toast.loading('Generating PDF...')
       const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      const container = document.createElement('div')
-      container.innerHTML = html
-      container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
-      document.body.appendChild(container)
-      await new Promise(r => setTimeout(r, 500))
-      const html2pdf = (await import('html2pdf.js')).default
-      await html2pdf().set({ margin: [0, 0, 0, 0], filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css'] } }).from(container).save()
-      document.body.removeChild(container)
-      toast.dismiss(); toast.success('PDF downloaded! 📄')
-    } catch (e) { toast.dismiss(); toast.error('PDF failed') }
+      const blob = new Blob([html], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      const printWindow = window.open(url, '_blank', 'width=900,height=700')
+      
+      if (printWindow) {
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print()
+          }, 500)
+        }
+      } else {
+        // Fallback: open in same window
+        window.open(url, '_blank')
+      }
+      
+      toast.success('Quotation opened for printing! 📄 Use Ctrl+P or Cmd+P to save as PDF')
+    } catch (e) {
+      console.error('PDF error:', e)
+      toast.error('Failed to generate PDF')
+    }
   }
 
   const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
