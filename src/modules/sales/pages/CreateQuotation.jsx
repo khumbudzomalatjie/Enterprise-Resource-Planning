@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 import {
   FileText, Plus, Trash2, Download, Eye,
   Sun, Moon, Sparkles, ChevronRight,
-  Save, Send, Briefcase
+  Save, Send
 } from 'lucide-react'
 
 const SERVICES = [
@@ -51,15 +51,31 @@ const COMPANY = {
   accountType: 'Transact',
 }
 
-const FULL_TERMS = `BOOKING & PAYMENT: 50% deposit secures booking. Balance due on completion. EFT/Card only — no cash.
-CANCELLATION: 24-hour notice for full refund. Rescheduling subject to availability.
-LIABILITY: Clients must remove valuables & fragile items. Company not liable for loss/damage to such items.
-CLIENT DUTIES: Provide access, secure pets, remove clutter & obstacles.
-SATISFACTION: 100% guaranteed. Free re-clean if unsatisfied.
-TENDERS: Available for short/long-term tenders & call-out services.`
+const FULL_TERMS = `BOOKING & PAYMENT
+1. 50% deposit required to secure booking
+2. Balance payable upon completion
+3. Payment methods: EFT and card. No cash.
+
+CANCELLATION & RESCHEDULING
+1. 24-hour notice required for full refund
+2. Rescheduling subject to availability
+
+LIABILITY & INSURANCE
+Clients responsible for removing valuables and fragile items as company will not be liable for damages. The company shall not be held liable for any loss or damage to such items.
+
+CLIENT RESPONSIBILITIES
+1. Provide access to premises
+2. Ensure pets are secured or removed
+3. Remove clutter and obstacles
+
+SATISFACTION GUARANTEE
+1. 100% satisfaction guaranteed
+2. Re-cleaning provided if not satisfied
+
+TENDERS & CALL-OUTS
+The company is available for short- and long-term tenders and can provide services on an as-needed, call-out basis.`
 
 const A4_WIDTH_PX = 794
-const A4_HEIGHT_PX = 1123
 
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
@@ -83,7 +99,7 @@ function buildQuotationHTML(quotation, items) {
     <tr>
       <td class="td-c">${i + 1}</td>
       <td class="td-l">${item.code || ''}</td>
-      <td class="td-l">${item.description}${item.unit_price === 0 ? ' <span style="color:#000;font-weight:bold;">(FREE)</span>' : ''}</td>
+      <td class="td-l">${item.description}${item.unit_price === 0 ? ' <span style="color:#059669;font-weight:bold;">(FREE)</span>' : ''}</td>
       <td class="td-c">${item.quantity}</td>
       <td class="td-c">${item.unit || 'each'}</td>
       <td class="td-r">${fmt(item.unit_price)}</td>
@@ -94,42 +110,40 @@ function buildQuotationHTML(quotation, items) {
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#000;background:#fff;line-height:1.25}
-.page{width:${A4_WIDTH_PX}px;padding:20px 30px;background:#fff}
-.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:5px}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;background:#fff;line-height:1.25}
+.page{width:${A4_WIDTH_PX}px;padding:22px 32px;background:#fff}
+.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:6px;margin-bottom:4px}
 .hdr-l{display:flex;align-items:flex-start;gap:12px}
-.logo-box{width:80px;height:48px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:12px;font-weight:bold;color:#1B5080;border:1px solid #ccc;flex-shrink:0;overflow:hidden}
-.logo-box img{width:100%;height:100%;object-fit:contain}
-.cn{font-size:16px;font-weight:bold;color:#000;margin:0;line-height:1.1}
-.cd{font-size:6.5px;color:#000;margin:0}
+.logo-img{width:80px;height:auto;object-fit:contain;flex-shrink:0}
+.cn{font-size:17px;font-weight:bold;color:#0D2D4A;margin:0;line-height:1.1}
+.cd{font-size:6.5px;color:#333;margin:0}
 .hdr-r{text-align:right;flex-shrink:0}
-.qt{font-size:24px;font-weight:bold;color:#000;margin:0;letter-spacing:2px}
-.qn{font-size:11px;color:#000;font-weight:bold;margin:1px 0}
-.qi{font-size:6.5px;color:#000}
+.qt{font-size:24px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:2px}
+.qn{font-size:11px;color:#1B5080;font-weight:bold;margin:1px 0}
+.qi{font-size:6.5px;color:#333}
 .qi p{margin:0}
 .row{display:flex;gap:5px;margin-bottom:4px}
-.box{flex:1;border:1px solid #000;border-radius:3px;padding:4px 6px}
-.bt{font-size:6.5px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:2px;border-bottom:1px solid #000;padding-bottom:1px}
-.box p{font-size:6.5px;margin:1px 0;color:#000}
-.box p strong{color:#000}
+.box{flex:1;border:1px solid #d1d5db;border-radius:3px;padding:4px 6px}
+.bt{font-size:6.5px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px;border-bottom:1px solid #e5e7eb;padding-bottom:1px}
+.box p{font-size:6.5px;margin:1px 0;color:#1a1a1a}
 table{width:100%;border-collapse:collapse;margin-bottom:4px}
-th{background:#000;color:#fff;padding:3px 4px;font-size:6.5px;font-weight:bold;text-transform:uppercase;text-align:center}
-.td-l{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #ccc;text-align:left;color:#000}
-.td-c{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #ccc;text-align:center;color:#000}
-.td-r{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #ccc;text-align:right;color:#000}
+th{background:#1B5080;color:#fff;padding:3px 4px;font-size:6.5px;font-weight:bold;text-transform:uppercase;text-align:center}
+.td-l{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:left;color:#1a1a1a}
+.td-c{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:center;color:#1a1a1a}
+.td-r{padding:2px 4px;font-size:6.5px;border-bottom:1px solid #e5e7eb;text-align:right;color:#1a1a1a}
 .tr{display:flex;justify-content:flex-end;margin-bottom:4px}
-.tb{width:200px;border:1px solid #000;border-radius:3px;overflow:hidden}
-.tl{display:flex;justify-content:space-between;padding:2px 7px;border-bottom:1px solid #ccc;font-size:6.5px;color:#000}
-.tlg{display:flex;justify-content:space-between;padding:5px 7px;font-size:11px;font-weight:bold;background:#e8e8e8;color:#000}
+.tb{width:200px;border:1px solid #d1d5db;border-radius:3px;overflow:hidden}
+.tl{display:flex;justify-content:space-between;padding:2px 7px;border-bottom:1px solid #e5e7eb;font-size:6.5px;color:#1a1a1a}
+.tlg{display:flex;justify-content:space-between;padding:5px 7px;font-size:11px;font-weight:bold;background:#eaf1f8;color:#0D2D4A}
 .br{display:flex;gap:5px;margin-bottom:2px}
-.bb{flex:1;font-size:5.5px;color:#000}
-.bbt{font-size:6.5px;font-weight:bold;color:#000;text-transform:uppercase;margin-bottom:1px}
-.ft{border-top:1px solid #000;padding-top:2px;text-align:center;font-size:5.5px;color:#000;margin-top:2px}
+.bb{flex:1;font-size:5.5px;color:#1a1a1a}
+.bbt{font-size:6.5px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px}
+.ft{border-top:1px solid #d1d5db;padding-top:2px;text-align:center;font-size:5.5px;color:#666;margin-top:2px}
 </style></head><body>
 <div class="page">
 <div class="hdr">
 <div class="hdr-l">
-<div class="logo-box"><img src="/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.innerHTML='<span style=font-size:14px;font-weight:bold;color:#1B5080;>NDANDULENI<br>GROUP</span>'" /></div>
+<img src="/logo.png" alt="Logo" class="logo-img" />
 <div>
 <h1 class="cn">${COMPANY.name}</h1>
 <p class="cd">${COMPANY.tagline}</p>
@@ -151,12 +165,12 @@ th{background:#000;color:#fff;padding:3px 4px;font-size:6.5px;font-weight:bold;t
 <div class="row">
 <div class="box"><div class="bt">Customer Details</div><p><strong>Customer:</strong> ${quotation?.client_name || ''}</p><p><strong>Phone:</strong> ${quotation?.client_phone || ''}</p><p><strong>Email:</strong> ${quotation?.client_email || ''}</p><p><strong>Address:</strong> ${quotation?.client_address || ''}</p></div>
 </div>
-<table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${productRows || '<tr><td colspan="9" class="td-c" style="padding:10px;">No items</td></tr>'}</tbody></table>
+<table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${productRows || '<tr><td colspan="9" class="td-c" style="padding:12px;">No items</td></tr>'}</tbody></table>
 <div class="tr"><div class="tb"><div class="tl"><span>Subtotal</span><span>${fmt(subtotal)}</span></div><div class="tl"><span>Discount</span><span>-${fmt(totalDiscount)}</span></div><div class="tl"><span>VAT (15%)</span><span>${fmt(totalVAT)}</span></div><div class="tlg"><span>Grand Total</span><span>${fmt(grandTotal)}</span></div></div></div>
-${quotation?.notes ? `<div class="box" style="margin-bottom:3px;"><div class="bt">Notes</div><p style="font-size:6.5px;white-space:pre-line;color:#000;">${quotation.notes}</p></div>` : ''}
+${quotation?.notes ? `<div class="box" style="margin-bottom:3px;"><div class="bt">Notes</div><p style="font-size:6.5px;white-space:pre-line;">${quotation.notes}</p></div>` : ''}
 <div class="br">
-<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:5.5px;color:#000;">${FULL_TERMS}</p></div>
-<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:5.5px;color:#000;"><strong>Bank:</strong> ${COMPANY.bank} | <strong>Branch:</strong> ${COMPANY.branch}</p><p style="font-size:5.5px;color:#000;"><strong>Account:</strong> ${COMPANY.accountNumber} | <strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:5.5px;color:#000;"><strong>Ref:</strong> ${quoteNum}</p></div>
+<div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:5.5px;color:#1a1a1a;">${FULL_TERMS}</p></div>
+<div class="bb"><div class="bbt">Banking Details</div><p style="font-size:5.5px;"><strong>Bank:</strong> ${COMPANY.bank}</p><p style="font-size:5.5px;"><strong>Branch Code:</strong> ${COMPANY.branch}</p><p style="font-size:5.5px;"><strong>Account No:</strong> ${COMPANY.accountNumber}</p><p style="font-size:5.5px;"><strong>Type:</strong> ${COMPANY.accountType}</p><p style="font-size:5.5px;"><strong>Ref:</strong> ${quoteNum}</p></div>
 </div>
 <div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p></div>
 </div></body></html>`
@@ -169,8 +183,6 @@ export default function CreateQuotation() {
   const [previewScale, setPreviewScale] = useState(0.4)
   const [saving, setSaving] = useState(false)
 
-  const createQuotation = useSalesStore((state) => state.createQuotation)
-  const updateQuotation = useSalesStore((state) => state.updateQuotation)
   const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
   const fetchClients = useCRMStore((state) => state.fetchClients)
@@ -275,10 +287,9 @@ export default function CreateQuotation() {
       const safeStatus = validStatuses.includes(status) ? status : 'draft'
 
       if (isEditMode) {
-        const { error: updateError } = await supabase.from('quotations').update({
+        await supabase.from('quotations').update({
           client_name: quotationData.client_name, client_email: quotationData.client_email || null,
           client_phone: quotationData.client_phone || null, client_address: quotationData.client_address || null,
-          client_city: quotationData.client_address?.split(',').pop()?.trim() || null,
           valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms,
           notes: quotationData.notes || null, terms_and_conditions: quotationData.terms_and_conditions || null,
           subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
@@ -286,17 +297,15 @@ export default function CreateQuotation() {
           total_amount: grandTotal, status: safeStatus,
           prepared_by_name: quotationData.prepared_by_name, updated_at: new Date().toISOString()
         }).eq('id', id)
-        if (updateError) throw updateError
         await supabase.from('quotation_items').delete().eq('quotation_id', id)
-        if (cleanItems.length > 0) { const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id }))); if (itemsError) throw itemsError }
-        toast.success('Quotation updated! ✅')
+        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: id })))
+        toast.success('Updated! ✅')
         navigate('/sales/quotations')
       } else {
-        const { data: newQuote, error: createError } = await supabase.from('quotations').insert([{
+        const { data: newQuote } = await supabase.from('quotations').insert([{
           client_id: quotationData.client_id || null, client_name: quotationData.client_name,
           client_email: quotationData.client_email || null, client_phone: quotationData.client_phone || null,
           client_address: quotationData.client_address || null,
-          client_city: quotationData.client_address?.split(',').pop()?.trim() || null,
           valid_until: quotationData.valid_until, payment_terms: quotationData.payment_terms || '30 Days',
           notes: quotationData.notes || null, terms_and_conditions: quotationData.terms_and_conditions || null,
           subtotal, tax_amount: totalVAT, tax_rate: 15, discount_amount: totalDisc,
@@ -306,54 +315,35 @@ export default function CreateQuotation() {
           created_by: user.id, created_by_name: quotationData.created_by_name || 'Unknown',
           prepared_by: user.id, prepared_by_name: quotationData.prepared_by_name || quotationData.created_by_name || 'Unknown'
         }]).select().single()
-        if (createError) throw createError
-        if (cleanItems.length > 0) { const { error: itemsError } = await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: newQuote.id }))); if (itemsError) throw itemsError }
-        toast.success('Quotation saved! ✅')
+        if (cleanItems.length > 0) await supabase.from('quotation_items').insert(cleanItems.map(item => ({ ...item, quotation_id: newQuote.id })))
+        toast.success('Saved! ✅')
         navigate('/sales/quotations')
       }
-    } catch (error) { console.error('Save error:', error); toast.error('Failed to save: ' + (error.message || 'Unknown error')) }
+    } catch (error) { toast.error('Failed: ' + (error.message || 'Unknown error')) }
     finally { setSaving(false) }
   }
 
   const downloadPDF = async () => {
     try {
       toast.loading('Generating PDF...')
-      const htmlContent = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      const iframe = document.createElement('iframe')
-      iframe.style.cssText = 'position:absolute;left:-9999px;top:0;width:794px;height:1123px;'
-      document.body.appendChild(iframe)
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
-      iframeDoc.open()
-      iframeDoc.write(htmlContent)
-      iframeDoc.close()
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(iframeDoc.body, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#ffffff', width: 794, windowWidth: 794, logging: false
-      })
-      document.body.removeChild(iframe)
-      const { default: jsPDF } = await import('jspdf')
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
-      const imgWidth = 210
-      const imgHeight = (canvas.height * 210) / canvas.width
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight)
-      let heightLeft = imgHeight - 297
-      while (heightLeft > 0) {
-        pdf.addPage()
-        pdf.addImage(imgData, 'JPEG', 0, -(imgHeight - 297), imgWidth, imgHeight)
-        heightLeft -= 297
-      }
-      const filename = `Quotation_${(quotationData.client_name || 'draft').replace(/\s+/g, '_')}.pdf`
-      pdf.save(filename)
-      toast.dismiss()
-      toast.success('PDF downloaded! 📄')
-    } catch (error) {
-      console.error('PDF error:', error)
-      toast.dismiss()
-      toast.error('Failed to generate PDF')
-    }
+      const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
+      const container = document.createElement('div')
+      container.innerHTML = html
+      container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + A4_WIDTH_PX + 'px;background:white;'
+      document.body.appendChild(container)
+      await new Promise(r => setTimeout(r, 600))
+      const html2pdf = (await import('html2pdf.js')).default
+      await html2pdf().set({
+        margin: [0, 0, 0, 0],
+        filename: `Quotation_${quotationData.client_name || 'draft'}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, letterRendering: true, width: A4_WIDTH_PX },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all'] }
+      }).from(container).save()
+      document.body.removeChild(container)
+      toast.dismiss(); toast.success('PDF downloaded! 📄')
+    } catch (e) { toast.dismiss(); toast.error('PDF failed') }
   }
 
   const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
@@ -392,7 +382,7 @@ export default function CreateQuotation() {
               <div className="flex justify-between mb-3"><h2 className="text-lg font-semibold">Products</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
               {items.map((item, i) => (
                 <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
-                  <div className="flex justify-between mb-2"><span className="text-sm font-medium">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
+                  <div className="flex justify-between mb-2"><span className="text-sm">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
                   <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
                   <div className="grid grid-cols-4 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" /></div>
                   <p className="text-right text-sm font-bold mt-1">{fmt(calcLine(item))}</p>
