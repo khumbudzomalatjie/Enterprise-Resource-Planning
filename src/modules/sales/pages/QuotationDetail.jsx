@@ -25,6 +25,24 @@ const COMPANY = {
   accountType: 'Transact',
 }
 
+// Convert logo image to base64 for PDF
+async function getLogoBase64() {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(null)
+    img.src = '/logo.png'
+  })
+}
+
 export default function QuotationDetail() {
   const { id } = useParams()
   const { selectedQuotation, fetchQuotation, loading } = useSalesStore()
@@ -51,7 +69,7 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
-  // DOWNLOAD PDF - Direct jsPDF generation (no HTML, never blank)
+  // DOWNLOAD PDF - Direct jsPDF with LOGO
   const handleDownloadPDF = async () => {
     if (!selectedQuotation) return
     const q = selectedQuotation
@@ -59,33 +77,53 @@ export default function QuotationDetail() {
     try {
       toast.loading('Generating PDF...')
       
+      // Get logo as base64
+      const logoBase64 = await getLogoBase64()
+      
       const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       
       const fmt = (a) => (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
       
-      let y = 15
+      let y = 12
       const leftMargin = 15
       const rightMargin = 195
       const pageWidth = 180
       
-      // ===== COMPANY HEADER =====
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(13, 45, 74)
-      doc.text(COMPANY.name, leftMargin, y)
-      y += 6
+      // ===== LOGO + COMPANY HEADER =====
+      if (logoBase64) {
+        // Add logo on the left
+        doc.addImage(logoBase64, 'PNG', leftMargin, y, 18, 18)
+        // Company name next to logo
+        doc.setFontSize(18)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(13, 45, 74)
+        doc.text(COMPANY.name, leftMargin + 22, y + 6)
+        y += 10
+        // Tagline below logo
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(85, 85, 85)
+        doc.text(`${COMPANY.tagline} | ${COMPANY.address}`, leftMargin + 22, y)
+      } else {
+        // No logo - just text
+        doc.setFontSize(18)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(13, 45, 74)
+        doc.text(COMPANY.name, leftMargin, y)
+        y += 6
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(85, 85, 85)
+        doc.text(`${COMPANY.tagline} | ${COMPANY.address}`, leftMargin, y)
+      }
       
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(85, 85, 85)
-      doc.text(`${COMPANY.tagline} | ${COMPANY.address}`, leftMargin, y)
       y += 4
-      doc.text(`Tel: ${COMPANY.phone} | Email: ${COMPANY.email} | Web: ${COMPANY.website}`, leftMargin, y)
+      doc.text(`Tel: ${COMPANY.phone} | Email: ${COMPANY.email} | Web: ${COMPANY.website}`, logoBase64 ? leftMargin + 22 : leftMargin, y)
       y += 4
-      doc.text(`Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}`, leftMargin, y)
-      y += 6
+      doc.text(`Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}`, logoBase64 ? leftMargin + 22 : leftMargin, y)
+      y += 5
       
       // Line
       doc.setDrawColor(27, 80, 128)
@@ -144,20 +182,13 @@ export default function QuotationDetail() {
       
       if (items.length > 0) {
         items.forEach((item, i) => {
-          // Check if we need a new page
-          if (y > 250) {
-            doc.addPage()
-            y = 15
-          }
-          
+          if (y > 255) { doc.addPage(); y = 15 }
           doc.setFontSize(8)
           doc.text(`${i + 1}`, leftMargin + 2, y)
           doc.text(`${(item.description || '').substring(0, 50)}`, leftMargin + 10, y)
           doc.text(`${item.quantity || 0}`, leftMargin + 115, y)
           doc.text(`R ${fmt(item.unit_price || 0)}`, leftMargin + 130, y)
           doc.text(`R ${fmt((item.quantity || 0) * (item.unit_price || 0))}`, rightMargin, y, { align: 'right' })
-          
-          // Light gray line between rows
           doc.setDrawColor(230, 230, 230)
           doc.setLineWidth(0.1)
           doc.line(leftMargin, y + 1, rightMargin, y + 1)
@@ -178,10 +209,10 @@ export default function QuotationDetail() {
       const vat = Number(q.tax_amount) || st * 0.15
       const total = Number(q.total_amount) || st - disc + vat
       
-      // Totals box
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.3)
-      doc.rect(leftMargin + 90, y - 4, pageWidth - 90, 24)
+      const totalsHeight = disc > 0 ? 24 : 20
+      doc.rect(leftMargin + 90, y - 4, pageWidth - 90, totalsHeight)
       
       doc.setFontSize(8)
       doc.setFont('helvetica', 'normal')
@@ -202,7 +233,6 @@ export default function QuotationDetail() {
       doc.text(`R ${fmt(vat)}`, rightMargin - 2, y, { align: 'right' })
       y += 4
       
-      // Grand total
       doc.setFillColor(234, 241, 248)
       doc.rect(leftMargin + 90, y - 4, pageWidth - 90, 8, 'F')
       doc.setFontSize(11)
