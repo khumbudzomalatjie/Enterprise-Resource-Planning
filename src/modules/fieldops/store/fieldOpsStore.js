@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 
 const useFieldOpsStore = create((set, get) => ({
   liveJobs: [],
+  myAssignedJobs: [],  // ✅ NEW: Track current user's assigned jobs
   assignedEmployees: [],
   incidents: [],
   selectedIncident: null,
@@ -20,6 +21,30 @@ const useFieldOpsStore = create((set, get) => ({
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
     set({ liveJobs: data || [], loading: false })
     return { success: true, data }
+  },
+
+  // ✅ NEW: Fetch current user's assigned jobs
+  fetchMyAssignedJobs: async (userId) => {
+    if (!userId) return { success: false, data: [] }
+    try {
+      // Find employee record linked to this user
+      const { supabase } = await import('../../../lib/supabaseClient')
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('user_id', userId)
+        .single()
+      
+      if (!employee) return { success: false, data: [] }
+      
+      const { data, error } = await fieldOpsApi.getLiveJobsByEmployee(employee.id)
+      if (error) return { success: false }
+      set({ myAssignedJobs: data || [] })
+      return { success: true, data }
+    } catch (err) {
+      console.error('Failed to fetch my jobs:', err)
+      return { success: false }
+    }
   },
 
   fetchAssignedEmployees: async (jobId) => {
@@ -54,11 +79,24 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  updateJobStatus: async (jobId, status) => {
-    const { data, error } = await fieldOpsApi.updateJobStatus(jobId, status)
+  updateJobStatus: async (jobId, status, employeeId = null) => {
+    const { data, error } = await fieldOpsApi.updateJobStatus(jobId, status, employeeId)
     if (error) return { success: false, error: error.message }
     await get().fetchLiveJobs()
     return { success: true, data }
+  },
+
+  // ✅ NEW: Sync job from mobile to main ERP
+  syncJobFromMobile: async (jobId, syncData) => {
+    set({ loading: true, error: null })
+    const result = await fieldOpsApi.syncJobWithMobile(jobId, syncData)
+    if (result.error) {
+      set({ error: result.error, loading: false })
+      return { success: false, error: result.error }
+    }
+    await get().fetchLiveJobs()
+    set({ loading: false })
+    return { success: true, data: result.job }
   },
 
   fetchMobileSyncData: async (employeeId) => {
