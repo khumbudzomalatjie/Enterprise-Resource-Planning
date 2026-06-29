@@ -31,7 +31,7 @@ export default function SalesRoutes() {
         </ProtectedRoute>
       } />
       
-      {/* New Quotation */}
+      {/* CREATE New Quotation - MUST come before :id routes */}
       <Route path="/quotations/new" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={createRoles}>
@@ -40,20 +40,20 @@ export default function SalesRoutes() {
         </ProtectedRoute>
       } />
       
-      {/* View Quotation Detail */}
-      <Route path="/quotations/:id" element={
-        <ProtectedRoute>
-          <RoleBasedRoute requiredRoles={salesRoles}>
-            <QuotationDetail />
-          </RoleBasedRoute>
-        </ProtectedRoute>
-      } />
-      
-      {/* Edit Quotation - opens CreateQuotation in edit mode */}
+      {/* EDIT Quotation - MUST come before :id route */}
       <Route path="/quotations/:id/edit" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={createRoles}>
             <CreateQuotation />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      {/* VIEW Quotation Detail - MUST be last */}
+      <Route path="/quotations/:id" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={salesRoles}>
+            <QuotationDetail />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
