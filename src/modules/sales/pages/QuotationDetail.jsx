@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { useEffect } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
 import useThemeStore from '../../../store/themeStore'
 import toast from 'react-hot-toast'
 import { 
-  FileText, Search, Eye, Edit, ChevronRight,
-  Sun, Moon, Sparkles, Download, MoreVertical,
-  CheckCircle, XCircle, Send, Trash2, AlertTriangle,
-  Briefcase, Lock, User, Calendar
+  FileText, Edit, ChevronRight, Sun, Moon, Sparkles, 
+  User, Calendar, Building2, Phone, Mail, MapPin, Printer,
+  ArrowLeft
 } from 'lucide-react'
 
 const COMPANY = {
@@ -19,239 +17,209 @@ const COMPANY = {
   phone: '070 419 9457',
   email: 'account@ndandulenigroup.co.za',
   website: 'www.ndandulenigroup.co.za',
-  taxRegNumber: '2025/842857/07',
-  taxRefNumber: '9983138190',
   bank: 'Capitec Business',
   branch: '450105',
   accountNumber: '1054498946',
   accountType: 'Transact',
 }
 
-export default function QuotationList() {
-  const { quotations, fetchQuotations, updateQuotationStatus, loading } = useSalesStore()
+export default function QuotationDetail() {
+  const { id } = useParams()
+  const { selectedQuotation, fetchQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [actionMenu, setActionMenu] = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
-  const [acceptConfirm, setAcceptConfirm] = useState(null)
-  const [processingId, setProcessingId] = useState(null)
 
   useEffect(() => {
-    loadQuotations()
-  }, [statusFilter])
-
-  const loadQuotations = async () => {
-    const filters = {}
-    if (statusFilter !== 'all') filters.status = statusFilter
-    if (search) filters.search = search
-    await fetchQuotations(filters)
-  }
-
-  const handleSearch = (e) => {
-    e.preventDefault()
-    loadQuotations()
-  }
-
-  const handleStatusChange = async (id, newStatus) => {
-    setActionMenu(null)
-    if (newStatus === 'accepted') { setAcceptConfirm(id); return }
-    setProcessingId(id)
-    const result = await updateQuotationStatus(id, newStatus)
-    setProcessingId(null)
-    if (result.success) { toast.success(`Quotation ${newStatus.replace('_', ' ')}`); loadQuotations() }
-    else { toast.error(result.error || 'Failed') }
-  }
-
-  const handleAcceptQuotation = async () => {
-    if (!acceptConfirm) return
-    setProcessingId(acceptConfirm)
-    const result = await updateQuotationStatus(acceptConfirm, 'accepted')
-    setProcessingId(null)
-    if (result.success) { toast.success('Accepted! ✅'); loadQuotations() }
-    else { toast.error(result.error || 'Failed') }
-    setAcceptConfirm(null)
-  }
-
-  const handleDelete = async (id) => {
-    setDeleteConfirm(null)
-    setProcessingId(id)
-    const result = await updateQuotationStatus(id, 'cancelled')
-    setProcessingId(null)
-    if (result.success) { toast.success('Deleted'); loadQuotations() }
-    else { toast.error(result.error || 'Failed') }
-  }
-
-  // VIEW - opens read-only detail page
-  const handleView = (quote) => {
-    navigate(`/sales/quotations/${quote.id}`)
-  }
-
-  // EDIT - opens edit page
-  const handleEdit = (quote) => {
-    if (quote.status === 'accepted' || quote.status === 'converted') {
-      toast.error('Cannot edit accepted or converted quotations')
-      return
+    console.log('QuotationDetail mounted, id:', id)
+    if (id) {
+      fetchQuotation(id)
     }
-    navigate(`/sales/quotations/${quote.id}/edit`)
-  }
-
-  // DOWNLOAD PDF - Opens in new window with print dialog
-  const handleDownloadPDF = (quote) => {
-    const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
-    
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Quotation ${quote.quotation_number}</title>
-<style>
-  @page { size: A4; margin: 10mm; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; font-size: 14px; color: #1a1a1a; background: white; padding: 20px; }
-  .header { border-bottom: 2px solid #1B5080; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; }
-  h1 { font-size: 20px; color: #0D2D4A; margin: 0; }
-  h2 { font-size: 16px; color: #1B5080; margin: 5px 0; }
-  .section { border: 1px solid #ddd; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; }
-  .section-title { font-weight: bold; color: #1B5080; border-bottom: 1px solid #eee; padding-bottom: 3px; margin-bottom: 5px; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  th { background: #1B5080; color: white; padding: 6px 8px; font-size: 11px; text-align: left; }
-  td { padding: 5px 8px; border-bottom: 1px solid #ddd; font-size: 11px; }
-  .total { text-align: right; font-size: 16px; font-weight: bold; color: #0D2D4A; margin-top: 10px; }
-  .footer { border-top: 1px solid #ddd; padding-top: 8px; text-align: center; font-size: 9px; color: #888; margin-top: 15px; }
-  .print-btn { display: block; margin: 20px auto; padding: 12px 30px; background: #1B5080; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
-  .no-print { } @media print { .no-print { display: none !important; } body { padding: 0; } }
-</style></head><body>
-<div class="header">
-  <div>
-    <h1>${COMPANY.name}</h1>
-    <p style="font-size:12px">${COMPANY.tagline} | ${COMPANY.address}</p>
-    <p style="font-size:11px">Tel: ${COMPANY.phone} | Email: ${COMPANY.email}</p>
-    <p style="font-size:10px">Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}</p>
-  </div>
-  <div style="text-align:right">
-    <h2 style="font-size:24px;letter-spacing:2px">QUOTATION</h2>
-    <p style="font-size:14px;font-weight:bold;color:#1B5080">No: ${quote.quotation_number}</p>
-    <p style="font-size:11px">Date: ${fmtDate(quote.quotation_date)}</p>
-    <p style="font-size:11px">Created By: ${quote.created_by_name || 'N/A'}</p>
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-title">Customer Details</div>
-  <p><b>Customer:</b> ${quote.client_name || quote.clients?.company_name || 'N/A'}</p>
-  <p><b>Phone:</b> ${quote.client_phone || quote.clients?.phone || 'N/A'}</p>
-  <p><b>Email:</b> ${quote.client_email || quote.clients?.email || 'N/A'}</p>
-  <p><b>Address:</b> ${quote.client_address || 'N/A'}</p>
-</div>
-
-<div class="section">
-  <div class="section-title">Quote Summary</div>
-  <p><b>Status:</b> ${quote.status} | <b>Total:</b> <span style="font-size:16px;color:#059669;font-weight:bold">${fmt(quote.total_amount)}</span></p>
-  <p><b>Valid Until:</b> ${fmtDate(quote.valid_until)}</p>
-</div>
-
-<div class="section">
-  <div class="section-title">Banking Details</div>
-  <p><b>Bank:</b> ${COMPANY.bank} | <b>Branch:</b> ${COMPANY.branch}</p>
-  <p><b>Account No:</b> ${COMPANY.accountNumber} | <b>Type:</b> ${COMPANY.accountType}</p>
-  <p><b>Reference:</b> ${quote.quotation_number}</p>
-</div>
-
-<div class="footer">
-  <p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p>
-</div>
-
-<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
-<script>window.onload=function(){setTimeout(function(){window.print()},600)}</script>
-</body></html>`
-
-    const w = window.open('', '_blank', 'width=900,height=800')
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-    } else {
-      toast.error('Please allow pop-ups for this site')
-    }
-  }
+  }, [id])
 
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
-  const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
+  const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'
 
   const getStatusBadge = (status) => {
-    const b = { draft: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300', sent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', accepted: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', expired: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', converted: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }
+    const b = { 
+      draft: 'bg-gray-100 text-gray-700', 
+      sent: 'bg-blue-100 text-blue-700', 
+      accepted: 'bg-emerald-100 text-emerald-700', 
+      rejected: 'bg-red-100 text-red-700', 
+      expired: 'bg-amber-100 text-amber-700', 
+      converted: 'bg-purple-100 text-purple-700', 
+      cancelled: 'bg-red-100 text-red-700' 
+    }
     return b[status] || 'bg-gray-100'
   }
 
-  const canEdit = (s) => s === 'draft' || s === 'sent'
-  const canChangeStatus = (s) => s === 'draft' || s === 'sent'
-  const canDelete = (s) => s === 'draft' || s === 'sent'
+  const handlePrint = () => {
+    if (!selectedQuotation) return
+    window.print()
+  }
 
-  const filtered = quotations.filter(q => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return (q.quotation_number||'').toLowerCase().includes(s) || (q.client_name||'').toLowerCase().includes(s) || (q.clients?.company_name||'').toLowerCase().includes(s) || (q.created_by_name||'').toLowerCase().includes(s)
-  })
+  console.log('selectedQuotation:', selectedQuotation)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+      </div>
+    )
+  }
+
+  if (!selectedQuotation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-500 text-lg">Quotation not found</p>
+          <p className="text-slate-400 text-sm mt-1">ID: {id}</p>
+          <Link to="/sales/quotations" className="text-emerald-600 hover:text-emerald-700 mt-3 inline-block">
+            ← Back to Quotations
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const q = selectedQuotation
+  const items = q.quotation_items || []
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span></div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">{isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}</button>
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
+        </div>
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
+          {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
+        </button>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 pt-8 pb-16">
-        <div className="flex items-center gap-2 mb-6 text-sm"><Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link><ChevronRight className="w-4 h-4 text-slate-400" /><span className="font-medium">Quotations</span></div>
+      <main className="max-w-4xl mx-auto px-4 pt-8 pb-16">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 mb-6 text-sm">
+          <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <span className="font-medium">{q.quotation_number}</span>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-          <div><h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />Quotations</h1><p className="text-slate-500 mt-1">Manage and track quotations</p></div>
-          <Link to="/sales/quotations/new" className="neu-raised neu-btn px-6 py-3 rounded-2xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"><FileText className="w-5 h-5" /><span>New Quotation</span></Link>
-        </motion.div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <FileText className="w-8 h-8 text-emerald-600" />
+              Quotation {q.quotation_number}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(q.status)}`}>
+                {q.status?.replace('_', ' ')}
+              </span>
+            </h1>
+            <p className="text-slate-500 mt-1">
+              Created by {q.created_by_name || 'Unknown'} on {formatDate(q.quotation_date || q.created_at)}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {(q.status === 'draft' || q.status === 'sent') && (
+              <button onClick={() => navigate(`/sales/quotations/${q.id}/edit`)} 
+                className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
+                <Edit className="w-4 h-4" />Edit
+              </button>
+            )}
+          </div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" /><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by quote #, client, or creator..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" /></div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"><option value="all">All Status</option><option value="draft">Draft</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
-            <button type="submit" className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Search</button>
-          </form>
-        </motion.div>
+        {/* Info Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="neu-raised rounded-2xl p-4 text-center">
+            <p className="text-xs text-slate-500">Date</p>
+            <p className="font-semibold flex items-center justify-center gap-1">
+              <Calendar className="w-4 h-4" />{formatDate(q.quotation_date)}
+            </p>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 text-center">
+            <p className="text-xs text-slate-500">Expiry</p>
+            <p className="font-semibold">{formatDate(q.valid_until)}</p>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 text-center">
+            <p className="text-xs text-slate-500">Created By</p>
+            <p className="font-semibold flex items-center justify-center gap-1">
+              <User className="w-4 h-4" />{q.created_by_name || 'N/A'}
+            </p>
+          </div>
+          <div className="neu-raised rounded-2xl p-4 text-center">
+            <p className="text-xs text-slate-500">Total</p>
+            <p className="font-bold text-emerald-600 text-lg">{formatCurrency(q.total_amount)}</p>
+          </div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="neu-raised rounded-3xl overflow-hidden">
-          {loading ? <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
-          : filtered.length === 0 ? <div className="text-center py-12"><FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" /><p className="text-slate-500 text-lg">No quotations found</p></div>
-          : <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50"><th className="text-left text-xs font-semibold text-slate-500 uppercase py-4 px-4">Quote #</th><th className="text-left text-xs font-semibold text-slate-500 uppercase py-4 px-4">Client</th><th className="text-left text-xs font-semibold text-slate-500 uppercase py-4 px-4">Date</th><th className="text-left text-xs font-semibold text-slate-500 uppercase py-4 px-4">Created By</th><th className="text-right text-xs font-semibold text-slate-500 uppercase py-4 px-4">Total</th><th className="text-center text-xs font-semibold text-slate-500 uppercase py-4 px-4">Status</th><th className="text-center text-xs font-semibold text-slate-500 uppercase py-4 px-4">Actions</th></tr></thead>
-            <tbody>{filtered.map((quote) => (
-              <tr key={quote.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${processingId===quote.id?'opacity-50':''}`}>
-                <td className="py-4 px-4"><p className="font-semibold text-sm text-slate-800 dark:text-white">{quote.quotation_number}</p><p className="text-xs text-slate-500">Valid: {formatDate(quote.valid_until)}</p></td>
-                <td className="py-4 px-4"><p className="text-sm font-medium text-slate-700 dark:text-slate-300">{quote.clients?.company_name||quote.client_name||'N/A'}</p>{quote.client_email&&<p className="text-xs text-slate-500">{quote.client_email}</p>}</td>
-                <td className="py-4 px-4"><div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400"><Calendar className="w-3.5 h-3.5" />{formatDate(quote.quotation_date||quote.created_at)}</div></td>
-                <td className="py-4 px-4"><div className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0"><User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /></div><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{quote.created_by_name||'Unknown'}</span></div></td>
-                <td className="py-4 px-4 text-right"><p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{formatCurrency(quote.total_amount)}</p></td>
-                <td className="py-4 px-4 text-center"><span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(quote.status)}`}>{quote.status?.replace('_',' ')}</span></td>
-                <td className="py-4 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600" title="View Details"><Eye className="w-4 h-4" /></button>
-                    {canEdit(quote.status) ? <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600" title="Edit"><Edit className="w-4 h-4" /></button> : <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" disabled title="Locked"><Lock className="w-4 h-4" /></button>}
-                    <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600" title="Download PDF"><Download className="w-4 h-4" /></button>
-                    {canChangeStatus(quote.status) && <div className="relative"><button onClick={() => setActionMenu(actionMenu===quote.id?null:quote.id)} className="p-2 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 text-slate-400 hover:text-amber-600" title="Change Status"><MoreVertical className="w-4 h-4" /></button>
-                      {actionMenu===quote.id && <div className="absolute right-0 top-full mt-1 w-48 neu-raised rounded-xl p-2 z-50 bg-white dark:bg-slate-800 shadow-xl"><p className="text-xs text-slate-500 px-3 py-1 mb-1">Change Status:</p>
-                        {quote.status==='draft'&&<button onClick={()=>handleStatusChange(quote.id,'sent')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20"><Send className="w-3 h-3 text-blue-500"/>Mark as Sent</button>}
-                        <button onClick={()=>handleStatusChange(quote.id,'accepted')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"><CheckCircle className="w-3 h-3 text-emerald-500"/>Accept</button>
-                        <button onClick={()=>handleStatusChange(quote.id,'rejected')} className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-red-50 dark:hover:bg-red-900/20"><XCircle className="w-3 h-3 text-red-500"/>Reject</button>
-                      </div>}
-                    </div>}
-                    {canDelete(quote.status)&&<button onClick={()=>setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600" title="Delete"><Trash2 className="w-4 h-4"/></button>}
-                  </div>
-                </td>
-              </tr>
-            ))}</tbody></table></div>}
-        </motion.div>
+        {/* Client Info */}
+        <div className="neu-raised rounded-3xl p-6 mb-6">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-emerald-600" />Client Details
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <p className="flex items-center gap-2"><Building2 className="w-4 h-4 text-slate-400" /><b>{q.client_name || q.clients?.company_name || 'N/A'}</b></p>
+            <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-slate-400" />{q.client_phone || q.clients?.phone || 'N/A'}</p>
+            <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-slate-400" />{q.client_email || q.clients?.email || 'N/A'}</p>
+            <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-slate-400" />{q.client_address || 'N/A'}</p>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="neu-raised rounded-3xl p-6 mb-6">
+          <h2 className="text-lg font-bold mb-3">Items / Services</h2>
+          {items.length > 0 ? (
+            <table className="w-full text-sm">
+              <thead><tr className="border-b"><th className="text-left py-2">#</th><th className="text-left py-2">Description</th><th className="text-center py-2">Qty</th><th className="text-center py-2">Unit</th><th className="text-right py-2">Unit Price</th><th className="text-right py-2">Total</th></tr></thead>
+              <tbody>
+                {items.map((item, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="py-2">{i+1}</td>
+                    <td className="py-2">{item.description}</td>
+                    <td className="py-2 text-center">{item.quantity}</td>
+                    <td className="py-2 text-center">{item.unit||'each'}</td>
+                    <td className="py-2 text-right">{formatCurrency(item.unit_price)}</td>
+                    <td className="py-2 text-right font-medium">{formatCurrency((item.quantity||0)*(item.unit_price||0))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className="text-slate-500 text-center py-4">No items</p>}
+          
+          <div className="flex justify-end mt-4">
+            <div className="w-56 space-y-2">
+              <div className="flex justify-between text-sm"><span>Subtotal:</span><span>{formatCurrency(q.subtotal || 0)}</span></div>
+              <div className="flex justify-between text-sm"><span>Discount:</span><span className="text-red-500">-{formatCurrency(q.discount_amount || 0)}</span></div>
+              <div className="flex justify-between text-sm"><span>VAT:</span><span>{formatCurrency(q.tax_amount || 0)}</span></div>
+              <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{formatCurrency(q.total_amount || 0)}</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Notes */}
+        {q.notes && (
+          <div className="neu-raised rounded-3xl p-6 mb-6">
+            <h2 className="text-lg font-bold mb-2">Notes</h2>
+            <p className="text-sm text-slate-600 whitespace-pre-line">{q.notes}</p>
+          </div>
+        )}
+
+        {/* Banking */}
+        <div className="neu-raised rounded-3xl p-6">
+          <h2 className="text-lg font-bold mb-3">Banking Details</h2>
+          <div className="text-sm space-y-1">
+            <p><b>Bank:</b> {COMPANY.bank}</p>
+            <p><b>Branch Code:</b> {COMPANY.branch}</p>
+            <p><b>Account No:</b> {COMPANY.accountNumber}</p>
+            <p><b>Type:</b> {COMPANY.accountType}</p>
+            <p><b>Reference:</b> {q.quotation_number}</p>
+          </div>
+        </div>
       </main>
-
-      {acceptConfirm && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800"><div className="text-center"><div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4"><Briefcase className="w-10 h-10 text-emerald-600"/></div><h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept Quotation?</h3><div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left"><div className="flex items-start gap-2"><AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"/><div><p className="text-sm font-semibold text-amber-800 dark:text-amber-300">This will:</p><ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1 list-disc list-inside"><li>Mark quotation as <strong>Accepted</strong></li><li>Lock from further edits</li></ul></div></div></div><div className="flex gap-3"><button onClick={()=>setAcceptConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={handleAcceptQuotation} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5"/>Accept</button></div></div></motion.div></div>}
-
-      {deleteConfirm && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="neu-raised rounded-3xl p-8 max-w-md w-full bg-white dark:bg-slate-800"><div className="text-center"><div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4"><AlertTriangle className="w-8 h-8 text-red-600"/></div><h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Quotation?</h3><p className="text-slate-500 mb-6">This will be cancelled. Cannot be undone.</p><div className="flex gap-3"><button onClick={()=>setDeleteConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl">Cancel</button><button onClick={()=>handleDelete(deleteConfirm)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"><Trash2 className="w-4 h-4"/>Delete</button></div></div></motion.div></div>}
-
-      {actionMenu && <div className="fixed inset-0 z-40" onClick={()=>setActionMenu(null)}></div>}
     </div>
   )
 }
