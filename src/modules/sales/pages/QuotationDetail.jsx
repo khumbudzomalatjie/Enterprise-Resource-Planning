@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
@@ -30,6 +30,7 @@ export default function QuotationDetail() {
   const { selectedQuotation, fetchQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
+  const printRef = useRef(null)
 
   useEffect(() => {
     if (id) fetchQuotation(id)
@@ -51,147 +52,139 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
-  // DOWNLOAD PDF - Opens in new window with auto-print
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!selectedQuotation) return
     
     const q = selectedQuotation
-    const items = q.quotation_items || []
     
-    const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
-    
-    const itemRows = items.map((item, i) => 
-      `<tr><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd">${item.description||''}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${item.quantity||0}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right">${fmt(item.unit_price||0)}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right"><b>${fmt((item.quantity||0)*(item.unit_price||0))}</b></td></tr>`
-    ).join('')
-    
-    const st = items.reduce((s,i) => s + (Number(i.quantity)||0)*(Number(i.unit_price)||0), 0)
-    const tv = st * 0.15
-    const gt = st + tv
+    try {
+      toast.loading('Generating PDF...')
+      
+      // Try html2pdf first
+      const html2pdf = (await import('html2pdf.js')).default
+      
+      const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
+      const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+      
+      const items = q.quotation_items || []
+      const itemRows = items.map((item, i) => 
+        `<tr><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd">${item.description||''}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:center">${item.quantity||0}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right">${fmt(item.unit_price||0)}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right"><b>${fmt((item.quantity||0)*(item.unit_price||0))}</b></td></tr>`
+      ).join('')
+      
+      const st = items.reduce((s,i) => s + (Number(i.quantity)||0)*(Number(i.unit_price)||0), 0)
+      const tv = st * 0.15
+      const gt = st + tv
 
-    const html = `<!DOCTYPE html>
+      const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Quotation ${q.quotation_number}</title>
 <style>
-  @page { size: A4; margin: 10mm; }
+  @page { size: A4; margin: 8mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { 
-    font-family: Arial, Helvetica, sans-serif; 
-    font-size: 13px; 
-    color: #1a1a1a; 
-    background: white; 
-    line-height: 1.4;
-    padding: 20px;
-  }
-  @media print {
-    body { padding: 0; }
-    .no-print { display: none !important; }
-  }
-  .header { display: flex; justify-content: space-between; border-bottom: 2px solid #1B5080; padding-bottom: 8px; margin-bottom: 10px; }
-  .header-left { flex: 1; }
-  .company-name { font-size: 20px; font-weight: bold; color: #0D2D4A; margin: 0; }
-  .company-detail { font-size: 10px; color: #555; margin: 1px 0; }
-  .header-right { text-align: right; }
-  .quote-title { font-size: 24px; font-weight: bold; color: #0D2D4A; margin: 0; letter-spacing: 2px; }
-  .quote-number { font-size: 14px; color: #1B5080; font-weight: bold; margin: 2px 0; }
-  .quote-info { font-size: 10px; color: #333; }
-  .section { border: 1px solid #ddd; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; }
-  .section-title { font-weight: bold; color: #1B5080; border-bottom: 1px solid #eee; padding-bottom: 3px; margin-bottom: 5px; font-size: 11px; text-transform: uppercase; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-  th { background: #1B5080; color: white; padding: 6px 8px; font-size: 10px; text-align: center; }
-  .totals { display: flex; justify-content: flex-end; margin-top: 8px; }
-  .totals-box { width: 220px; border: 1px solid #ddd; border-radius: 4px; }
-  .total-row { display: flex; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid #ddd; font-size: 11px; }
-  .grand-total { display: flex; justify-content: space-between; padding: 8px 10px; font-size: 14px; font-weight: bold; background: #eaf1f8; color: #0D2D4A; }
-  .footer { border-top: 1px solid #ddd; padding-top: 8px; text-align: center; font-size: 9px; color: #888; margin-top: 12px; }
-  .print-btn { display: block; margin: 15px auto; padding: 10px 25px; background: #1B5080; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
-  .print-btn:hover { background: #0D2D4A; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 15px; }
+  h1 { font-size: 18px; color: #0D2D4A; margin: 0; }
+  h2 { font-size: 14px; color: #1B5080; margin: 5px 0; }
+  .hr { border-bottom: 2px solid #1B5080; padding-bottom: 4px; margin-bottom: 8px; }
+  .info p { font-size: 10px; margin: 1px 0; }
+  .section { border: 1px solid #ddd; padding: 6px 10px; margin-bottom: 5px; border-radius: 3px; }
+  .stitle { font-weight: bold; color: #1B5080; margin-bottom: 2px; font-size: 10px; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin: 5px 0; }
+  th { background: #1B5080; color: #fff; padding: 4px 5px; font-size: 9px; text-align: center; }
+  td { padding: 3px 5px; border-bottom: 1px solid #ddd; font-size: 9px; }
+  .total-box { text-align: right; margin-top: 5px; padding: 6px 10px; background: #eaf1f8; border-radius: 3px; }
+  .total-box p { font-size: 14px; font-weight: bold; color: #0D2D4A; }
+  .ft { text-align: center; font-size: 8px; color: #888; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 4px; }
 </style>
 </head>
 <body>
-
-<div class="header">
-  <div class="header-left">
-    <h1 class="company-name">${COMPANY.name}</h1>
-    <p class="company-detail">${COMPANY.tagline}</p>
-    <p class="company-detail">${COMPANY.address}</p>
-    <p class="company-detail">Tel: ${COMPANY.phone} | Email: ${COMPANY.email}</p>
-    <p class="company-detail">Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}</p>
-  </div>
-  <div class="header-right">
-    <h2 class="quote-title">QUOTATION</h2>
-    <p class="quote-number">No: ${q.quotation_number}</p>
-    <div class="quote-info">
-      <p>Date: ${fmtDate(q.quotation_date)}</p>
-      <p>Expiry: ${fmtDate(q.valid_until)}</p>
-      <p>Created By: ${q.created_by_name || 'N/A'}</p>
-    </div>
-  </div>
+<h1>${COMPANY.name}</h1>
+<p style="font-size:9px;color:#555">${COMPANY.tagline} | ${COMPANY.address} | Tel: ${COMPANY.phone}</p>
+<div class="hr"></div>
+<h2>QUOTATION: ${q.quotation_number || 'N/A'}</h2>
+<div class="info">
+<p><b>Date:</b> ${fmtDate(q.quotation_date)} | <b>Expiry:</b> ${fmtDate(q.valid_until)}</p>
+<p><b>Client:</b> ${q.client_name || q.clients?.company_name || 'N/A'}</p>
+<p><b>Created By:</b> ${q.created_by_name || 'N/A'} | <b>Status:</b> ${q.status}</p>
 </div>
-
-<div class="section">
-  <div class="section-title">Customer Details</div>
-  <p><b>Customer:</b> ${q.client_name || q.clients?.company_name || 'N/A'}</p>
-  <p><b>Phone:</b> ${q.client_phone || q.clients?.phone || 'N/A'}</p>
-  <p><b>Email:</b> ${q.client_email || q.clients?.email || 'N/A'}</p>
-  <p><b>Address:</b> ${q.client_address || 'N/A'}</p>
+<div class="section"><div class="stitle">Items</div>
+<table><thead><tr><th>No</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>${itemRows||'<tr><td colspan="5" style="padding:8px;text-align:center">No items</td></tr>'}</tbody></table>
+<div style="text-align:right;margin-top:4px"><b>Subtotal:</b> ${fmt(st)} | <b>VAT:</b> ${fmt(tv)} | <b>Total:</b> ${fmt(gt)}</div>
 </div>
-
-<div class="section">
-  <div class="section-title">Items / Services</div>
-  ${items.length > 0 ? `
-  <table>
-    <thead><tr><th>No</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
-    <tbody>${itemRows}</tbody>
-  </table>
-  <div class="totals">
-    <div class="totals-box">
-      <div class="total-row"><span>Subtotal</span><span>${fmt(st)}</span></div>
-      <div class="total-row"><span>VAT (15%)</span><span>${fmt(tv)}</span></div>
-      <div class="grand-total"><span>Grand Total</span><span>${fmt(gt)}</span></div>
-    </div>
-  </div>
-  ` : '<p style="color:#999;text-align:center;padding:15px;">No items</p>'}
+<div class="section"><div class="stitle">Banking</div>
+<p style="font-size:9px"><b>Bank:</b> ${COMPANY.bank} | <b>Branch:</b> ${COMPANY.branch} | <b>Account:</b> ${COMPANY.accountNumber}</p>
 </div>
-
-${q.notes ? `<div class="section"><div class="section-title">Notes</div><p style="font-size:11px;white-space:pre-line;">${q.notes}</p></div>` : ''}
-
-<div class="section">
-  <div class="section-title">Banking Details</div>
-  <p style="font-size:11px"><b>Bank:</b> ${COMPANY.bank} | <b>Branch Code:</b> ${COMPANY.branch}</p>
-  <p style="font-size:11px"><b>Account No:</b> ${COMPANY.accountNumber} | <b>Type:</b> ${COMPANY.accountType}</p>
-  <p style="font-size:11px"><b>Reference:</b> ${q.quotation_number}</p>
-</div>
-
-<div class="footer">
-  <p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p>
-</div>
-
-<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
-
-<script>
-  // Auto-open print dialog after page loads
-  window.onload = function() {
-    setTimeout(function() {
-      window.print();
-    }, 500);
-  };
-</script>
-
+<div class="total-box"><p>TOTAL: ${fmt(q.total_amount)}</p></div>
+<div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p></div>
 </body>
 </html>`
 
-    // Open in new window - this ALWAYS works because browser renders HTML natively
-    const w = window.open('', '_blank', 'width=900,height=800')
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-      toast.success('Quotation opened! Press Ctrl+P or click Print button to save as PDF')
-    } else {
-      toast.error('Please allow pop-ups for this site to download PDF')
+      // Create element and append to body
+      const element = document.createElement('div')
+      element.innerHTML = htmlContent
+      element.style.cssText = 'position:fixed;left:0;top:0;width:210mm;background:white;z-index:99999;min-height:100vh;'
+      document.body.appendChild(element)
+      
+      // Wait for render
+      await new Promise(r => setTimeout(r, 1000))
+      
+      // Generate PDF
+      const opt = {
+        margin: [5, 5, 5, 5],
+        filename: `Quotation_${q.quotation_number || 'quote'}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          backgroundColor: '#ffffff',
+          logging: true,
+          windowWidth: element.scrollWidth,
+          windowHeight: element.scrollHeight
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all'] }
+      }
+      
+      await html2pdf().set(opt).from(element).save()
+      
+      // Clean up
+      document.body.removeChild(element)
+      toast.dismiss()
+      toast.success('PDF downloaded! 📄')
+      
+    } catch (error) {
+      console.error('PDF Error:', error)
+      toast.dismiss()
+      
+      // Fallback: try opening in new window
+      const q = selectedQuotation
+      const printHTML = buildPrintHTML(q)
+      
+      const w = window.open('', '_blank', 'width=900,height=800')
+      if (w) {
+        w.document.write(printHTML)
+        w.document.close()
+        toast.success('Opened in new window. Press Ctrl+P to save as PDF')
+      } else {
+        toast.error('Please allow pop-ups and try again')
+      }
     }
+  }
+
+  // Fallback print HTML builder
+  function buildPrintHTML(q) {
+    const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Quotation</title>
+<style>body{font-family:Arial;padding:20px;font-size:14px}h1{color:#0D2D4A}h2{color:#1B5080}
+.section{border:1px solid #ddd;padding:10px;margin:8px 0;border-radius:4px}
+.total{font-size:18px;font-weight:bold;color:#0D2D4A}@media print{body{padding:0}}</style></head><body>
+<h1>NDANDULENI GROUP</h1><h2>Quotation: ${q.quotation_number}</h2>
+<p><b>Date:</b> ${fmtDate(q.quotation_date)} | <b>Client:</b> ${q.client_name||'N/A'}</p>
+<p><b>Total:</b> <span class="total">${fmt(q.total_amount)}</span></p>
+<p><b>Status:</b> ${q.status} | <b>Created By:</b> ${q.created_by_name||'N/A'}</p>
+<div class="section"><h3>Banking</h3><p>Capitec Business | Branch: 450105 | Account: 1054498946</p></div>
+<script>setTimeout(window.print,800)</script></body></html>`
   }
 
   if (loading) return (
