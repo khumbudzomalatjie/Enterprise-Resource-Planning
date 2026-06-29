@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
 import useCRMStore from '../../crm/store/crmStore'
@@ -61,7 +60,7 @@ CANCELLATION & RESCHEDULING
 2. Rescheduling subject to availability
 
 LIABILITY & INSURANCE
-Clients responsible for removing valuables and fragile items as company will not be liable for damages. The company shall not be held liable for any loss or damage to such items.
+Clients responsible for removing valuables and fragile items as company will not be liable for damages.
 
 CLIENT RESPONSIBILITIES
 1. Provide access to premises
@@ -73,17 +72,17 @@ SATISFACTION GUARANTEE
 2. Re-cleaning provided if not satisfied
 
 TENDERS & CALL-OUTS
-The company is available for short- and long-term tenders and can provide services on an as-needed, call-out basis.`
+The company is available for short- and long-term tenders.`
 
 const A4_WIDTH_PX = 794
 
 function buildQuotationHTML(quotation, items) {
-  const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(a || 0)
+  const fmt = (a) => 'R ' + (a || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
-  const lt = (i) => (i.quantity || 0) * (i.unit_price || 0)
-  const disc = (i) => lt(i) * ((i.discount_percent || 0) / 100)
+  const lt = (i) => (Number(i.quantity) || 0) * (Number(i.unit_price) || 0)
+  const disc = (i) => lt(i) * ((Number(i.discount_percent) || 0) / 100)
   const ad = (i) => lt(i) - disc(i)
-  const vat = (i) => ad(i) * ((i.tax_percent || 15) / 100)
+  const vat = (i) => ad(i) * ((Number(i.tax_percent) || 15) / 100)
   const grand = (i) => ad(i) + vat(i)
   const st = items.reduce((s, i) => s + lt(i), 0)
   const td = items.reduce((s, i) => s + disc(i), 0)
@@ -92,41 +91,134 @@ function buildQuotationHTML(quotation, items) {
   const qn = quotation?.quotation_number || 'DRAFT'
   const cr = quotation?.created_by_name || 'Sales'
 
-  const rows = items.filter(i => i.description).map((item, i) => `
-    <tr><td class="tc">${i+1}</td><td class="tl">${item.code||''}</td><td class="tl">${item.description}${item.unit_price===0?' <b style="color:#059669">(FREE)</b>':''}</td><td class="tc">${item.quantity}</td><td class="tc">${item.unit||'each'}</td><td class="tr">${fmt(item.unit_price)}</td><td class="tc">${item.discount_percent||0}%</td><td class="tc">${item.tax_percent||15}%</td><td class="tr"><b>${fmt(grand(item))}</b></td></tr>`).join('')
+  const rows = items.filter(i => i.description).map((item, i) => 
+    `<tr><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${i+1}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;font-size:12px">${item.code||''}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;font-size:12px">${item.description}${Number(item.unit_price)===0?' <b style="color:green">(FREE)</b>':''}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.quantity}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.unit||'each'}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:right;font-size:12px">${fmt(item.unit_price)}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.discount_percent||0}%</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.tax_percent||15}%</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:right;font-size:12px"><b>${fmt(grand(item))}</b></td></tr>`
+  ).join('')
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9px;color:#111;background:#fff;line-height:1.2}
-.pg{width:${A4_WIDTH_PX}px;padding:20px 30px;background:#fff}
-.hd{display:flex;justify-content:space-between;border-bottom:2px solid #1B5080;padding-bottom:5px;margin-bottom:4px}
-.hl{display:flex;align-items:flex-start;gap:10px}.lg{width:75px;flex-shrink:0}.lg img{width:75px;height:auto}
-.cn{font-size:16px;font-weight:bold;color:#0D2D4A;margin:0}.cd{font-size:6px;color:#444;margin:0}
-.hr{text-align:right}.qt{font-size:22px;font-weight:bold;color:#0D2D4A;margin:0;letter-spacing:1px}
-.qn{font-size:10px;color:#1B5080;font-weight:bold;margin:1px 0}.qi{font-size:6px;color:#444}.qi p{margin:0}
-.bx{border:1px solid #ccc;border-radius:3px;padding:3px 5px;margin-bottom:3px}
-.bt{font-size:6px;font-weight:bold;color:#1B5080;border-bottom:1px solid #ddd;padding-bottom:1px;margin-bottom:1px;text-transform:uppercase}
-.bx p{font-size:6px;margin:1px 0}table{width:100%;border-collapse:collapse;margin-bottom:3px}
-th{background:#1B5080;color:#fff;padding:3px 4px;font-size:6px;font-weight:bold;text-align:center}
-.tl{padding:2px 4px;font-size:6px;border-bottom:1px solid #ddd;text-align:left}
-.tc{padding:2px 4px;font-size:6px;border-bottom:1px solid #ddd;text-align:center}
-.tr{padding:2px 4px;font-size:6px;border-bottom:1px solid #ddd;text-align:right}
-.ft{display:flex;justify-content:flex-end;margin-bottom:3px}
-.ftb{width:180px;border:1px solid #ccc;border-radius:3px}
-.ftl{display:flex;justify-content:space-between;padding:2px 6px;border-bottom:1px solid #ddd;font-size:6px}
-.ftlg{display:flex;justify-content:space-between;padding:4px 6px;font-size:10px;font-weight:bold;background:#eaf1f8;color:#0D2D4A}
-.btm{display:flex;gap:4px;margin-bottom:2px}.bb{flex:1;font-size:5px}
-.bbt{font-size:6px;font-weight:bold;color:#1B5080;text-transform:uppercase;margin-bottom:1px}
-.ftr{border-top:1px solid #ccc;padding-top:2px;text-align:center;font-size:5px;color:#888;margin-top:2px}
-</style></head><body>
-<div class="pg">
-<div class="hd"><div class="hl"><div class="lg"><img src="/logo.png" alt="Logo" /></div><div><h1 class="cn">${COMPANY.name}</h1><p class="cd">${COMPANY.tagline}</p><p class="cd">${COMPANY.address}</p><p class="cd">Tel: ${COMPANY.phone} | Email: ${COMPANY.email} | Web: ${COMPANY.website}</p><p class="cd">Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}</p></div></div><div class="hr"><h2 class="qt">QUOTATION</h2><p class="qn">No: ${qn}</p><div class="qi"><p>Date: ${fmtDate(quotation?.quotation_date||new Date())}</p><p>Expiry: ${fmtDate(quotation?.valid_until)}</p><p>Created By: ${cr}</p></div></div></div>
-<div class="bx"><div class="bt">Customer Details</div><p><b>Customer:</b> ${quotation?.client_name||''}</p><p><b>Phone:</b> ${quotation?.client_phone||''}</p><p><b>Email:</b> ${quotation?.client_email||''}</p><p><b>Address:</b> ${quotation?.client_address||''}</p></div>
-<table><thead><tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="tc" style="padding:10px">No items</td></tr>'}</tbody></table>
-<div class="ft"><div class="ftb"><div class="ftl"><span>Subtotal</span><span>${fmt(st)}</span></div><div class="ftl"><span>Discount</span><span>-${fmt(td)}</span></div><div class="ftl"><span>VAT (15%)</span><span>${fmt(tv)}</span></div><div class="ftlg"><span>Grand Total</span><span>${fmt(gt)}</span></div></div></div>
-${quotation?.notes?`<div class="bx"><div class="bt">Notes</div><p style="font-size:6px">${quotation.notes}</p></div>`:''}
-<div class="btm"><div class="bb"><div class="bbt">Terms & Conditions</div><p style="white-space:pre-line;font-size:5px">${FULL_TERMS}</p></div><div class="bb"><div class="bbt">Banking Details</div><p style="font-size:5px"><b>Bank:</b> ${COMPANY.bank}</p><p style="font-size:5px"><b>Branch:</b> ${COMPANY.branch}</p><p style="font-size:5px"><b>Account:</b> ${COMPANY.accountNumber}</p><p style="font-size:5px"><b>Type:</b> ${COMPANY.accountType}</p><p style="font-size:5px"><b>Ref:</b> ${qn}</p></div></div>
-<div class="ftr"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p></div>
-</div></body></html>`
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Quotation ${qn}</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: Arial, Helvetica, sans-serif; 
+    font-size: 14px; 
+    color: #000; 
+    background: white; 
+    line-height: 1.4;
+    padding: 20px;
+  }
+  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1B5080; padding-bottom: 10px; margin-bottom: 10px; }
+  .header-left { display: flex; align-items: flex-start; gap: 15px; }
+  .logo { width: 100px; }
+  .logo img { width: 100px; height: auto; }
+  .company-name { font-size: 22px; font-weight: bold; color: #0D2D4A; margin: 0; }
+  .company-detail { font-size: 11px; color: #333; margin: 2px 0; }
+  .header-right { text-align: right; }
+  .quote-title { font-size: 28px; font-weight: bold; color: #0D2D4A; margin: 0; letter-spacing: 2px; }
+  .quote-number { font-size: 14px; color: #1B5080; font-weight: bold; margin: 3px 0; }
+  .quote-info { font-size: 11px; color: #333; }
+  .quote-info p { margin: 1px 0; }
+  .section { border: 1px solid #ccc; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; }
+  .section-title { font-size: 11px; font-weight: bold; color: #1B5080; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 5px; }
+  .section p { font-size: 12px; margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th { background: #1B5080; color: white; padding: 8px 10px; font-size: 12px; font-weight: bold; text-align: center; }
+  .totals { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .totals-box { width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+  .total-row { display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #ddd; font-size: 13px; }
+  .grand-total { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 16px; font-weight: bold; background: #eaf1f8; color: #0D2D4A; }
+  .two-col { display: flex; gap: 10px; margin-bottom: 8px; }
+  .col { flex: 1; }
+  .footer { border-top: 1px solid #ccc; padding-top: 8px; text-align: center; font-size: 10px; color: #666; margin-top: 10px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo"><img src="/logo.png" alt="Logo" /></div>
+    <div>
+      <h1 class="company-name">${COMPANY.name}</h1>
+      <p class="company-detail">${COMPANY.tagline}</p>
+      <p class="company-detail">${COMPANY.address}</p>
+      <p class="company-detail">Tel: ${COMPANY.phone} | Email: ${COMPANY.email}</p>
+      <p class="company-detail">Web: ${COMPANY.website}</p>
+      <p class="company-detail">Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <h2 class="quote-title">QUOTATION</h2>
+    <p class="quote-number">Quotation No: ${qn}</p>
+    <div class="quote-info">
+      <p>Date: ${fmtDate(quotation?.quotation_date || new Date())}</p>
+      <p>Expiry: ${fmtDate(quotation?.valid_until)}</p>
+      <p>Created By: ${cr}</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Customer Details</div>
+  <p><b>Customer:</b> ${quotation?.client_name || ''}</p>
+  <p><b>Phone:</b> ${quotation?.client_phone || ''}</p>
+  <p><b>Email:</b> ${quotation?.client_email || ''}</p>
+  <p><b>Address:</b> ${quotation?.client_address || ''}</p>
+</div>
+
+<table>
+  <thead>
+    <tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr>
+  </thead>
+  <tbody>
+    ${rows || '<tr><td colspan="9" style="padding:15px;text-align:center;">No items added</td></tr>'}
+  </tbody>
+</table>
+
+<div class="totals">
+  <div class="totals-box">
+    <div class="total-row"><span>Subtotal</span><span>${fmt(st)}</span></div>
+    <div class="total-row"><span>Discount</span><span>-${fmt(td)}</span></div>
+    <div class="total-row"><span>VAT (15%)</span><span>${fmt(tv)}</span></div>
+    <div class="grand-total"><span>Grand Total</span><span>${fmt(gt)}</span></div>
+  </div>
+</div>
+
+${quotation?.notes ? `<div class="section"><div class="section-title">Notes</div><p>${quotation.notes}</p></div>` : ''}
+
+<div class="two-col">
+  <div class="col">
+    <div class="section-title">Terms & Conditions</div>
+    <p style="font-size:10px;white-space:pre-line;">${FULL_TERMS}</p>
+  </div>
+  <div class="col">
+    <div class="section-title">Banking Details</div>
+    <p style="font-size:11px;"><b>Bank:</b> ${COMPANY.bank}</p>
+    <p style="font-size:11px;"><b>Branch Code:</b> ${COMPANY.branch}</p>
+    <p style="font-size:11px;"><b>Account No:</b> ${COMPANY.accountNumber}</p>
+    <p style="font-size:11px;"><b>Type:</b> ${COMPANY.accountType}</p>
+    <p style="font-size:11px;"><b>Ref:</b> ${qn}</p>
+  </div>
+</div>
+
+<div class="footer">
+  <p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p>
+</div>
+
+<script>
+  // Auto-trigger print when loaded in popup
+  window.onload = function() {
+    setTimeout(function() {
+      window.print();
+    }, 500);
+  };
+</script>
+</body>
+</html>`
 }
 
 export default function CreateQuotation() {
@@ -170,7 +262,8 @@ export default function CreateQuotation() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: p } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
-      setQuotationData(prev => ({ ...prev, created_by_name: p?.full_name || user.email?.split('@')[0] || 'Unknown', prepared_by_name: p?.full_name || user.email?.split('@')[0] || 'Unknown' }))
+      const name = p?.full_name || user.email?.split('@')[0] || 'Unknown'
+      setQuotationData(prev => ({ ...prev, created_by_name: name, prepared_by_name: name }))
     }
   }
 
@@ -216,7 +309,7 @@ export default function CreateQuotation() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { toast.error('Not logged in'); setSaving(false); return }
-      const ci = items.filter(i => i.description).map((item, i) => ({ item_number: i + 1, description: item.description, quantity: item.quantity || 1, unit: item.unit || 'per_service', unit_price: item.unit_price || 0, tax_percent: item.tax_percent ?? 15, discount_percent: item.discount_percent ?? 0 }))
+      const ci = items.filter(i => i.description).map((item, i) => ({ item_number: i + 1, description: item.description, quantity: Number(item.quantity) || 1, unit: item.unit || 'per_service', unit_price: Number(item.unit_price) || 0, tax_percent: Number(item.tax_percent) ?? 15, discount_percent: Number(item.discount_percent) ?? 0 }))
       const lt = (i) => i.quantity * i.unit_price; const disc = (i) => lt(i) * (i.discount_percent / 100); const ad = (i) => lt(i) - disc(i); const vat = (i) => ad(i) * (i.tax_percent / 100)
       const st = ci.reduce((s, i) => s + lt(i), 0); const td = ci.reduce((s, i) => s + disc(i), 0); const tv = ci.reduce((s, i) => s + vat(i), 0); const gt = st - td + tv
       const vs = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'converted']; const ss = vs.includes(status) ? status : 'draft'
@@ -235,48 +328,17 @@ export default function CreateQuotation() {
     } catch (e) { toast.error('Failed: ' + (e.message || 'Error')) } finally { setSaving(false) }
   }
 
-  // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - USING WINDOW.OPEN FOR PRINT
-  // ═══════════════════════════════════════════════
-  const downloadPDF = async () => {
-    if (downloading) return
-    setDownloading(true)
-    toast.loading('Opening PDF print dialog...')
-    
-    try {
-      const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      
-      // Open new window with the quotation HTML
-      const printWindow = window.open('', '_blank', `width=${A4_WIDTH_PX},height=900`)
-      if (!printWindow) {
-        toast.dismiss()
-        toast.error('Please allow pop-ups for this site')
-        setDownloading(false)
-        return
-      }
-      
-      printWindow.document.write(html)
-      printWindow.document.close()
-      
-      // Wait for content to load then trigger print
-      setTimeout(() => {
-        printWindow.print()
-        toast.dismiss()
-        toast.success('PDF ready! Use Save as PDF in print dialog')
-        setDownloading(false)
-      }, 1000)
-      
-    } catch (e) {
-      console.error('PDF error:', e)
-      toast.dismiss()
-      toast.error('Failed: ' + (e.message || 'Unknown'))
-      setDownloading(false)
-    }
+  const downloadPDF = () => {
+    const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
+    const w = window.open('', '_blank')
+    if (!w) { toast.error('Please allow pop-ups'); return }
+    w.document.write(html)
+    w.document.close()
   }
 
-  const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
+  const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const cats = [...new Set(SERVICES.map(s => s.category))]
-  const cl = (i) => (i.quantity || 0) * (i.unit_price || 0)
+  const cl = (i) => (Number(i.quantity) || 0) * (Number(i.unit_price) || 0)
 
   if (loadingQuote) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
 
@@ -292,25 +354,22 @@ export default function CreateQuotation() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
           <div className="flex gap-2">
-            <button onClick={downloadPDF} disabled={downloading} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"><Download className="w-4 h-4" />{downloading ? '...' : 'PDF'}</button>
+            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
             <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? '...' : 'Save'}</button>
             <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? '...' : 'Send'}</button>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div className="neu-raised rounded-3xl p-6">
-              <h2 className="text-lg font-semibold mb-3">Customer</h2>
+            <div className="neu-raised rounded-3xl p-6"><h2 className="text-lg font-semibold mb-3">Customer</h2>
               <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-3"><option value="">Select Client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
               <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({...quotationData, client_name: e.target.value})} placeholder="Customer Name" className="w-full p-3 neu-inset rounded-xl mb-3" />
               <div className="grid grid-cols-2 gap-3 mb-3"><input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" /><input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" /></div>
               <textarea value={quotationData.client_address} onChange={(e) => setQuotationData({...quotationData, client_address: e.target.value})} placeholder="Address" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
-            <div className="neu-raised rounded-3xl p-6">
-              <div className="flex justify-between mb-3"><h2 className="text-lg font-semibold">Products</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
+            <div className="neu-raised rounded-3xl p-6"><div className="flex justify-between mb-3"><h2 className="text-lg font-semibold">Products</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
               {items.map((item, i) => (
-                <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
-                  <div className="flex justify-between mb-2"><span className="text-sm">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
+                <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3"><div className="flex justify-between mb-2"><span className="text-sm">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
                   <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
                   <div className="grid grid-cols-4 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" /></div>
                   <p className="text-right text-sm font-bold mt-1">{fmt(cl(item))}</p>
@@ -321,7 +380,7 @@ export default function CreateQuotation() {
           </div>
           <div className="space-y-4">
             <div className="neu-raised rounded-3xl p-6"><h3 className="text-lg font-semibold mb-3">Totals</h3>
-              {(() => {const ai=items.filter(i=>i.description);const st=ai.reduce((s,i)=>s+(i.quantity||0)*(i.unit_price||0),0);const dc=ai.reduce((s,i)=>s+(i.quantity||0)*(i.unit_price||0)*(i.discount_percent||0)/100,0);const ad=st-dc;const vt=ai.reduce((s,i)=>{const lt=(i.quantity||0)*(i.unit_price||0);const a=lt-lt*(i.discount_percent||0)/100;return s+a*(i.tax_percent||15)/100},0);return <div className="space-y-2 text-sm"><div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div><div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div><div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div><div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div></div>})()}
+              {(() => {const ai=items.filter(i=>i.description);const st=ai.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unit_price)||0),0);const dc=ai.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unit_price)||0)*(Number(i.discount_percent)||0)/100,0);const ad=st-dc;const vt=ai.reduce((s,i)=>{const lt=(Number(i.quantity)||0)*(Number(i.unit_price)||0);const a=lt-lt*(Number(i.discount_percent)||0)/100;return s+a*(Number(i.tax_percent)||15)/100},0);return <div className="space-y-2 text-sm"><div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div><div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div><div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div><div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div></div>})()}
             </div>
             <div className="neu-raised rounded-3xl p-4"><h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2><div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{minHeight:'400px',maxHeight:'600px'}}><div style={{transform:`scale(${previewScale})`,transformOrigin:'center center',width:A4_WIDTH_PX+'px',backgroundColor:'white',boxShadow:'0 4px 20px rgba(0,0,0,0.15)',margin:'10px 0'}} dangerouslySetInnerHTML={{__html:buildQuotationHTML(quotationData,items.filter(i=>i.description))}} /></div></div>
           </div>
