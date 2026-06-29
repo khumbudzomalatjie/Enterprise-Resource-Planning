@@ -3,11 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
 import useThemeStore from '../../../store/themeStore'
+import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   FileText, Edit, ChevronRight, Sun, Moon, Sparkles, 
   User, Calendar, Building2, Phone, Mail, MapPin, Download,
-  ArrowLeft
+  ArrowLeft, Briefcase
 } from 'lucide-react'
 
 const COMPANY = {
@@ -78,6 +79,174 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
+  // CONVERT ACCEPTED QUOTATION TO JOB
+  const handleConvertToJob = async () => {
+    if (!selectedQuotation) return
+    const q = selectedQuotation
+    
+    try {
+      toast.loading('Creating job from quotation...')
+      
+      // Create job data from quotation
+      const jobData = {
+        title: q.client_name ? `Service for ${q.client_name}` : `Job from ${q.quotation_number}`,
+        description: q.notes || `Created from quotation ${q.quotation_number}`,
+        client_id: q.client_id || null,
+        client_name: q.client_name || q.clients?.company_name || '',
+        site_address: q.client_address || '',
+        site_city: q.client_address?.split(',').pop()?.trim() || '',
+        site_contact_name: q.client_name || '',
+        site_contact_phone: q.client_phone || '',
+        quoted_amount: q.total_amount || 0,
+        quotation_id: q.id,
+        scheduled_date: q.valid_until || new Date().toISOString().split('T')[0],
+        scheduled_start_time: '08:00',
+        scheduled_end_time: '17:00',
+        priority: 'medium',
+        status: 'pending',
+        cleaners_required: 1,
+        notes: `Auto-created from quotation ${q.quotation_number}. Client: ${q.client_name || 'N/A'}. Total: R ${(q.total_amount || 0).toLocaleString('en-ZA', {minimumFractionDigits: 2})}`,
+        created_by: (await supabase.auth.getUser()).data.user?.id
+      }
+      
+      // Insert job directly into Supabase
+      const { data: newJob, error: jobError } = await supabase
+        .from('jobs')
+        .insert([jobData])
+        .select()
+        .single()
+      
+      if (jobError) {
+        console.error('Job creation error:', jobError)
+        throw jobError
+      }
+      
+      // Update quotation status to converted
+      const { error: updateError } = await supabase
+        .from('quotations')
+        .update({ 
+          status: 'converted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', q.id)
+      
+      if (updateError) {
+        console.error('Status update error:', updateError)
+      }
+      
+      toast.dismiss()
+      toast.success('Job created successfully! ✅')
+      
+      // Navigate to the new job
+      navigate(`/operations/jobs/${newJob.id}`)
+      
+    } catch (error) {
+      console.error('Convert to job error:', error)
+      toast.dismiss()
+      toast.error('Failed to create job: ' + (error.message || 'Unknown error'))
+    }
+  }
+
+  // CREATE JOB AND INVOICE
+  const handleConvertToJobAndInvoice = async () => {
+    if (!selectedQuotation) return
+    const q = selectedQuotation
+    
+    try {
+      toast.loading('Creating job and invoice...')
+      
+      // First create the job
+      const jobData = {
+        title: q.client_name ? `Service for ${q.client_name}` : `Job from ${q.quotation_number}`,
+        description: q.notes || `Created from quotation ${q.quotation_number}`,
+        client_id: q.client_id || null,
+        client_name: q.client_name || q.clients?.company_name || '',
+        site_address: q.client_address || '',
+        site_city: q.client_address?.split(',').pop()?.trim() || '',
+        site_contact_name: q.client_name || '',
+        site_contact_phone: q.client_phone || '',
+        quoted_amount: q.total_amount || 0,
+        quotation_id: q.id,
+        scheduled_date: q.valid_until || new Date().toISOString().split('T')[0],
+        scheduled_start_time: '08:00',
+        scheduled_end_time: '17:00',
+        priority: 'medium',
+        status: 'pending',
+        cleaners_required: 1,
+        notes: `Auto-created from quotation ${q.quotation_number}`,
+        created_by: (await supabase.auth.getUser()).data.user?.id
+      }
+      
+      const { data: newJob, error: jobError } = await supabase
+        .from('jobs')
+        .insert([jobData])
+        .select()
+        .single()
+      
+      if (jobError) throw jobError
+      
+      // Then create an invoice
+      const invoiceData = {
+        client_id: q.client_id || null,
+        client_name: q.client_name || q.clients?.company_name || '',
+        client_email: q.client_email || q.clients?.email || '',
+        client_address: q.client_address || '',
+        quotation_id: q.id,
+        subtotal: q.subtotal || 0,
+        tax_rate: q.tax_rate || 15,
+        tax_amount: q.tax_amount || 0,
+        discount_amount: q.discount_amount || 0,
+        total_amount: q.total_amount || 0,
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: 'draft',
+        notes: `Invoice for quotation ${q.quotation_number} - Job ${newJob.job_number}`,
+        invoice_date: new Date().toISOString().split('T')[0]
+      }
+      
+      const { data: newInvoice } = await supabase
+        .from('invoices')
+        .insert([invoiceData])
+        .select()
+        .single()
+      
+      // Add invoice items from quotation items
+      if (q.quotation_items && q.quotation_items.length > 0) {
+        const invoiceItems = q.quotation_items.map((item, i) => ({
+          invoice_id: newInvoice.id,
+          item_number: i + 1,
+          description: item.description || '',
+          quantity: item.quantity || 1,
+          unit: item.unit || 'each',
+          unit_price: item.unit_price || 0,
+          tax_percent: item.tax_percent || 15,
+          discount_percent: item.discount_percent || 0
+        }))
+        
+        await supabase.from('invoice_items').insert(invoiceItems)
+      }
+      
+      // Update quotation status
+      await supabase
+        .from('quotations')
+        .update({ 
+          status: 'converted',
+          converted_to_invoice: true,
+          invoice_id: newInvoice.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', q.id)
+      
+      toast.dismiss()
+      toast.success('Job and invoice created! ✅')
+      navigate(`/operations/jobs/${newJob.id}`)
+      
+    } catch (error) {
+      console.error('Convert error:', error)
+      toast.dismiss()
+      toast.error('Failed: ' + (error.message || 'Unknown error'))
+    }
+  }
+
   const handleDownloadPDF = async () => {
     if (!selectedQuotation) return
     const q = selectedQuotation
@@ -98,7 +267,6 @@ export default function QuotationDetail() {
       const rightMargin = 195
       const pageWidth = 180
       
-      // ===== LOGO + COMPANY HEADER =====
       if (logoBase64) {
         doc.addImage(logoBase64, 'PNG', leftMargin, y, 18, 18)
         doc.setFontSize(18)
@@ -133,7 +301,6 @@ export default function QuotationDetail() {
       doc.line(leftMargin, y, rightMargin, y)
       y += 6
       
-      // ===== QUOTATION TITLE =====
       doc.setFontSize(20)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(13, 45, 74)
@@ -144,7 +311,6 @@ export default function QuotationDetail() {
       doc.text(`No: ${q.quotation_number || 'N/A'}`, rightMargin, y, { align: 'right' })
       y += 7
       
-      // ===== QUOTE INFO =====
       doc.setFontSize(8)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(51, 51, 51)
@@ -161,7 +327,6 @@ export default function QuotationDetail() {
       doc.line(leftMargin, y, rightMargin, y)
       y += 5
       
-      // ===== ITEMS TABLE =====
       const items = q.quotation_items || []
       
       doc.setFontSize(8)
@@ -202,7 +367,6 @@ export default function QuotationDetail() {
       
       y += 3
       
-      // ===== TOTALS =====
       const st = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0)
       const disc = Number(q.discount_amount) || 0
       const vat = Number(q.tax_amount) || st * 0.15
@@ -241,7 +405,6 @@ export default function QuotationDetail() {
       doc.text(`R ${fmt(total)}`, rightMargin - 2, y + 1, { align: 'right' })
       y += 10
       
-      // ===== NOTES =====
       if (q.notes) {
         doc.setFontSize(9)
         doc.setFont('helvetica', 'bold')
@@ -255,7 +418,6 @@ export default function QuotationDetail() {
         y += 6
       }
       
-      // ===== BANKING DETAILS =====
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.2)
       doc.line(leftMargin, y, rightMargin, y)
@@ -279,7 +441,6 @@ export default function QuotationDetail() {
       doc.text(`Reference: ${q.quotation_number}`, leftMargin, y)
       y += 6
       
-      // ===== TERMS & CONDITIONS (Important ones only) =====
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.2)
       doc.line(leftMargin, y, rightMargin, y)
@@ -303,7 +464,6 @@ export default function QuotationDetail() {
       
       y += 2
       
-      // ===== FOOTER =====
       doc.setFontSize(7)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(136, 136, 136)
@@ -387,6 +547,18 @@ export default function QuotationDetail() {
                 className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
                 <Edit className="w-4 h-4" />Edit
               </button>
+            )}
+            {q.status === 'accepted' && (
+              <>
+                <button onClick={handleConvertToJob} 
+                  className="neu-raised neu-btn px-4 py-2 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4" />Create Job
+                </button>
+                <button onClick={handleConvertToJobAndInvoice} 
+                  className="neu-raised neu-btn px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
+                  <Briefcase className="w-4 h-4" />Job + Invoice
+                </button>
+              </>
             )}
           </div>
         </div>
