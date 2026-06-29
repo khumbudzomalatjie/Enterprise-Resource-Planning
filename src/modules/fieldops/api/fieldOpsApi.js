@@ -14,7 +14,7 @@ export const fieldOpsApi = {
         teams(team_name),
         field_job_assignments(
           *,
-          employees(first_name, last_name, employee_code, phone, department, position)
+          employees(first_name, last_name, employee_code, phone, department, position, user_id)
         ),
         quality_inspections(id, overall_rating, inspection_date),
         job_checklist_items(id, description, is_completed)
@@ -31,7 +31,7 @@ export const fieldOpsApi = {
   async getAssignedEmployees(jobId) {
     const { data, error } = await supabase
       .from('field_job_assignments')
-      .select('*, employees(first_name, last_name, employee_code, phone, department)')
+      .select('*, employees(first_name, last_name, employee_code, phone, department, user_id)')
       .eq('job_id', jobId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     
@@ -50,7 +50,7 @@ export const fieldOpsApi = {
         assignment_status: 'assigned',
         assigned_at: new Date().toISOString()
       }], { onConflict: 'job_id,employee_id' })
-      .select('*, employees(first_name, last_name)')
+      .select('*, employees(first_name, last_name, user_id)')
       .single()
     
     return { data, error }
@@ -183,8 +183,12 @@ export const fieldOpsApi = {
         *,
         jobs(
           *, 
-          clients(company_name, client_code, phone, city), 
-          job_categories(name, color)
+          clients(company_name, client_code, phone, city, address_line1), 
+          job_categories(name, color),
+          field_job_assignments(
+            *,
+            employees(first_name, last_name, employee_code, phone, user_id)
+          )
         )
       `)
       .eq('employee_id', employeeId)
@@ -417,7 +421,7 @@ export const fieldOpsApi = {
     ] = await Promise.all([
       supabase.from('job_full_audit').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_status_history').select('*').eq('job_id', job.id).order('changed_at', { ascending: true }),
-      supabase.from('field_job_assignments').select('*, employees(first_name, last_name, employee_code, phone, department, position)').eq('job_id', job.id).order('assigned_at', { ascending: true }),
+      supabase.from('field_job_assignments').select('*, employees(first_name, last_name, employee_code, phone, department, position, user_id)').eq('job_id', job.id).order('assigned_at', { ascending: true }),
       supabase.from('quality_inspections').select('*').eq('job_id', job.id).order('inspection_date', { ascending: true }),
       supabase.from('incidents').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_checklist_items').select('*').eq('job_id', job.id).order('item_number', { ascending: true }),
