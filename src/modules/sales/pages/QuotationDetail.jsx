@@ -79,7 +79,9 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
+  // ═══════════════════════════════════════════════
   // CONVERT ACCEPTED QUOTATION TO JOB
+  // ═══════════════════════════════════════════════
   const handleConvertToJob = async () => {
     if (!selectedQuotation) return
     const q = selectedQuotation
@@ -87,29 +89,47 @@ export default function QuotationDetail() {
     try {
       toast.loading('Creating job from quotation...')
       
-      // Create job data from quotation
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.dismiss()
+        toast.error('You must be logged in')
+        return
+      }
+      
+      // Get client info if client_id exists
+      let clientInfo = {}
+      if (q.client_id) {
+        const { data: client } = await supabase
+          .from('clients')
+          .select('company_name, phone, email, address_line1, city')
+          .eq('id', q.client_id)
+          .single()
+        if (client) clientInfo = client
+      }
+      
       const jobData = {
-        title: q.client_name ? `Service for ${q.client_name}` : `Job from ${q.quotation_number}`,
+        title: q.client_name ? `Service - ${q.client_name}` : `Job from ${q.quotation_number}`,
         description: q.notes || `Created from quotation ${q.quotation_number}`,
         client_id: q.client_id || null,
-        client_name: q.client_name || q.clients?.company_name || '',
-        site_address: q.client_address || '',
-        site_city: q.client_address?.split(',').pop()?.trim() || '',
-        site_contact_name: q.client_name || '',
-        site_contact_phone: q.client_phone || '',
+        site_address: q.client_address || clientInfo.address_line1 || '',
+        site_city: q.client_address?.split(',').pop()?.trim() || clientInfo.city || 'Midrand',
+        site_contact_name: q.client_name || clientInfo.company_name || '',
+        site_contact_phone: q.client_phone || clientInfo.phone || '',
         quoted_amount: q.total_amount || 0,
         quotation_id: q.id,
         scheduled_date: q.valid_until || new Date().toISOString().split('T')[0],
         scheduled_start_time: '08:00',
         scheduled_end_time: '17:00',
+        estimated_duration_minutes: 480,
         priority: 'medium',
         status: 'pending',
         cleaners_required: 1,
-        notes: `Auto-created from quotation ${q.quotation_number}. Client: ${q.client_name || 'N/A'}. Total: R ${(q.total_amount || 0).toLocaleString('en-ZA', {minimumFractionDigits: 2})}`,
-        created_by: (await supabase.auth.getUser()).data.user?.id
+        notes: `Auto-created from quotation ${q.quotation_number}. Client: ${q.client_name || 'N/A'}`,
+        created_by: user.id
       }
       
-      // Insert job directly into Supabase
+      console.log('Creating job with data:', jobData)
+      
       const { data: newJob, error: jobError } = await supabase
         .from('jobs')
         .insert([jobData])
@@ -118,8 +138,12 @@ export default function QuotationDetail() {
       
       if (jobError) {
         console.error('Job creation error:', jobError)
-        throw jobError
+        toast.dismiss()
+        toast.error('Failed to create job: ' + jobError.message)
+        return
       }
+      
+      console.log('Job created:', newJob)
       
       // Update quotation status to converted
       const { error: updateError } = await supabase
@@ -135,19 +159,22 @@ export default function QuotationDetail() {
       }
       
       toast.dismiss()
-      toast.success('Job created successfully! ✅')
+      toast.success(`Job ${newJob.job_number} created! ✅`)
       
-      // Navigate to the new job
-      navigate(`/operations/jobs/${newJob.id}`)
+      setTimeout(() => {
+        navigate(`/operations/jobs/${newJob.id}`)
+      }, 1000)
       
     } catch (error) {
       console.error('Convert to job error:', error)
       toast.dismiss()
-      toast.error('Failed to create job: ' + (error.message || 'Unknown error'))
+      toast.error('Failed: ' + (error.message || 'Unknown error'))
     }
   }
 
-  // CREATE JOB AND INVOICE
+  // ═══════════════════════════════════════════════
+  // CONVERT TO JOB + INVOICE
+  // ═══════════════════════════════════════════════
   const handleConvertToJobAndInvoice = async () => {
     if (!selectedQuotation) return
     const q = selectedQuotation
@@ -155,26 +182,43 @@ export default function QuotationDetail() {
     try {
       toast.loading('Creating job and invoice...')
       
-      // First create the job
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.dismiss()
+        toast.error('You must be logged in')
+        return
+      }
+      
+      let clientInfo = {}
+      if (q.client_id) {
+        const { data: client } = await supabase
+          .from('clients')
+          .select('company_name, phone, email, address_line1, city')
+          .eq('id', q.client_id)
+          .single()
+        if (client) clientInfo = client
+      }
+      
+      // Create job
       const jobData = {
-        title: q.client_name ? `Service for ${q.client_name}` : `Job from ${q.quotation_number}`,
+        title: q.client_name ? `Service - ${q.client_name}` : `Job from ${q.quotation_number}`,
         description: q.notes || `Created from quotation ${q.quotation_number}`,
         client_id: q.client_id || null,
-        client_name: q.client_name || q.clients?.company_name || '',
-        site_address: q.client_address || '',
-        site_city: q.client_address?.split(',').pop()?.trim() || '',
-        site_contact_name: q.client_name || '',
-        site_contact_phone: q.client_phone || '',
+        site_address: q.client_address || clientInfo.address_line1 || '',
+        site_city: q.client_address?.split(',').pop()?.trim() || clientInfo.city || 'Midrand',
+        site_contact_name: q.client_name || clientInfo.company_name || '',
+        site_contact_phone: q.client_phone || clientInfo.phone || '',
         quoted_amount: q.total_amount || 0,
         quotation_id: q.id,
         scheduled_date: q.valid_until || new Date().toISOString().split('T')[0],
         scheduled_start_time: '08:00',
         scheduled_end_time: '17:00',
+        estimated_duration_minutes: 480,
         priority: 'medium',
         status: 'pending',
         cleaners_required: 1,
-        notes: `Auto-created from quotation ${q.quotation_number}`,
-        created_by: (await supabase.auth.getUser()).data.user?.id
+        notes: `Created from quotation ${q.quotation_number}`,
+        created_by: user.id
       }
       
       const { data: newJob, error: jobError } = await supabase
@@ -183,34 +227,38 @@ export default function QuotationDetail() {
         .select()
         .single()
       
-      if (jobError) throw jobError
+      if (jobError) {
+        toast.dismiss()
+        toast.error('Job creation failed: ' + jobError.message)
+        return
+      }
       
-      // Then create an invoice
+      // Create invoice
       const invoiceData = {
         client_id: q.client_id || null,
-        client_name: q.client_name || q.clients?.company_name || '',
-        client_email: q.client_email || q.clients?.email || '',
-        client_address: q.client_address || '',
+        client_name: q.client_name || clientInfo.company_name || '',
+        client_email: q.client_email || clientInfo.email || '',
+        client_address: q.client_address || clientInfo.address_line1 || '',
         quotation_id: q.id,
         subtotal: q.subtotal || 0,
         tax_rate: q.tax_rate || 15,
         tax_amount: q.tax_amount || 0,
         discount_amount: q.discount_amount || 0,
         total_amount: q.total_amount || 0,
+        amount_paid: 0,
         due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        invoice_date: new Date().toISOString().split('T')[0],
         status: 'draft',
-        notes: `Invoice for quotation ${q.quotation_number} - Job ${newJob.job_number}`,
-        invoice_date: new Date().toISOString().split('T')[0]
+        notes: `Invoice for quotation ${q.quotation_number} - Job ${newJob.job_number}`
       }
       
-      const { data: newInvoice } = await supabase
+      const { data: newInvoice, error: invError } = await supabase
         .from('invoices')
         .insert([invoiceData])
         .select()
         .single()
       
-      // Add invoice items from quotation items
-      if (q.quotation_items && q.quotation_items.length > 0) {
+      if (!invError && newInvoice && q.quotation_items?.length > 0) {
         const invoiceItems = q.quotation_items.map((item, i) => ({
           invoice_id: newInvoice.id,
           item_number: i + 1,
@@ -221,24 +269,26 @@ export default function QuotationDetail() {
           tax_percent: item.tax_percent || 15,
           discount_percent: item.discount_percent || 0
         }))
-        
         await supabase.from('invoice_items').insert(invoiceItems)
       }
       
-      // Update quotation status
+      // Update quotation
       await supabase
         .from('quotations')
         .update({ 
           status: 'converted',
           converted_to_invoice: true,
-          invoice_id: newInvoice.id,
+          invoice_id: newInvoice?.id || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', q.id)
       
       toast.dismiss()
-      toast.success('Job and invoice created! ✅')
-      navigate(`/operations/jobs/${newJob.id}`)
+      toast.success(`Job ${newJob.job_number} + Invoice created! ✅`)
+      
+      setTimeout(() => {
+        navigate(`/operations/jobs/${newJob.id}`)
+      }, 1000)
       
     } catch (error) {
       console.error('Convert error:', error)
