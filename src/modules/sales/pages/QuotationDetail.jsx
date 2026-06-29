@@ -63,6 +63,84 @@ export default function QuotationDetail() {
     if (id) fetchQuotation(id)
   }, [id])
 
+  // ═══════════════════════════════════════════════
+  // AUTO-CREATE JOB WHEN VIEWING ACCEPTED QUOTATION
+  // ═══════════════════════════════════════════════
+  useEffect(() => {
+    if (selectedQuotation && selectedQuotation.status === 'accepted') {
+      autoCreateJobIfNeeded()
+    }
+  }, [selectedQuotation])
+
+  const autoCreateJobIfNeeded = async () => {
+    if (!selectedQuotation) return
+    const q = selectedQuotation
+    
+    // Check if job already exists for this quotation
+    const { data: existingJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('quotation_id', q.id)
+      .maybeSingle()
+    
+    if (existingJob) {
+      // Job already exists - update quotation to converted
+      if (q.status === 'accepted') {
+        await supabase
+          .from('quotations')
+          .update({ status: 'converted', updated_at: new Date().toISOString() })
+          .eq('id', q.id)
+        fetchQuotation(id) // Refresh data
+      }
+      return
+    }
+    
+    // No job exists - auto create one
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      const jobData = {
+        title: q.client_name ? `Service - ${q.client_name}` : `Job from ${q.quotation_number}`,
+        description: q.notes || `Auto-created from accepted quotation ${q.quotation_number}`,
+        client_id: q.client_id || null,
+        site_address: q.client_address || '',
+        site_city: q.client_address?.split(',').pop()?.trim() || 'Midrand',
+        site_contact_name: q.client_name || q.clients?.company_name || '',
+        site_contact_phone: q.client_phone || q.clients?.phone || '',
+        quoted_amount: q.total_amount || 0,
+        quotation_id: q.id,
+        scheduled_date: q.valid_until || new Date().toISOString().split('T')[0],
+        scheduled_start_time: '08:00',
+        scheduled_end_time: '17:00',
+        estimated_duration_minutes: 480,
+        priority: 'medium',
+        status: 'pending',
+        cleaners_required: 1,
+        notes: `Auto-created from accepted quotation ${q.quotation_number}`,
+        created_by: user?.id
+      }
+      
+      const { data: newJob, error: jobError } = await supabase
+        .from('jobs')
+        .insert([jobData])
+        .select()
+        .single()
+      
+      if (!jobError && newJob) {
+        // Update quotation to converted
+        await supabase
+          .from('quotations')
+          .update({ status: 'converted', updated_at: new Date().toISOString() })
+          .eq('id', q.id)
+        
+        toast.success(`Job ${newJob.job_number} auto-created! ✅`)
+        fetchQuotation(id) // Refresh data
+      }
+    } catch (error) {
+      console.error('Auto job creation error:', error)
+    }
+  }
+
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'
 
