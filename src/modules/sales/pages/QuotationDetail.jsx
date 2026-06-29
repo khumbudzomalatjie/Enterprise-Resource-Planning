@@ -76,8 +76,11 @@ The company is available for short- and long-term tenders.`
 
 const A4_WIDTH_PX = 794
 
-function buildQuotationHTML(quotation, items) {
-  const fmt = (a) => 'R ' + (a || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// ═══════════════════════════════════════════════
+// BUILD HTML FOR DISPLAY & PDF
+// ═══════════════════════════════════════════════
+function buildHTML(quotation, items) {
+  const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
   const lt = (i) => (Number(i.quantity) || 0) * (Number(i.unit_price) || 0)
   const disc = (i) => lt(i) * ((Number(i.discount_percent) || 0) / 100)
@@ -92,56 +95,64 @@ function buildQuotationHTML(quotation, items) {
   const cr = quotation?.created_by_name || 'Sales'
 
   const rows = items.filter(i => i.description).map((item, i) => 
-    `<tr><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${i+1}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;font-size:12px">${item.code||''}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;font-size:12px">${item.description}${Number(item.unit_price)===0?' <b style="color:green">(FREE)</b>':''}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.quantity}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.unit||'each'}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:right;font-size:12px">${fmt(item.unit_price)}</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.discount_percent||0}%</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:center;font-size:12px">${item.tax_percent||15}%</td><td style="padding:4px 6px;border-bottom:1px solid #ddd;text-align:right;font-size:12px"><b>${fmt(grand(item))}</b></td></tr>`
+    `<tr><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd">${item.code||''}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd">${item.description}${Number(item.unit_price)===0?' <b style="color:green">(FREE)</b>':''}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${item.quantity}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${item.unit||'each'}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right">${fmt(item.unit_price)}</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${item.discount_percent||0}%</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center">${item.tax_percent||15}%</td><td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right"><b>${fmt(grand(item))}</b></td></tr>`
   ).join('')
 
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Quotation ${qn}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quotation ${qn} - Ndanduleni Group</title>
 <style>
-  @page { size: A4; margin: 10mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
     font-family: Arial, Helvetica, sans-serif; 
     font-size: 14px; 
-    color: #000; 
+    color: #1a1a1a; 
     background: white; 
     line-height: 1.4;
-    padding: 20px;
+    padding: 30px 40px;
+    max-width: 900px;
+    margin: 0 auto;
   }
-  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1B5080; padding-bottom: 10px; margin-bottom: 10px; }
+  @media print {
+    body { padding: 0; margin: 0; max-width: none; }
+    @page { size: A4; margin: 12mm; }
+    .no-print { display: none !important; }
+  }
+  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #1B5080; padding-bottom: 12px; margin-bottom: 12px; }
   .header-left { display: flex; align-items: flex-start; gap: 15px; }
-  .logo { width: 100px; }
-  .logo img { width: 100px; height: auto; }
+  .logo-box { width: 100px; flex-shrink: 0; }
+  .logo-box img { width: 100px; height: auto; }
   .company-name { font-size: 22px; font-weight: bold; color: #0D2D4A; margin: 0; }
   .company-detail { font-size: 11px; color: #333; margin: 2px 0; }
-  .header-right { text-align: right; }
+  .header-right { text-align: right; flex-shrink: 0; }
   .quote-title { font-size: 28px; font-weight: bold; color: #0D2D4A; margin: 0; letter-spacing: 2px; }
   .quote-number { font-size: 14px; color: #1B5080; font-weight: bold; margin: 3px 0; }
   .quote-info { font-size: 11px; color: #333; }
   .quote-info p { margin: 1px 0; }
-  .section { border: 1px solid #ccc; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; }
-  .section-title { font-size: 11px; font-weight: bold; color: #1B5080; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 5px; }
+  .section { border: 1px solid #d1d5db; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; }
+  .section-title { font-size: 11px; font-weight: bold; color: #1B5080; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; margin-bottom: 5px; }
   .section p { font-size: 12px; margin: 2px 0; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-  th { background: #1B5080; color: white; padding: 8px 10px; font-size: 12px; font-weight: bold; text-align: center; }
+  th { background: #1B5080; color: white; padding: 8px 10px; font-size: 11px; font-weight: bold; text-align: center; }
   .totals { display: flex; justify-content: flex-end; margin-bottom: 10px; }
-  .totals-box { width: 250px; border: 1px solid #ccc; border-radius: 4px; }
-  .total-row { display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #ddd; font-size: 13px; }
-  .grand-total { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 16px; font-weight: bold; background: #eaf1f8; color: #0D2D4A; }
+  .totals-box { width: 250px; border: 1px solid #d1d5db; border-radius: 4px; overflow: hidden; }
+  .total-row { display: flex; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid #e5e7eb; font-size: 12px; background: #f9fafb; }
+  .grand-total { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 15px; font-weight: bold; background: #eaf1f8; color: #0D2D4A; }
   .two-col { display: flex; gap: 10px; margin-bottom: 8px; }
   .col { flex: 1; }
-  .footer { border-top: 1px solid #ccc; padding-top: 8px; text-align: center; font-size: 10px; color: #666; margin-top: 10px; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  .footer { border-top: 1px solid #d1d5db; padding-top: 8px; text-align: center; font-size: 10px; color: #6b7280; margin-top: 10px; }
+  .print-btn { display: block; margin: 20px auto; padding: 12px 30px; background: #1B5080; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+  .print-btn:hover { background: #0D2D4A; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <div class="header-left">
-    <div class="logo"><img src="/logo.png" alt="Logo" /></div>
+    <div class="logo-box"><img src="/logo.png" alt="Ndanduleni Group Logo" /></div>
     <div>
       <h1 class="company-name">${COMPANY.name}</h1>
       <p class="company-detail">${COMPANY.tagline}</p>
@@ -164,10 +175,10 @@ function buildQuotationHTML(quotation, items) {
 
 <div class="section">
   <div class="section-title">Customer Details</div>
-  <p><b>Customer:</b> ${quotation?.client_name || ''}</p>
-  <p><b>Phone:</b> ${quotation?.client_phone || ''}</p>
-  <p><b>Email:</b> ${quotation?.client_email || ''}</p>
-  <p><b>Address:</b> ${quotation?.client_address || ''}</p>
+  <p><b>Customer:</b> ${quotation?.client_name || '________________________'}</p>
+  <p><b>Phone:</b> ${quotation?.client_phone || '________________________'}</p>
+  <p><b>Email:</b> ${quotation?.client_email || '________________________'}</p>
+  <p><b>Address:</b> ${quotation?.client_address || '________________________'}</p>
 </div>
 
 <table>
@@ -175,7 +186,7 @@ function buildQuotationHTML(quotation, items) {
     <tr><th>No</th><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Disc</th><th>VAT</th><th>Total</th></tr>
   </thead>
   <tbody>
-    ${rows || '<tr><td colspan="9" style="padding:15px;text-align:center;">No items added</td></tr>'}
+    ${rows || '<tr><td colspan="9" style="padding:20px;text-align:center;color:#999;">No items added yet</td></tr>'}
   </tbody>
 </table>
 
@@ -188,12 +199,12 @@ function buildQuotationHTML(quotation, items) {
   </div>
 </div>
 
-${quotation?.notes ? `<div class="section"><div class="section-title">Notes</div><p>${quotation.notes}</p></div>` : ''}
+${quotation?.notes ? `<div class="section"><div class="section-title">Notes</div><p style="white-space:pre-line;">${quotation.notes}</p></div>` : ''}
 
 <div class="two-col">
   <div class="col">
     <div class="section-title">Terms & Conditions</div>
-    <p style="font-size:10px;white-space:pre-line;">${FULL_TERMS}</p>
+    <p style="font-size:10px;white-space:pre-line;color:#333;">${FULL_TERMS}</p>
   </div>
   <div class="col">
     <div class="section-title">Banking Details</div>
@@ -209,25 +220,21 @@ ${quotation?.notes ? `<div class="section"><div class="section-title">Notes</div
   <p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone} | Page 1 of 1</p>
 </div>
 
-<script>
-  // Auto-trigger print when loaded in popup
-  window.onload = function() {
-    setTimeout(function() {
-      window.print();
-    }, 500);
-  };
-</script>
+<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+
 </body>
 </html>`
 }
 
+// ═══════════════════════════════════════════════
+// CREATE/EDIT QUOTATION PAGE
+// ═══════════════════════════════════════════════
 export default function CreateQuotation() {
   const { id } = useParams()
   const isEditMode = Boolean(id)
   const previewRef = useRef(null)
   const [previewScale, setPreviewScale] = useState(0.4)
   const [saving, setSaving] = useState(false)
-  const [downloading, setDownloading] = useState(false)
 
   const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
@@ -253,7 +260,9 @@ export default function CreateQuotation() {
   }, [])
 
   useEffect(() => {
-    fetchClients({ status: 'active' }); setCurrentUserName(); updatePreviewScale()
+    fetchClients({ status: 'active' })
+    setCurrentUserName()
+    updatePreviewScale()
     window.addEventListener('resize', updatePreviewScale)
     return () => window.removeEventListener('resize', updatePreviewScale)
   }, [updatePreviewScale])
@@ -328,12 +337,19 @@ export default function CreateQuotation() {
     } catch (e) { toast.error('Failed: ' + (e.message || 'Error')) } finally { setSaving(false) }
   }
 
-  const downloadPDF = () => {
-    const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-    const w = window.open('', '_blank')
-    if (!w) { toast.error('Please allow pop-ups'); return }
+  // ═══════════════════════════════════════════════
+  // PDF - Opens in new window with print button
+  // ═══════════════════════════════════════════════
+  const openPDF = () => {
+    const html = buildHTML(quotationData, items.filter(i => i.description))
+    const w = window.open('', '_blank', 'width=900,height=800')
+    if (!w) {
+      toast.error('Please allow pop-ups for this site to download PDF')
+      return
+    }
     w.document.write(html)
     w.document.close()
+    toast.success('Quotation opened! Click Print/Save as PDF button or press Ctrl+P')
   }
 
   const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -346,43 +362,117 @@ export default function CreateQuotation() {
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
-        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2"><Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span></div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">{isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}</button>
+        <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
+        </div>
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
+          {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
+        </button>
       </div>
+
       <main className="max-w-7xl mx-auto px-4 pt-8 pb-16">
-        <div className="flex items-center gap-2 mb-6 text-sm"><Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link><ChevronRight className="w-4 h-4 text-slate-400" /><Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link><ChevronRight className="w-4 h-4 text-slate-400" /><span className="font-medium">{isEditMode ? 'Edit' : 'New'}</span></div>
+        <div className="flex items-center gap-2 mb-6 text-sm">
+          <Link to="/sales" className="text-slate-500 hover:text-emerald-600">Sales</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <Link to="/sales/quotations" className="text-slate-500 hover:text-emerald-600">Quotations</Link>
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+          <span className="font-medium">{isEditMode ? 'Edit' : 'New'}</span>
+        </div>
+
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <FileText className="w-8 h-8 text-emerald-600" />{isEditMode ? 'Edit' : 'Create'} Quotation
+          </h1>
           <div className="flex gap-2">
-            <button onClick={downloadPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"><Download className="w-4 h-4" />PDF</button>
-            <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" />{saving ? '...' : 'Save'}</button>
-            <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"><Send className="w-4 h-4" />{saving ? '...' : 'Send'}</button>
+            <button onClick={openPDF} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2">
+              <Download className="w-4 h-4" />PDF
+            </button>
+            <button onClick={() => handleSave('draft')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50">
+              <Save className="w-4 h-4" />{saving ? '...' : 'Save'}
+            </button>
+            <button onClick={() => handleSave('sent')} disabled={saving} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50">
+              <Send className="w-4 h-4" />{saving ? '...' : 'Send'}
+            </button>
           </div>
         </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div className="neu-raised rounded-3xl p-6"><h2 className="text-lg font-semibold mb-3">Customer</h2>
-              <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-3"><option value="">Select Client</option>{clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+            <div className="neu-raised rounded-3xl p-6">
+              <h2 className="text-lg font-semibold mb-3">Customer</h2>
+              <select value={quotationData.client_id} onChange={(e) => handleClientSelect(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-3">
+                <option value="">Select Client</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select>
               <input type="text" value={quotationData.client_name} onChange={(e) => setQuotationData({...quotationData, client_name: e.target.value})} placeholder="Customer Name" className="w-full p-3 neu-inset rounded-xl mb-3" />
-              <div className="grid grid-cols-2 gap-3 mb-3"><input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" /><input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" /></div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <input type="email" value={quotationData.client_email} onChange={(e) => setQuotationData({...quotationData, client_email: e.target.value})} placeholder="Email" className="p-3 neu-inset rounded-xl" />
+                <input type="text" value={quotationData.client_phone} onChange={(e) => setQuotationData({...quotationData, client_phone: e.target.value})} placeholder="Phone" className="p-3 neu-inset rounded-xl" />
+              </div>
               <textarea value={quotationData.client_address} onChange={(e) => setQuotationData({...quotationData, client_address: e.target.value})} placeholder="Address" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
-            <div className="neu-raised rounded-3xl p-6"><div className="flex justify-between mb-3"><h2 className="text-lg font-semibold">Products</h2><button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button></div>
+
+            <div className="neu-raised rounded-3xl p-6">
+              <div className="flex justify-between mb-3">
+                <h2 className="text-lg font-semibold">Products</h2>
+                <button onClick={addItem} className="text-emerald-600 flex items-center gap-1 text-sm"><Plus className="w-4 h-4" />Add</button>
+              </div>
               {items.map((item, i) => (
-                <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3"><div className="flex justify-between mb-2"><span className="text-sm">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
-                  <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
-                  <div className="grid grid-cols-4 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" /></div>
+                <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm">Item {i+1}</span>
+                    <button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                  <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2">
+                    <option value="">Select</option>
+                    {cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}
+                  </select>
+                  <div className="grid grid-cols-4 gap-2">
+                    <input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" />
+                    <input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" />
+                    <input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" />
+                    <input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" />
+                  </div>
                   <p className="text-right text-sm font-bold mt-1">{fmt(cl(item))}</p>
                 </div>
               ))}
             </div>
-            <div className="neu-raised rounded-3xl p-6"><h2 className="text-lg font-semibold mb-3">Details</h2><input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({...quotationData, valid_until: e.target.value})} className="w-full p-3 neu-inset rounded-xl mb-3" /><textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Notes" rows={2} className="w-full p-3 neu-inset rounded-xl" /></div>
-          </div>
-          <div className="space-y-4">
-            <div className="neu-raised rounded-3xl p-6"><h3 className="text-lg font-semibold mb-3">Totals</h3>
-              {(() => {const ai=items.filter(i=>i.description);const st=ai.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unit_price)||0),0);const dc=ai.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.unit_price)||0)*(Number(i.discount_percent)||0)/100,0);const ad=st-dc;const vt=ai.reduce((s,i)=>{const lt=(Number(i.quantity)||0)*(Number(i.unit_price)||0);const a=lt-lt*(Number(i.discount_percent)||0)/100;return s+a*(Number(i.tax_percent)||15)/100},0);return <div className="space-y-2 text-sm"><div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div><div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div><div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div><div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div></div>})()}
+
+            <div className="neu-raised rounded-3xl p-6">
+              <h2 className="text-lg font-semibold mb-3">Details</h2>
+              <input type="date" value={quotationData.valid_until} onChange={(e) => setQuotationData({...quotationData, valid_until: e.target.value})} className="w-full p-3 neu-inset rounded-xl mb-3" />
+              <textarea value={quotationData.notes} onChange={(e) => setQuotationData({...quotationData, notes: e.target.value})} placeholder="Notes" rows={2} className="w-full p-3 neu-inset rounded-xl" />
             </div>
-            <div className="neu-raised rounded-3xl p-4"><h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2><div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{minHeight:'400px',maxHeight:'600px'}}><div style={{transform:`scale(${previewScale})`,transformOrigin:'center center',width:A4_WIDTH_PX+'px',backgroundColor:'white',boxShadow:'0 4px 20px rgba(0,0,0,0.15)',margin:'10px 0'}} dangerouslySetInnerHTML={{__html:buildQuotationHTML(quotationData,items.filter(i=>i.description))}} /></div></div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="neu-raised rounded-3xl p-6">
+              <h3 className="text-lg font-semibold mb-3">Totals</h3>
+              {(() => {
+                const ai = items.filter(i => i.description)
+                const st = ai.reduce((s,i) => s + (Number(i.quantity)||0)*(Number(i.unit_price)||0), 0)
+                const dc = ai.reduce((s,i) => s + (Number(i.quantity)||0)*(Number(i.unit_price)||0)*(Number(i.discount_percent)||0)/100, 0)
+                const ad = st - dc
+                const vt = ai.reduce((s,i) => {const lt=(Number(i.quantity)||0)*(Number(i.unit_price)||0);const a=lt-lt*(Number(i.discount_percent)||0)/100;return s+a*(Number(i.tax_percent)||15)/100}, 0)
+                return (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span>Subtotal:</span><span>{fmt(st)}</span></div>
+                    <div className="flex justify-between"><span>Discount:</span><span className="text-red-500">-{fmt(dc)}</span></div>
+                    <div className="flex justify-between"><span>VAT:</span><span>{fmt(vt)}</span></div>
+                    <div className="flex justify-between font-bold text-lg pt-2 border-t"><span>Grand Total:</span><span className="text-emerald-600">{fmt(ad+vt)}</span></div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            <div className="neu-raised rounded-3xl p-4">
+              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Eye className="w-5 h-5 text-emerald-600" />Preview</h2>
+              <div ref={previewRef} className="bg-slate-100 dark:bg-slate-700 rounded-xl overflow-auto flex items-center justify-center" style={{ minHeight: '400px', maxHeight: '600px' }}>
+                <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'center center', width: A4_WIDTH_PX + 'px', backgroundColor: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '10px 0' }}
+                  dangerouslySetInnerHTML={{ __html: buildHTML(quotationData, items.filter(i => i.description)) }} />
+              </div>
+            </div>
           </div>
         </div>
       </main>
