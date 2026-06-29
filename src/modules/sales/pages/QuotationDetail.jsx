@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
@@ -30,7 +30,6 @@ export default function QuotationDetail() {
   const { selectedQuotation, fetchQuotation, loading } = useSalesStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const printRef = useRef(null)
 
   useEffect(() => {
     if (id) fetchQuotation(id)
@@ -52,139 +51,224 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
+  // DOWNLOAD PDF - Direct jsPDF generation (no HTML, never blank)
   const handleDownloadPDF = async () => {
     if (!selectedQuotation) return
-    
     const q = selectedQuotation
     
     try {
       toast.loading('Generating PDF...')
       
-      // Try html2pdf first
-      const html2pdf = (await import('html2pdf.js')).default
+      const { default: jsPDF } = await import('jspdf')
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       
-      const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
+      const fmt = (a) => (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
       
+      let y = 15
+      const leftMargin = 15
+      const rightMargin = 195
+      const pageWidth = 180
+      
+      // ===== COMPANY HEADER =====
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(13, 45, 74)
+      doc.text(COMPANY.name, leftMargin, y)
+      y += 6
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(85, 85, 85)
+      doc.text(`${COMPANY.tagline} | ${COMPANY.address}`, leftMargin, y)
+      y += 4
+      doc.text(`Tel: ${COMPANY.phone} | Email: ${COMPANY.email} | Web: ${COMPANY.website}`, leftMargin, y)
+      y += 4
+      doc.text(`Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}`, leftMargin, y)
+      y += 6
+      
+      // Line
+      doc.setDrawColor(27, 80, 128)
+      doc.setLineWidth(0.5)
+      doc.line(leftMargin, y, rightMargin, y)
+      y += 6
+      
+      // ===== QUOTATION TITLE =====
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(13, 45, 74)
+      doc.text('QUOTATION', leftMargin, y)
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(27, 80, 128)
+      doc.text(`No: ${q.quotation_number || 'N/A'}`, rightMargin, y, { align: 'right' })
+      y += 7
+      
+      // ===== QUOTE INFO =====
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(51, 51, 51)
+      doc.text(`Date: ${fmtDate(q.quotation_date)}`, leftMargin, y)
+      doc.text(`Expiry: ${fmtDate(q.valid_until)}`, leftMargin + 60, y)
+      doc.text(`Status: ${q.status?.replace('_', ' ')}`, leftMargin + 120, y)
+      y += 4
+      doc.text(`Client: ${q.client_name || q.clients?.company_name || 'N/A'}`, leftMargin, y)
+      doc.text(`Created By: ${q.created_by_name || 'N/A'}`, leftMargin + 60, y)
+      y += 6
+      
+      // Line
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.2)
+      doc.line(leftMargin, y, rightMargin, y)
+      y += 5
+      
+      // ===== ITEMS TABLE HEADER =====
       const items = q.quotation_items || []
-      const itemRows = items.map((item, i) => 
-        `<tr><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd">${item.description||''}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:center">${item.quantity||0}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right">${fmt(item.unit_price||0)}</td><td style="padding:4px 8px;border-bottom:1px solid #ddd;text-align:right"><b>${fmt((item.quantity||0)*(item.unit_price||0))}</b></td></tr>`
-      ).join('')
       
-      const st = items.reduce((s,i) => s + (Number(i.quantity)||0)*(Number(i.unit_price)||0), 0)
-      const tv = st * 0.15
-      const gt = st + tv
-
-      const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  @page { size: A4; margin: 8mm; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; padding: 15px; }
-  h1 { font-size: 18px; color: #0D2D4A; margin: 0; }
-  h2 { font-size: 14px; color: #1B5080; margin: 5px 0; }
-  .hr { border-bottom: 2px solid #1B5080; padding-bottom: 4px; margin-bottom: 8px; }
-  .info p { font-size: 10px; margin: 1px 0; }
-  .section { border: 1px solid #ddd; padding: 6px 10px; margin-bottom: 5px; border-radius: 3px; }
-  .stitle { font-weight: bold; color: #1B5080; margin-bottom: 2px; font-size: 10px; text-transform: uppercase; }
-  table { width: 100%; border-collapse: collapse; margin: 5px 0; }
-  th { background: #1B5080; color: #fff; padding: 4px 5px; font-size: 9px; text-align: center; }
-  td { padding: 3px 5px; border-bottom: 1px solid #ddd; font-size: 9px; }
-  .total-box { text-align: right; margin-top: 5px; padding: 6px 10px; background: #eaf1f8; border-radius: 3px; }
-  .total-box p { font-size: 14px; font-weight: bold; color: #0D2D4A; }
-  .ft { text-align: center; font-size: 8px; color: #888; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 4px; }
-</style>
-</head>
-<body>
-<h1>${COMPANY.name}</h1>
-<p style="font-size:9px;color:#555">${COMPANY.tagline} | ${COMPANY.address} | Tel: ${COMPANY.phone}</p>
-<div class="hr"></div>
-<h2>QUOTATION: ${q.quotation_number || 'N/A'}</h2>
-<div class="info">
-<p><b>Date:</b> ${fmtDate(q.quotation_date)} | <b>Expiry:</b> ${fmtDate(q.valid_until)}</p>
-<p><b>Client:</b> ${q.client_name || q.clients?.company_name || 'N/A'}</p>
-<p><b>Created By:</b> ${q.created_by_name || 'N/A'} | <b>Status:</b> ${q.status}</p>
-</div>
-<div class="section"><div class="stitle">Items</div>
-<table><thead><tr><th>No</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>${itemRows||'<tr><td colspan="5" style="padding:8px;text-align:center">No items</td></tr>'}</tbody></table>
-<div style="text-align:right;margin-top:4px"><b>Subtotal:</b> ${fmt(st)} | <b>VAT:</b> ${fmt(tv)} | <b>Total:</b> ${fmt(gt)}</div>
-</div>
-<div class="section"><div class="stitle">Banking</div>
-<p style="font-size:9px"><b>Bank:</b> ${COMPANY.bank} | <b>Branch:</b> ${COMPANY.branch} | <b>Account:</b> ${COMPANY.accountNumber}</p>
-</div>
-<div class="total-box"><p>TOTAL: ${fmt(q.total_amount)}</p></div>
-<div class="ft"><p>${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}</p></div>
-</body>
-</html>`
-
-      // Create element and append to body
-      const element = document.createElement('div')
-      element.innerHTML = htmlContent
-      element.style.cssText = 'position:fixed;left:0;top:0;width:210mm;background:white;z-index:99999;min-height:100vh;'
-      document.body.appendChild(element)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(255, 255, 255)
+      doc.setFillColor(27, 80, 128)
+      doc.rect(leftMargin, y - 4, pageWidth, 6, 'F')
+      doc.text('No', leftMargin + 2, y)
+      doc.text('Description', leftMargin + 10, y)
+      doc.text('Qty', leftMargin + 115, y)
+      doc.text('Unit Price', leftMargin + 130, y)
+      doc.text('Total', rightMargin, y, { align: 'right' })
+      y += 6
       
-      // Wait for render
-      await new Promise(r => setTimeout(r, 1000))
+      // ===== ITEMS TABLE ROWS =====
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(26, 26, 26)
       
-      // Generate PDF
-      const opt = {
-        margin: [5, 5, 5, 5],
-        filename: `Quotation_${q.quotation_number || 'quote'}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          backgroundColor: '#ffffff',
-          logging: true,
-          windowWidth: element.scrollWidth,
-          windowHeight: element.scrollHeight
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] }
+      if (items.length > 0) {
+        items.forEach((item, i) => {
+          // Check if we need a new page
+          if (y > 250) {
+            doc.addPage()
+            y = 15
+          }
+          
+          doc.setFontSize(8)
+          doc.text(`${i + 1}`, leftMargin + 2, y)
+          doc.text(`${(item.description || '').substring(0, 50)}`, leftMargin + 10, y)
+          doc.text(`${item.quantity || 0}`, leftMargin + 115, y)
+          doc.text(`R ${fmt(item.unit_price || 0)}`, leftMargin + 130, y)
+          doc.text(`R ${fmt((item.quantity || 0) * (item.unit_price || 0))}`, rightMargin, y, { align: 'right' })
+          
+          // Light gray line between rows
+          doc.setDrawColor(230, 230, 230)
+          doc.setLineWidth(0.1)
+          doc.line(leftMargin, y + 1, rightMargin, y + 1)
+          y += 5
+        })
+      } else {
+        doc.setFontSize(9)
+        doc.setTextColor(150, 150, 150)
+        doc.text('No items added', leftMargin + 60, y)
+        y += 5
       }
       
-      await html2pdf().set(opt).from(element).save()
+      y += 3
       
-      // Clean up
-      document.body.removeChild(element)
+      // ===== TOTALS =====
+      const st = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0)
+      const disc = Number(q.discount_amount) || 0
+      const vat = Number(q.tax_amount) || st * 0.15
+      const total = Number(q.total_amount) || st - disc + vat
+      
+      // Totals box
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.3)
+      doc.rect(leftMargin + 90, y - 4, pageWidth - 90, 24)
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(51, 51, 51)
+      doc.text('Subtotal:', leftMargin + 95, y)
+      doc.text(`R ${fmt(st)}`, rightMargin - 2, y, { align: 'right' })
+      y += 4
+      
+      if (disc > 0) {
+        doc.text('Discount:', leftMargin + 95, y)
+        doc.setTextColor(200, 50, 50)
+        doc.text(`-R ${fmt(disc)}`, rightMargin - 2, y, { align: 'right' })
+        doc.setTextColor(51, 51, 51)
+        y += 4
+      }
+      
+      doc.text('VAT (15%):', leftMargin + 95, y)
+      doc.text(`R ${fmt(vat)}`, rightMargin - 2, y, { align: 'right' })
+      y += 4
+      
+      // Grand total
+      doc.setFillColor(234, 241, 248)
+      doc.rect(leftMargin + 90, y - 4, pageWidth - 90, 8, 'F')
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(13, 45, 74)
+      doc.text('GRAND TOTAL:', leftMargin + 95, y + 1)
+      doc.text(`R ${fmt(total)}`, rightMargin - 2, y + 1, { align: 'right' })
+      y += 10
+      
+      // ===== NOTES =====
+      if (q.notes) {
+        y += 3
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(27, 80, 128)
+        doc.text('Notes:', leftMargin, y)
+        y += 4
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(51, 51, 51)
+        doc.text(q.notes.substring(0, 100), leftMargin, y)
+        y += 6
+      }
+      
+      // ===== BANKING DETAILS =====
+      y += 3
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.2)
+      doc.line(leftMargin, y - 2, rightMargin, y - 2)
+      y += 3
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(27, 80, 128)
+      doc.text('Banking Details', leftMargin, y)
+      y += 5
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(51, 51, 51)
+      doc.text(`Bank: ${COMPANY.bank}`, leftMargin, y)
+      doc.text(`Branch Code: ${COMPANY.branch}`, leftMargin + 70, y)
+      y += 4
+      doc.text(`Account No: ${COMPANY.accountNumber}`, leftMargin, y)
+      doc.text(`Account Type: ${COMPANY.accountType}`, leftMargin + 70, y)
+      y += 4
+      doc.text(`Reference: ${q.quotation_number}`, leftMargin, y)
+      
+      // ===== FOOTER =====
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(136, 136, 136)
+      doc.text(`${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}`, 105, 288, { align: 'center' })
+      doc.text('Page 1 of 1', 105, 292, { align: 'center' })
+      
+      // ===== SAVE =====
+      doc.save(`Quotation_${q.quotation_number || 'quote'}.pdf`)
+      
       toast.dismiss()
       toast.success('PDF downloaded! 📄')
       
     } catch (error) {
       console.error('PDF Error:', error)
       toast.dismiss()
-      
-      // Fallback: try opening in new window
-      const q = selectedQuotation
-      const printHTML = buildPrintHTML(q)
-      
-      const w = window.open('', '_blank', 'width=900,height=800')
-      if (w) {
-        w.document.write(printHTML)
-        w.document.close()
-        toast.success('Opened in new window. Press Ctrl+P to save as PDF')
-      } else {
-        toast.error('Please allow pop-ups and try again')
-      }
+      toast.error('Failed to generate PDF: ' + error.message)
     }
-  }
-
-  // Fallback print HTML builder
-  function buildPrintHTML(q) {
-    const fmt = (a) => 'R ' + (Number(a) || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Quotation</title>
-<style>body{font-family:Arial;padding:20px;font-size:14px}h1{color:#0D2D4A}h2{color:#1B5080}
-.section{border:1px solid #ddd;padding:10px;margin:8px 0;border-radius:4px}
-.total{font-size:18px;font-weight:bold;color:#0D2D4A}@media print{body{padding:0}}</style></head><body>
-<h1>NDANDULENI GROUP</h1><h2>Quotation: ${q.quotation_number}</h2>
-<p><b>Date:</b> ${fmtDate(q.quotation_date)} | <b>Client:</b> ${q.client_name||'N/A'}</p>
-<p><b>Total:</b> <span class="total">${fmt(q.total_amount)}</span></p>
-<p><b>Status:</b> ${q.status} | <b>Created By:</b> ${q.created_by_name||'N/A'}</p>
-<div class="section"><h3>Banking</h3><p>Capitec Business | Branch: 450105 | Account: 1054498946</p></div>
-<script>setTimeout(window.print,800)</script></body></html>`
   }
 
   if (loading) return (
