@@ -92,7 +92,10 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  async updateJobStatus(jobId, status) {
+  // ═══════════════════════════════════════════════
+  // UPDATED: Syncs both jobs table AND assignments
+  // ═══════════════════════════════════════════════
+  async updateJobStatus(jobId, status, employeeId = null) {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
     if (status === 'completed') updates.actual_end_time = new Date().toISOString()
@@ -104,7 +107,70 @@ export const fieldOpsApi = {
       .select()
       .single()
     
+    // Also update the assignment status if employeeId provided
+    if (!error && employeeId) {
+      const assignmentStatus = status === 'in_progress' ? 'in_progress' : 
+                               status === 'completed' ? 'completed' : 'assigned'
+      
+      await supabase
+        .from('field_job_assignments')
+        .update({ 
+          assignment_status: assignmentStatus,
+          ...(status === 'in_progress' ? { started_at: new Date().toISOString() } : {}),
+          ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {})
+        })
+        .eq('job_id', jobId)
+        .eq('employee_id', employeeId)
+    }
+    
     return { data, error }
+  },
+
+  // ═══════════════════════════════════════════════
+  // NEW: Full sync from mobile to main ERP
+  // ═══════════════════════════════════════════════
+  async syncJobWithMobile(jobId, data) {
+    const { employeeId, status, checkInLocation, checkOutLocation, notes } = data
+    
+    // Update job status
+    if (status) {
+      await this.updateJobStatus(jobId, status, employeeId)
+    }
+    
+    // Update assignment with GPS location data
+    if (employeeId) {
+      const updates = {}
+      if (checkInLocation) {
+        updates.check_in_latitude = checkInLocation.latitude
+        updates.check_in_longitude = checkInLocation.longitude
+        updates.check_in_address = checkInLocation.address || null
+        updates.check_in_time = new Date().toISOString()
+      }
+      if (checkOutLocation) {
+        updates.check_out_latitude = checkOutLocation.latitude
+        updates.check_out_longitude = checkOutLocation.longitude
+        updates.check_out_address = checkOutLocation.address || null
+        updates.check_out_time = new Date().toISOString()
+      }
+      if (notes) updates.employee_notes = notes
+      
+      if (Object.keys(updates).length > 0) {
+        await supabase
+          .from('field_job_assignments')
+          .update(updates)
+          .eq('job_id', jobId)
+          .eq('employee_id', employeeId)
+      }
+    }
+    
+    // Return updated job data
+    const { data: updatedJob } = await supabase
+      .from('jobs')
+      .select('*, clients(*), job_categories(*)')
+      .eq('id', jobId)
+      .single()
+    
+    return { success: true, job: updatedJob }
   },
 
   // ============================================
@@ -233,11 +299,9 @@ export const fieldOpsApi = {
   },
 
   async getJobAuditTrail(searchInput) {
-    // Clean the input
     const search = searchInput.trim()
     let job = null
 
-    // Try 1: Exact match on job_number
     const { data: exactMatch } = await supabase
       .from('jobs')
       .select('id, job_number')
@@ -260,7 +324,6 @@ export const fieldOpsApi = {
       job = data
     }
 
-    // Try 2: Partial match on job_number (ilike)
     if (!job) {
       const { data: partialMatch } = await supabase
         .from('jobs')
@@ -286,7 +349,6 @@ export const fieldOpsApi = {
       }
     }
 
-    // Try 3: Search by title
     if (!job) {
       const { data: titleMatch } = await supabase
         .from('jobs')
@@ -312,7 +374,6 @@ export const fieldOpsApi = {
       }
     }
 
-    // Try 4: Search by client name
     if (!job) {
       const { data: clientJobs } = await supabase
         .from('jobs')
@@ -337,7 +398,6 @@ export const fieldOpsApi = {
       }
     }
 
-    // If no job found at all, return error
     if (!job) {
       return { 
         error: `No job found for "${search}". Try a different search term or browse the job list.`,
@@ -345,7 +405,6 @@ export const fieldOpsApi = {
       }
     }
 
-    // Job found! Now get all related audit data
     const [
       { data: auditLogs },
       { data: statusHistory },
