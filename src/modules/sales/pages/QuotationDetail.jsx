@@ -25,7 +25,16 @@ const COMPANY = {
   accountType: 'Transact',
 }
 
-// Convert logo image to base64 for PDF
+const IMPORTANT_TERMS = [
+  '50% deposit required to secure booking.',
+  'Balance payable upon completion.',
+  'Payment methods: EFT and card. No cash.',
+  '24-hour notice required for cancellation.',
+  'Clients responsible for removing valuables.',
+  '100% satisfaction guaranteed.',
+  'Available for short and long-term tenders.',
+]
+
 async function getLogoBase64() {
   return new Promise((resolve) => {
     const img = new Image()
@@ -69,7 +78,6 @@ export default function QuotationDetail() {
     return b[status] || 'bg-gray-100'
   }
 
-  // DOWNLOAD PDF - Direct jsPDF with LOGO
   const handleDownloadPDF = async () => {
     if (!selectedQuotation) return
     const q = selectedQuotation
@@ -77,7 +85,6 @@ export default function QuotationDetail() {
     try {
       toast.loading('Generating PDF...')
       
-      // Get logo as base64
       const logoBase64 = await getLogoBase64()
       
       const { default: jsPDF } = await import('jspdf')
@@ -93,21 +100,17 @@ export default function QuotationDetail() {
       
       // ===== LOGO + COMPANY HEADER =====
       if (logoBase64) {
-        // Add logo on the left
         doc.addImage(logoBase64, 'PNG', leftMargin, y, 18, 18)
-        // Company name next to logo
         doc.setFontSize(18)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(13, 45, 74)
         doc.text(COMPANY.name, leftMargin + 22, y + 6)
         y += 10
-        // Tagline below logo
         doc.setFontSize(8)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(85, 85, 85)
         doc.text(`${COMPANY.tagline} | ${COMPANY.address}`, leftMargin + 22, y)
       } else {
-        // No logo - just text
         doc.setFontSize(18)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(13, 45, 74)
@@ -125,7 +128,6 @@ export default function QuotationDetail() {
       doc.text(`Tax Reg: ${COMPANY.taxRegNumber} | Tax Ref: ${COMPANY.taxRefNumber}`, logoBase64 ? leftMargin + 22 : leftMargin, y)
       y += 5
       
-      // Line
       doc.setDrawColor(27, 80, 128)
       doc.setLineWidth(0.5)
       doc.line(leftMargin, y, rightMargin, y)
@@ -136,7 +138,6 @@ export default function QuotationDetail() {
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(13, 45, 74)
       doc.text('QUOTATION', leftMargin, y)
-      
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(27, 80, 128)
@@ -155,13 +156,12 @@ export default function QuotationDetail() {
       doc.text(`Created By: ${q.created_by_name || 'N/A'}`, leftMargin + 60, y)
       y += 6
       
-      // Line
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.2)
       doc.line(leftMargin, y, rightMargin, y)
       y += 5
       
-      // ===== ITEMS TABLE HEADER =====
+      // ===== ITEMS TABLE =====
       const items = q.quotation_items || []
       
       doc.setFontSize(8)
@@ -176,13 +176,12 @@ export default function QuotationDetail() {
       doc.text('Total', rightMargin, y, { align: 'right' })
       y += 6
       
-      // ===== ITEMS TABLE ROWS =====
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(26, 26, 26)
       
       if (items.length > 0) {
         items.forEach((item, i) => {
-          if (y > 255) { doc.addPage(); y = 15 }
+          if (y > 240) { doc.addPage(); y = 15 }
           doc.setFontSize(8)
           doc.text(`${i + 1}`, leftMargin + 2, y)
           doc.text(`${(item.description || '').substring(0, 50)}`, leftMargin + 10, y)
@@ -244,7 +243,6 @@ export default function QuotationDetail() {
       
       // ===== NOTES =====
       if (q.notes) {
-        y += 3
         doc.setFontSize(9)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(27, 80, 128)
@@ -258,10 +256,9 @@ export default function QuotationDetail() {
       }
       
       // ===== BANKING DETAILS =====
-      y += 3
       doc.setDrawColor(200, 200, 200)
       doc.setLineWidth(0.2)
-      doc.line(leftMargin, y - 2, rightMargin, y - 2)
+      doc.line(leftMargin, y, rightMargin, y)
       y += 3
       
       doc.setFontSize(9)
@@ -280,6 +277,31 @@ export default function QuotationDetail() {
       doc.text(`Account Type: ${COMPANY.accountType}`, leftMargin + 70, y)
       y += 4
       doc.text(`Reference: ${q.quotation_number}`, leftMargin, y)
+      y += 6
+      
+      // ===== TERMS & CONDITIONS (Important ones only) =====
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.2)
+      doc.line(leftMargin, y, rightMargin, y)
+      y += 3
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(27, 80, 128)
+      doc.text('Terms & Conditions', leftMargin, y)
+      y += 5
+      
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(80, 80, 80)
+      
+      IMPORTANT_TERMS.forEach((term, i) => {
+        if (y > 280) { doc.addPage(); y = 15 }
+        doc.text(`${i + 1}. ${term}`, leftMargin, y)
+        y += 3.5
+      })
+      
+      y += 2
       
       // ===== FOOTER =====
       doc.setFontSize(7)
@@ -288,7 +310,6 @@ export default function QuotationDetail() {
       doc.text(`${COMPANY.website} | ${COMPANY.email} | ${COMPANY.phone}`, 105, 288, { align: 'center' })
       doc.text('Page 1 of 1', 105, 292, { align: 'center' })
       
-      // ===== SAVE =====
       doc.save(`Quotation_${q.quotation_number || 'quote'}.pdf`)
       
       toast.dismiss()
