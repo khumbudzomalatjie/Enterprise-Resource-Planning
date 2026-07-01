@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import { fieldOpsApi } from '../api/fieldOpsApi'
+import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 
 const useFieldOpsStore = create((set, get) => ({
   liveJobs: [],
-  myAssignedJobs: [],  // ✅ NEW: Track current user's assigned jobs
+  myAssignedJobs: [],
   assignedEmployees: [],
   incidents: [],
   selectedIncident: null,
@@ -23,26 +24,36 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // ✅ NEW: Fetch current user's assigned jobs
+  // Fetch current user's assigned jobs
   fetchMyAssignedJobs: async (userId) => {
-    if (!userId) return { success: false, data: [] }
+    if (!userId) {
+      set({ myAssignedJobs: [] })
+      return { success: false, data: [] }
+    }
     try {
       // Find employee record linked to this user
-      const { supabase } = await import('../../../lib/supabaseClient')
       const { data: employee } = await supabase
         .from('employees')
-        .select('id')
+        .select('id, first_name, last_name, user_id')
         .eq('user_id', userId)
         .single()
       
-      if (!employee) return { success: false, data: [] }
+      if (!employee) {
+        set({ myAssignedJobs: [] })
+        return { success: false, data: [] }
+      }
       
       const { data, error } = await fieldOpsApi.getLiveJobsByEmployee(employee.id)
-      if (error) return { success: false }
+      if (error) {
+        set({ myAssignedJobs: [] })
+        return { success: false }
+      }
+      
       set({ myAssignedJobs: data || [] })
       return { success: true, data }
     } catch (err) {
       console.error('Failed to fetch my jobs:', err)
+      set({ myAssignedJobs: [] })
       return { success: false }
     }
   },
@@ -86,7 +97,6 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // ✅ NEW: Sync job from mobile to main ERP
   syncJobFromMobile: async (jobId, syncData) => {
     set({ loading: true, error: null })
     const result = await fieldOpsApi.syncJobWithMobile(jobId, syncData)
@@ -143,17 +153,14 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // Job Tracker - Simple search
+  // Job Tracker
   fetchJobAuditTrail: async (searchInput) => {
     set({ loading: true, error: null, jobAuditData: null })
-    
     const result = await fieldOpsApi.getJobAuditTrail(searchInput)
-    
     if (result.notFound || result.error) {
       set({ error: result.error, loading: false })
       return { success: false, error: result.error }
     }
-    
     set({ jobAuditData: result.data, loading: false })
     return { success: true, data: result.data }
   },
