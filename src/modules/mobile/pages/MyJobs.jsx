@@ -7,207 +7,110 @@ import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
 import { 
-  Briefcase, MapPin, Clock, Calendar, 
-  Search, Hand, Play, CheckCircle2,
-  Camera, Package, AlertCircle, RefreshCw,
-  ChevronDown, User, Users, List
+  Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, 
+  CheckCircle2, Camera, Package, AlertCircle, User, List
 } from 'lucide-react'
 
 export default function MyJobs() {
-  const { user, profile } = useAuthStore()
-  const { fetchMyJobs, fetchMobileStats } = useMobileStore()
+  const { user } = useAuthStore()
+  const { openJobs, myJobs, fetchOpenJobs, fetchMyJobs, selectJob, startJob, completeJob } = useMobileStore()
   const navigate = useNavigate()
-  
   const [activeTab, setActiveTab] = useState('open')
-  const [openJobs, setOpenJobs] = useState([])
-  const [myJobs, setMyJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [jobSearch, setJobSearch] = useState('')
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
-  const [myCleanerName, setMyCleanerName] = useState('')
 
-  useEffect(() => {
-    setupAndLoad()
-  }, [])
+  useEffect(() => { setupAndLoad() }, [])
 
   const setupAndLoad = async () => {
-    await findEmployee()
-    await loadAllJobs()
+    const empId = await findOrCreateEmployee()
+    if (empId) {
+      setMyEmployeeId(empId)
+      await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)])
+    }
+    setLoading(false)
   }
 
-  const findEmployee = async () => {
-    try {
-      let { data: emp } = await supabase.from('employees').select('id, first_name, last_name').eq('user_id', user?.id).single()
-      if (emp) { 
-        setMyEmployeeId(emp.id)
-        setMyCleanerName((emp.first_name + ' ' + (emp.last_name || '')).trim())
-        return 
-      }
-      
-      const { data: empByEmail } = await supabase.from('employees').select('id, first_name, last_name').eq('email', user?.email).single()
-      if (empByEmail) { 
-        await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id)
-        setMyEmployeeId(empByEmail.id)
-        setMyCleanerName((empByEmail.first_name + ' ' + (empByEmail.last_name || '')).trim())
-        return 
-      }
-
-      const firstName = user?.email?.split('@')[0] || 'Cleaner'
-      const { data: newEmp } = await supabase.from('employees').insert([{
-        user_id: user?.id, first_name: firstName, last_name: '',
-        email: user?.email, employment_status: 'active', department: 'Cleaning'
-      }]).select('id, first_name').single()
-      if (newEmp) {
-        setMyEmployeeId(newEmp.id)
-        setMyCleanerName(newEmp.first_name || 'Cleaner')
-      }
-    } catch (e) {}
+  const findOrCreateEmployee = async () => {
+    let { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
+    if (emp) return emp.id
+    const { data: empByEmail } = await supabase.from('employees').select('id').eq('email', user?.email).single()
+    if (empByEmail) { await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id); return empByEmail.id }
+    const firstName = user?.email?.split('@')[0] || 'Cleaner'
+    const { data: newEmp } = await supabase.from('employees').insert([{
+      user_id: user?.id, first_name: firstName, last_name: '',
+      email: user?.email, employment_status: 'active', department: 'Cleaning',
+      employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4)
+    }]).select('id').single()
+    return newEmp?.id || null
   }
 
-  // Check if a job is assigned to THIS cleaner
-  const isMyJob = (job) => {
-    if (!job?.notes || !myCleanerName) return false
-    
-    const notes = job.notes.toLowerCase()
-    const myName = myCleanerName.toLowerCase()
-    
-    // Check for "SELECTED BY: MyName"
-    if (notes.includes('selected by: ' + myName)) return true
-    
-    // Check for "ASSIGNED BY MANAGEMENT: MyName"
-    if (notes.includes('assigned by management: ' + myName)) return true
-    
-    // Check for "COMPLETED BY: MyName"
-    if (notes.includes('completed by: ' + myName)) return true
-    
-    return false
-  }
-
-  const loadAllJobs = async () => {
-    setLoading(true)
-    try {
-      // OPEN JOBS: All scheduled/pending jobs from ERP
-      const { data: open } = await supabase
-        .from('jobs')
-        .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
-        .in('status', ['pending', 'scheduled'])
-        .order('scheduled_date', { ascending: true })
-        .order('scheduled_start_time', { ascending: true })
-      setOpenJobs(open || [])
-
-      // ALL ACTIVE JOBS - then filter for THIS cleaner only
-      const { data: allActive } = await supabase
-        .from('jobs')
-        .select('id, title, job_number, status, scheduled_date, scheduled_start_time, scheduled_end_time, site_address, notes, clients(company_name, phone), job_categories(name, color)')
-        .eq('status', 'in_progress')
-        .order('scheduled_date', { ascending: true })
-        .order('scheduled_start_time', { ascending: true })
-
-      // Filter: Only jobs belonging to THIS cleaner
-      const myJobsOnly = (allActive || []).filter(job => isMyJob(job))
-      
-      console.log('👤 Cleaner:', myCleanerName)
-      console.log('👤 My Jobs:', myJobsOnly.length, 'of', allActive?.length, 'total active')
-      
-      setMyJobs(myJobsOnly)
-
-    } catch (error) { console.error('Error:', error) }
-    finally { setLoading(false) }
-  }
-
-  // SELECT JOB
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready'); return }
-    if (myJobs.length > 0) { toast.error('You already have an active job. Complete it first.'); setActiveTab('mine'); return }
+    if (myJobs.length > 0) { toast.error('Complete your current job first'); return }
     setUpdatingJob(jobId)
-    try {
-      const cleanerName = myCleanerName || profile?.full_name || user?.email?.split('@')[0] || 'Cleaner'
-      const { error } = await supabase.from('jobs').update({ 
-        status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString(),
-        notes: 'SELECTED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
-      }).eq('id', jobId)
-      if (error) { toast.error('Failed'); return }
-      toast.success('Job selected!')
-      loadAllJobs()
-      setActiveTab('mine')
-    } catch { toast.error('Failed') }
-    finally { setUpdatingJob(null) }
+    const result = await selectJob(jobId, myEmployeeId)
+    if (result.success) { toast.success('Job selected!'); setActiveTab('mine') }
+    else { toast.error('Failed to select job') }
+    setUpdatingJob(null)
   }
 
-  // START JOB
   const handleStartJob = async (jobId) => {
+    if (!myEmployeeId) return
     setUpdatingJob(jobId)
-    try {
-      await supabase.from('jobs').update({ status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', jobId)
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      await startJob(jobId, myEmployeeId, pos.coords.latitude, pos.coords.longitude)
       toast.success('Job started!')
-      loadAllJobs()
-    } catch { toast.error('Failed') }
-    finally { setUpdatingJob(null) }
+      setUpdatingJob(null)
+    }, async () => {
+      await startJob(jobId, myEmployeeId, null, null)
+      toast.success('Job started!')
+      setUpdatingJob(null)
+    })
   }
 
-  // COMPLETE JOB
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark as completed?')) return
+    if (!window.confirm('Mark job as completed?')) return
+    if (!myEmployeeId) return
     setUpdatingJob(jobId)
-    try {
-      const cleanerName = myCleanerName || profile?.full_name || user?.email?.split('@')[0] || 'Cleaner'
-      await supabase.from('jobs').update({ 
-        status: 'completed', updated_at: new Date().toISOString(),
-        notes: 'COMPLETED BY: ' + cleanerName + ' at ' + new Date().toLocaleString()
-      }).eq('id', jobId)
-      toast.success('Completed!')
-      loadAllJobs()
-      setActiveTab('open')
-    } catch { toast.error('Failed') }
-    finally { setUpdatingJob(null) }
+    const result = await completeJob(jobId, myEmployeeId)
+    if (result.success) { toast.success('Job completed!'); setActiveTab('open') }
+    else { toast.error('Failed to complete') }
+    setUpdatingJob(null)
   }
 
-  const formatDateShort = (date) => {
-    if (!date) return ''
-    return new Date(date + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })
-  }
+  const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
   const todayStr = new Date().toISOString().split('T')[0]
-  const hasActiveJob = myJobs.length > 0
 
-  const filteredOpen = openJobs.filter(j => {
+  const filterJobs = (jobs) => jobs.filter(j => {
     if (!jobSearch) return true
     const s = jobSearch.toLowerCase()
-    return (j.title || '').toLowerCase().includes(s) || (j.job_number || '').toLowerCase().includes(s) ||
-           (j.clients?.company_name || '').toLowerCase().includes(s) || (j.site_address || '').toLowerCase().includes(s)
+    return (j.title || '').toLowerCase().includes(s) || (j.job_number || '').toLowerCase().includes(s) || (j.clients?.company_name || '').toLowerCase().includes(s)
   })
 
-  const filteredMine = myJobs.filter(j => {
-    if (!jobSearch) return true
-    const s = jobSearch.toLowerCase()
-    return (j.title || '').toLowerCase().includes(s) || (j.job_number || '').toLowerCase().includes(s) ||
-           (j.clients?.company_name || '').toLowerCase().includes(s) || (j.site_address || '').toLowerCase().includes(s)
-  })
+  const filteredOpen = filterJobs(openJobs || [])
+  const filteredMine = filterJobs(myJobs || [])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
       <div className="px-5 pt-8 pb-5 text-white">
         <h1 className="text-2xl font-bold">Jobs</h1>
-        <p className="text-blue-100 text-sm mt-1">Select and manage your jobs</p>
-        {hasActiveJob && (
+        <p className="text-blue-100 text-sm mt-1">Synced with Main ERP</p>
+        {myJobs.length > 0 && (
           <div className="mt-3 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
-            <div>
-              <p className="text-amber-200 text-sm font-semibold">Active Job: {myJobs[0]?.title}</p>
-              <p className="text-amber-300/70 text-xs">Complete this job before selecting a new one</p>
-            </div>
+            <p className="text-amber-200 text-sm font-semibold">Active: {myJobs[0]?.title}</p>
           </div>
         )}
       </div>
 
       <div className="px-5 -mt-2">
         <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
-          <button onClick={() => setActiveTab('open')}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700 shadow-lg' : 'text-white/70'}`}>
-            <List className="w-4 h-4" /> Open Pool ({filteredOpen.length})
+          <button onClick={() => setActiveTab('open')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700' : 'text-white/70'}`}>
+            <List className="w-4 h-4" /> Open ({filteredOpen.length})
           </button>
-          <button onClick={() => setActiveTab('mine')}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'mine' ? 'bg-white text-amber-700 shadow-lg' : 'text-white/70'}`}>
+          <button onClick={() => setActiveTab('mine')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'mine' ? 'bg-white text-amber-700' : 'text-white/70'}`}>
             <User className="w-4 h-4" /> My Jobs ({filteredMine.length})
           </button>
         </div>
@@ -216,8 +119,7 @@ export default function MyJobs() {
       <div className="px-5 mt-3 mb-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
-          <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
-            placeholder="Search jobs..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" />
+          <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" />
         </div>
       </div>
 
@@ -229,50 +131,36 @@ export default function MyJobs() {
             <div className="space-y-2.5">
               {filteredOpen.map((job, i) => (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                  className={`bg-white rounded-2xl p-4 shadow-md border-l-4 ${hasActiveJob ? 'border-l-slate-300 opacity-60' : 'border-l-blue-400'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name || 'Client'}</p></div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">Open</span>
+                  className={`bg-white rounded-2xl p-4 shadow-md border-l-4 ${myJobs.length > 0 ? 'border-l-slate-300 opacity-60' : 'border-l-blue-400'}`}>
+                  <div className="flex justify-between mb-2">
+                    <div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name}</p></div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">{job.status}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" />{job.scheduled_date === todayStr ? 'Today' : formatDate(job.scheduled_date)}<span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                  {hasActiveJob ? (
-                    <div className="w-full py-2.5 bg-slate-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed">🔒 Complete current job first</div>
-                  ) : (
-                    <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id}
-                      className="w-full py-2.5 bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-sm">
-                      <Hand className="w-4 h-4" /> Select Job
-                    </button>
-                  )}
+                  <button onClick={() => handleSelectJob(job.id)} disabled={updatingJob === job.id || myJobs.length > 0}
+                    className="w-full py-2.5 bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                    {myJobs.length > 0 ? '🔒 Complete current job first' : <><Hand className="w-4 h-4" /> Select Job</>}
+                  </button>
                 </motion.div>
               ))}
             </div>
-          ) : (
-            <div className="text-center py-12 bg-white/10 rounded-2xl">
-              <Briefcase className="w-12 h-12 text-white/50 mx-auto mb-2" />
-              <p className="text-white font-semibold">No open jobs available</p>
-            </div>
-          )
+          ) : <div className="text-center py-12 bg-white/10 rounded-2xl"><Briefcase className="w-12 h-12 text-white/50 mx-auto mb-2" /><p className="text-white font-semibold">No open jobs</p></div>
         ) : (
           filteredMine.length > 0 ? (
             <div className="space-y-2.5">
               {filteredMine.map((job, i) => (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                   className="bg-white rounded-2xl p-4 shadow-md border-l-4 border-l-amber-400">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3>
-                      <p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name || 'Client'}</p>
-                    </div>
+                  <div className="flex justify-between mb-2">
+                    <div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name}</p></div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">My Job</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" /><span>{job.scheduled_date === todayStr ? 'Today' : formatDateShort(job.scheduled_date)}</span><span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}-{job.scheduled_end_time?.slice(0,5)}</div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" />{job.scheduled_date === todayStr ? 'Today' : formatDate(job.scheduled_date)}<span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
                   <div className="flex gap-2 mb-2">
-                    <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id}
-                      className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><Play className="w-3.5 h-3.5" /> Start Job</button>
-                    <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id}
-                      className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><CheckCircle2 className="w-3.5 h-3.5" /> Complete</button>
+                    <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"><Play className="w-3.5 h-3.5" /> Start</button>
+                    <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"><CheckCircle2 className="w-3.5 h-3.5" /> Complete</button>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
                     <button onClick={() => navigate('/mobile/photos')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Camera className="w-3 h-3" /> Photos</button>
@@ -282,16 +170,9 @@ export default function MyJobs() {
                 </motion.div>
               ))}
             </div>
-          ) : (
-            <div className="text-center py-12 bg-white/10 rounded-2xl">
-              <User className="w-12 h-12 text-white/50 mx-auto mb-2" />
-              <p className="text-white font-semibold">No jobs assigned to you</p>
-              <p className="text-white/50 text-xs mt-1">Select a job from Open Pool or wait for management assignment</p>
-            </div>
-          )
+          ) : <div className="text-center py-12 bg-white/10 rounded-2xl"><User className="w-12 h-12 text-white/50 mx-auto mb-2" /><p className="text-white font-semibold">No jobs assigned</p><p className="text-white/50 text-xs mt-1">Select a job from Open Pool</p></div>
         )}
       </div>
-
       <BottomNav active="jobs" />
     </div>
   )
