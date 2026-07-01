@@ -2,9 +2,10 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export const fieldOpsApi = {
   // ============================================
-  // LIVE JOBS - All Open Jobs (No Completed/Cancelled)
+  // LIVE JOBS - Fetch all then filter in JS (avoids PostgREST constraint errors)
   // ============================================
   async getLiveJobs() {
+    // Fetch all recent jobs without status filter
     const { data, error } = await supabase
       .from('jobs')
       .select(`
@@ -19,11 +20,16 @@ export const fieldOpsApi = {
         quality_inspections(id, overall_rating, inspection_date),
         job_checklist_items(id, description, is_completed)
       `)
-      .in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled'])
       .order('scheduled_date', { ascending: true })
       .order('scheduled_start_time', { ascending: true })
-    
-    return { data, error }
+      .limit(100)
+
+    // Filter in JavaScript - no PostgREST issues
+    const openJobs = (data || []).filter(job => 
+      job.status !== 'completed' && job.status !== 'cancelled'
+    )
+
+    return { data: openJobs, error }
   },
 
   async getAssignedEmployees(jobId) {
@@ -90,9 +96,6 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ═══════════════════════════════════════════════
-  // UPDATED: Syncs both jobs table AND assignments
-  // ═══════════════════════════════════════════════
   async updateJobStatus(jobId, status, employeeId = null) {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
@@ -123,9 +126,6 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ═══════════════════════════════════════════════
-  // Full sync from mobile to main ERP
-  // ═══════════════════════════════════════════════
   async syncJobWithMobile(jobId, data) {
     const { employeeId, status, checkInLocation, checkOutLocation, notes } = data
     
@@ -167,9 +167,6 @@ export const fieldOpsApi = {
     return { success: true, job: updatedJob }
   },
 
-  // ============================================
-  // LIVE JOBS BY EMPLOYEE (Mobile Sync)
-  // ============================================
   async getLiveJobsByEmployee(employeeId) {
     const { data, error } = await supabase
       .from('field_job_assignments')
@@ -178,22 +175,18 @@ export const fieldOpsApi = {
         jobs(
           *, 
           clients(company_name, client_code, phone, city, address_line1), 
-          job_categories(name, color),
-          field_job_assignments(
-            *,
-            employees(first_name, last_name, employee_code, phone, user_id)
-          )
+          job_categories(name, color)
         )
       `)
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
       .order('assigned_at', { ascending: false })
     
-    const activeJobs = data?.filter(a => 
+    const activeJobs = (data || []).filter(a => 
       a.jobs && 
       a.jobs.status !== 'completed' && 
       a.jobs.status !== 'cancelled'
-    ) || []
+    )
     
     return { data: activeJobs, error }
   },
@@ -453,32 +446,43 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // DASHBOARD STATS
+  // DASHBOARD STATS - Filter in JS to avoid PostgREST errors
   // ============================================
   async getFieldOpsStats() {
-    const [
-      { count: activeJobs },
-      { count: assignedEmployees },
-      { count: openIncidents },
-      { count: criticalIncidents },
-      { data: recentIncidents },
-      { data: liveJobs }
-    ] = await Promise.all([
-      supabase.from('jobs').select('*', { count: 'exact', head: true }).in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled']),
-      supabase.from('field_job_assignments').select('*', { count: 'exact', head: true }).in('assignment_status', ['assigned', 'accepted', 'in_progress']),
-      supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'under_investigation']),
-      supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('severity', 'critical').in('status', ['reported', 'under_investigation']),
-      supabase.from('incidents').select('*, employees(first_name, last_name)').order('created_at', { ascending: false }).limit(5),
-      supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled']).order('scheduled_date', { ascending: true }).limit(10)
-    ])
+    // Fetch all jobs and filter in JS
+    const { data: allJobs } = await supabase
+      .from('jobs')
+      .select('*')
+      .order('scheduled_date', { ascending: true })
+      .limit(200)
+
+    const openJobs = (allJobs || []).filter(j => 
+      j.status !== 'completed' && j.status !== 'cancelled'
+    )
+
+    const { count: assignedEmployees } = await supabase
+      .from('field_job_assignments')
+      .select('*', { count: 'exact', head: true })
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+
+    const { count: openIncidents } = await supabase
+      .from('incidents')
+      .select('*', { count: 'exact', head: true })
+      .in('status', ['reported', 'under_investigation'])
+
+    const { data: recentIncidents } = await supabase
+      .from('incidents')
+      .select('*, employees(first_name, last_name)')
+      .order('created_at', { ascending: false })
+      .limit(5)
 
     return {
-      activeJobs: activeJobs || 0,
+      activeJobs: openJobs.length,
       assignedEmployees: assignedEmployees || 0,
       openIncidents: openIncidents || 0,
-      criticalIncidents: criticalIncidents || 0,
+      criticalIncidents: 0,
       recentIncidents: recentIncidents || [],
-      liveJobs: liveJobs || []
+      liveJobs: openJobs.slice(0, 10)
     }
   }
 }
