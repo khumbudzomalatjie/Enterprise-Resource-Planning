@@ -107,7 +107,6 @@ export const fieldOpsApi = {
       .select()
       .single()
     
-    // Also update the assignment status if employeeId provided
     if (!error && employeeId) {
       const assignmentStatus = status === 'in_progress' ? 'in_progress' : 
                                status === 'completed' ? 'completed' : 'assigned'
@@ -127,17 +126,15 @@ export const fieldOpsApi = {
   },
 
   // ═══════════════════════════════════════════════
-  // NEW: Full sync from mobile to main ERP
+  // Full sync from mobile to main ERP
   // ═══════════════════════════════════════════════
   async syncJobWithMobile(jobId, data) {
     const { employeeId, status, checkInLocation, checkOutLocation, notes } = data
     
-    // Update job status
     if (status) {
       await this.updateJobStatus(jobId, status, employeeId)
     }
     
-    // Update assignment with GPS location data
     if (employeeId) {
       const updates = {}
       if (checkInLocation) {
@@ -163,7 +160,6 @@ export const fieldOpsApi = {
       }
     }
     
-    // Return updated job data
     const { data: updatedJob } = await supabase
       .from('jobs')
       .select('*, clients(*), job_categories(*)')
@@ -291,7 +287,7 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // SIMPLE JOB SEARCH - Just works
+  // SIMPLE JOB SEARCH
   // ============================================
   async getAllJobNumbers() {
     const { data, error } = await supabase
