@@ -19,9 +19,7 @@ export const fieldOpsApi = {
         quality_inspections(id, overall_rating, inspection_date),
         job_checklist_items(id, description, is_completed)
       `)
-      .not('status', 'eq', 'completed')
-      .not('status', 'eq', 'cancelled')
-      .order('priority', { ascending: false })
+      .in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled'])
       .order('scheduled_date', { ascending: true })
       .order('scheduled_start_time', { ascending: true })
     
@@ -466,12 +464,12 @@ export const fieldOpsApi = {
       { data: recentIncidents },
       { data: liveJobs }
     ] = await Promise.all([
-      supabase.from('jobs').select('*', { count: 'exact', head: true }).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled'),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled']),
       supabase.from('field_job_assignments').select('*', { count: 'exact', head: true }).in('assignment_status', ['assigned', 'accepted', 'in_progress']),
       supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'under_investigation']),
       supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('severity', 'critical').in('status', ['reported', 'under_investigation']),
       supabase.from('incidents').select('*, employees(first_name, last_name)').order('created_at', { ascending: false }).limit(5),
-      supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').not('status', 'eq', 'completed').not('status', 'eq', 'cancelled').order('scheduled_date', { ascending: true }).limit(10)
+      supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('status', ['pending', 'scheduled', 'assigned', 'in_progress', 'on_hold', 'overdue', 'rescheduled']).order('scheduled_date', { ascending: true }).limit(10)
     ])
 
     return {
