@@ -2,34 +2,125 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export const fieldOpsApi = {
   // ============================================
-  // LIVE JOBS - Fetch all then filter in JS (avoids PostgREST constraint errors)
+  // LIVE JOBS - Simple separate queries, merge in JS
   // ============================================
   async getLiveJobs() {
-    // Fetch all recent jobs without status filter
-    const { data, error } = await supabase
+    // 1. Get all jobs
+    const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        clients(company_name, client_code, phone, city, address_line1),
-        job_categories(name, color),
-        teams(team_name),
-        field_job_assignments(
-          *,
-          employees(first_name, last_name, employee_code, phone, department, position, user_id)
-        ),
-        quality_inspections(id, overall_rating, inspection_date),
-        job_checklist_items(id, description, is_completed)
-      `)
+      .select('*')
       .order('scheduled_date', { ascending: true })
       .order('scheduled_start_time', { ascending: true })
       .limit(100)
 
-    // Filter in JavaScript - no PostgREST issues
-    const openJobs = (data || []).filter(job => 
-      job.status !== 'completed' && job.status !== 'cancelled'
-    )
+    if (jobsError) {
+      console.error('Jobs error:', jobsError)
+      return { data: [], error: jobsError }
+    }
 
-    return { data: openJobs, error }
+    if (!jobs || jobs.length === 0) {
+      console.log('No jobs in database')
+      return { data: [], error: null }
+    }
+
+    // 2. Get clients for these jobs
+    const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))]
+    let clients = []
+    if (clientIds.length > 0) {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, company_name, client_code, phone, city, address_line1')
+        .in('id', clientIds)
+      clients = data || []
+    }
+
+    // 3. Get job categories
+    const catIds = [...new Set(jobs.map(j => j.job_category_id).filter(Boolean))]
+    let categories = []
+    if (catIds.length > 0) {
+      const { data } = await supabase
+        .from('job_categories')
+        .select('id, name, color')
+        .in('id', catIds)
+      categories = data || []
+    }
+
+    // 4. Get teams
+    const teamIds = [...new Set(jobs.map(j => j.team_id).filter(Boolean))]
+    let teams = []
+    if (teamIds.length > 0) {
+      const { data } = await supabase
+        .from('teams')
+        .select('id, team_name')
+        .in('id', teamIds)
+      teams = data || []
+    }
+
+    // 5. Get assignments for these jobs
+    const jobIds = jobs.map(j => j.id)
+    let assignments = []
+    if (jobIds.length > 0) {
+      const { data } = await supabase
+        .from('field_job_assignments')
+        .select('*')
+        .in('job_id', jobIds)
+        .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+      assignments = data || []
+    }
+
+    // 6. Get employees for assignments
+    let employees = []
+    if (assignments.length > 0) {
+      const empIds = [...new Set(assignments.map(a => a.employee_id).filter(Boolean))]
+      if (empIds.length > 0) {
+        const { data } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name, employee_code, phone, department, position, user_id')
+          .in('id', empIds)
+        employees = data || []
+      }
+    }
+
+    // 7. Get quality inspections
+    let inspections = []
+    if (jobIds.length > 0) {
+      const { data } = await supabase
+        .from('quality_inspections')
+        .select('id, overall_rating, inspection_date, job_id')
+        .in('job_id', jobIds)
+      inspections = data || []
+    }
+
+    // 8. Get checklist items
+    let checklists = []
+    if (jobIds.length > 0) {
+      const { data } = await supabase
+        .from('job_checklist_items')
+        .select('id, description, is_completed, job_id')
+        .in('job_id', jobIds)
+      checklists = data || []
+    }
+
+    // 9. Merge everything together
+    const merged = jobs
+      .filter(job => job.status !== 'completed' && job.status !== 'cancelled')
+      .map(job => ({
+        ...job,
+        clients: clients.find(c => c.id === job.client_id) || null,
+        job_categories: categories.find(c => c.id === job.job_category_id) || null,
+        teams: teams.find(t => t.id === job.team_id) || null,
+        field_job_assignments: assignments
+          .filter(a => a.job_id === job.id)
+          .map(a => ({
+            ...a,
+            employees: employees.find(e => e.id === a.employee_id) || null
+          })),
+        quality_inspections: inspections.filter(i => i.job_id === job.id),
+        job_checklist_items: checklists.filter(c => c.job_id === job.id)
+      }))
+
+    console.log('📊 Live jobs merged:', merged.length)
+    return { data: merged, error: null }
   },
 
   async getAssignedEmployees(jobId) {
@@ -170,25 +261,63 @@ export const fieldOpsApi = {
   async getLiveJobsByEmployee(employeeId) {
     const { data, error } = await supabase
       .from('field_job_assignments')
-      .select(`
-        *,
-        jobs(
-          *, 
-          clients(company_name, client_code, phone, city, address_line1), 
-          job_categories(name, color)
-        )
-      `)
+      .select('*')
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
       .order('assigned_at', { ascending: false })
     
-    const activeJobs = (data || []).filter(a => 
-      a.jobs && 
-      a.jobs.status !== 'completed' && 
-      a.jobs.status !== 'cancelled'
-    )
+    if (error || !data || data.length === 0) {
+      return { data: [], error }
+    }
+
+    // Get the actual jobs
+    const jobIds = [...new Set(data.map(a => a.job_id).filter(Boolean))]
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('*')
+      .in('id', jobIds)
+
+    // Get clients
+    const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
+    let clients = []
+    if (clientIds.length > 0) {
+      const { data: c } = await supabase
+        .from('clients')
+        .select('id, company_name, client_code, phone, city, address_line1')
+        .in('id', clientIds)
+      clients = c || []
+    }
+
+    // Get categories
+    const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
+    let categories = []
+    if (catIds.length > 0) {
+      const { data: c } = await supabase
+        .from('job_categories')
+        .select('id, name, color')
+        .in('id', catIds)
+      categories = c || []
+    }
+
+    // Merge and filter
+    const activeJobs = data
+      .filter(a => {
+        const job = (jobs || []).find(j => j.id === a.job_id)
+        return job && job.status !== 'completed' && job.status !== 'cancelled'
+      })
+      .map(a => {
+        const job = (jobs || []).find(j => j.id === a.job_id)
+        return {
+          ...a,
+          jobs: job ? {
+            ...job,
+            clients: clients.find(c => c.id === job.client_id) || null,
+            job_categories: categories.find(c => c.id === job.job_category_id) || null
+          } : null
+        }
+      })
     
-    return { data: activeJobs, error }
+    return { data: activeJobs, error: null }
   },
 
   async getMobileSyncData(employeeId) {
@@ -208,32 +337,79 @@ export const fieldOpsApi = {
   // INCIDENTS
   // ============================================
   async getIncidents(filters = {}) {
-    let query = supabase
+    const { data, error } = await supabase
       .from('incidents')
-      .select(`
-        *,
-        employees(first_name, last_name, employee_code),
-        jobs(job_number, title),
-        clients(company_name)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
+      .limit(100)
 
-    if (filters.status) query = query.eq('status', filters.status)
-    if (filters.severity) query = query.eq('severity', filters.severity)
-    if (filters.incident_type) query = query.eq('incident_type', filters.incident_type)
-    if (filters.job_id) query = query.eq('job_id', filters.job_id)
-    if (filters.search) {
-      query = query.or(`title.ilike.%${filters.search}%,incident_number.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
+    if (error || !data || data.length === 0) {
+      return { data: data || [], error }
     }
 
-    const { data, error } = await query
-    return { data, error }
+    // Get related employees
+    const empIds = [...new Set(data.map(i => i.employee_id).filter(Boolean))]
+    let employees = []
+    if (empIds.length > 0) {
+      const { data: e } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code')
+        .in('id', empIds)
+      employees = e || []
+    }
+
+    // Get related jobs
+    const jobIds = [...new Set(data.map(i => i.job_id).filter(Boolean))]
+    let jobs = []
+    if (jobIds.length > 0) {
+      const { data: j } = await supabase
+        .from('jobs')
+        .select('id, job_number, title')
+        .in('id', jobIds)
+      jobs = j || []
+    }
+
+    // Get related clients
+    const clientIds = [...new Set(data.map(i => i.client_id).filter(Boolean))]
+    let clients = []
+    if (clientIds.length > 0) {
+      const { data: c } = await supabase
+        .from('clients')
+        .select('id, company_name')
+        .in('id', clientIds)
+      clients = c || []
+    }
+
+    // Apply filters
+    let filtered = data
+    if (filters.status) filtered = filtered.filter(i => i.status === filters.status)
+    if (filters.severity) filtered = filtered.filter(i => i.severity === filters.severity)
+    if (filters.incident_type) filtered = filtered.filter(i => i.incident_type === filters.incident_type)
+    if (filters.job_id) filtered = filtered.filter(i => i.job_id === filters.job_id)
+    if (filters.search) {
+      const s = filters.search.toLowerCase()
+      filtered = filtered.filter(i => 
+        i.title?.toLowerCase().includes(s) ||
+        i.incident_number?.toLowerCase().includes(s) ||
+        i.description?.toLowerCase().includes(s)
+      )
+    }
+
+    // Merge
+    const merged = filtered.map(i => ({
+      ...i,
+      employees: employees.find(e => e.id === i.employee_id) || null,
+      jobs: jobs.find(j => j.id === i.job_id) || null,
+      clients: clients.find(c => c.id === i.client_id) || null
+    }))
+
+    return { data: merged, error: null }
   },
 
   async getIncident(id) {
     const { data, error } = await supabase
       .from('incidents')
-      .select('*, employees(*), jobs(*), clients(*)')
+      .select('*')
       .eq('id', id)
       .single()
     return { data, error }
@@ -283,139 +459,92 @@ export const fieldOpsApi = {
   async getAllJobNumbers() {
     const { data, error } = await supabase
       .from('jobs')
-      .select('job_number, title, status, clients(company_name), scheduled_date')
+      .select('job_number, title, status, scheduled_date')
       .order('created_at', { ascending: false })
       .limit(50)
     return { data, error }
   },
 
   async getJobAuditTrail(searchInput) {
-    const search = searchInput.trim()
-    let job = null
-
-    const { data: exactMatch } = await supabase
-      .from('jobs')
-      .select('id, job_number')
-      .eq('job_number', search.toUpperCase())
-      .single()
+    const search = searchInput.trim().toUpperCase()
     
-    if (exactMatch) {
-      const { data } = await supabase
-        .from('jobs')
-        .select(`
-          *,
-          clients(company_name, client_code, phone, email, city),
-          job_categories(name, color),
-          teams(team_name),
-          quotations(quotation_number, total_amount, status),
-          invoices(invoice_number, total_amount, status, amount_paid)
-        `)
-        .eq('id', exactMatch.id)
-        .single()
-      job = data
-    }
+    // Find job
+    let { data: job } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('job_number', search)
+      .single()
 
     if (!job) {
-      const { data: partialMatch } = await supabase
+      const { data: partial } = await supabase
         .from('jobs')
-        .select('id, job_number')
-        .ilike('job_number', `%${search.toUpperCase()}%`)
+        .select('*')
+        .ilike('job_number', `%${search}%`)
         .limit(1)
         .single()
-      
-      if (partialMatch) {
-        const { data } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            clients(company_name, client_code, phone, email, city),
-            job_categories(name, color),
-            teams(team_name),
-            quotations(quotation_number, total_amount, status),
-            invoices(invoice_number, total_amount, status, amount_paid)
-          `)
-          .eq('id', partialMatch.id)
-          .single()
-        job = data
-      }
+      job = partial
     }
 
     if (!job) {
       const { data: titleMatch } = await supabase
         .from('jobs')
-        .select('id, job_number, title')
-        .ilike('title', `%${search}%`)
+        .select('*')
+        .ilike('title', `%${searchInput.trim()}%`)
         .limit(1)
         .single()
-      
-      if (titleMatch) {
-        const { data } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            clients(company_name, client_code, phone, email, city),
-            job_categories(name, color),
-            teams(team_name),
-            quotations(quotation_number, total_amount, status),
-            invoices(invoice_number, total_amount, status, amount_paid)
-          `)
-          .eq('id', titleMatch.id)
-          .single()
-        job = data
-      }
+      job = titleMatch
     }
 
     if (!job) {
-      const { data: clientJobs } = await supabase
-        .from('jobs')
-        .select('id, job_number, clients!inner(company_name)')
-        .ilike('clients.company_name', `%${search}%`)
-        .limit(1)
-      
-      if (clientJobs && clientJobs.length > 0) {
-        const { data } = await supabase
-          .from('jobs')
-          .select(`
-            *,
-            clients(company_name, client_code, phone, email, city),
-            job_categories(name, color),
-            teams(team_name),
-            quotations(quotation_number, total_amount, status),
-            invoices(invoice_number, total_amount, status, amount_paid)
-          `)
-          .eq('id', clientJobs[0].id)
-          .single()
-        job = data
-      }
+      return { error: `No job found for "${searchInput}"`, notFound: true }
     }
 
-    if (!job) {
-      return { 
-        error: `No job found for "${search}". Try a different search term or browse the job list.`,
-        notFound: true
-      }
-    }
-
+    // Get all related data
     const [
+      { data: client },
+      { data: category },
+      { data: team },
       { data: auditLogs },
       { data: statusHistory },
       { data: assignments },
       { data: inspections },
       { data: incidents },
       { data: checklists },
-      { data: supplies },
-      { data: routeStops }
+      { data: quotation },
+      { data: invoice }
     ] = await Promise.all([
+      job.client_id ? supabase.from('clients').select('*').eq('id', job.client_id).single() : { data: null },
+      job.job_category_id ? supabase.from('job_categories').select('*').eq('id', job.job_category_id).single() : { data: null },
+      job.team_id ? supabase.from('teams').select('*').eq('id', job.team_id).single() : { data: null },
       supabase.from('job_full_audit').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_status_history').select('*').eq('job_id', job.id).order('changed_at', { ascending: true }),
-      supabase.from('field_job_assignments').select('*, employees(first_name, last_name, employee_code, phone, department, position, user_id)').eq('job_id', job.id).order('assigned_at', { ascending: true }),
+      supabase.from('field_job_assignments').select('*').eq('job_id', job.id).order('assigned_at', { ascending: true }),
       supabase.from('quality_inspections').select('*').eq('job_id', job.id).order('inspection_date', { ascending: true }),
       supabase.from('incidents').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_checklist_items').select('*').eq('job_id', job.id).order('item_number', { ascending: true }),
-      supabase.from('job_supplies_used').select('*, equipment_supplies(name)').eq('job_id', job.id),
-      supabase.from('route_stops').select('*, routes(route_name, route_date, teams(team_name))').eq('job_id', job.id)
+      job.quotation_id ? supabase.from('quotations').select('*').eq('id', job.quotation_id).single() : { data: null },
+      supabase.from('invoices').select('*').eq('id', job.id).maybeSingle()
     ])
 
+    // Get employee names for assignments
+    let assignmentsWithNames = assignments?.data || []
+    if (assignmentsWithNames.length > 0) {
+      const empIds = [...new Set(assignmentsWithNames.map(a => a.employee_id).filter(Boolean))]
+      if (empIds.length > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name, employee_code, phone, department, position, user_id')
+          .in('id', empIds)
+        const empMap = {}
+        ;(emps || []).forEach(e => { empMap[e.id] = e })
+        assignmentsWithNames = assignmentsWithNames.map(a => ({
+          ...a,
+          employees: empMap[a.employee_id] || null
+        }))
+      }
+    }
+
+    // Get creator
     let creator = null
     if (job.created_by) {
       const { data: creatorData } = await supabase
@@ -428,28 +557,32 @@ export const fieldOpsApi = {
 
     return {
       data: {
-        job,
+        job: {
+          ...job,
+          clients: client?.data || null,
+          job_categories: category?.data || null,
+          teams: team?.data || null,
+          quotations: quotation?.data || null,
+          invoices: invoice?.data || null
+        },
         creator,
-        auditLogs: auditLogs || [],
-        statusHistory: statusHistory || [],
-        assignments: assignments || [],
-        inspections: inspections || [],
-        incidents: incidents || [],
-        checklists: checklists || [],
-        supplies: supplies || [],
-        routeStops: routeStops || [],
-        client: job.clients || null,
-        quotation: job.quotations || null,
-        invoice: job.invoices || null
+        auditLogs: auditLogs?.data || [],
+        statusHistory: statusHistory?.data || [],
+        assignments: assignmentsWithNames,
+        inspections: inspections?.data || [],
+        incidents: incidents?.data || [],
+        checklists: checklists?.data || [],
+        client: client?.data || null,
+        quotation: quotation?.data || null,
+        invoice: invoice?.data || null
       }
     }
   },
 
   // ============================================
-  // DASHBOARD STATS - Filter in JS to avoid PostgREST errors
+  // DASHBOARD STATS
   // ============================================
   async getFieldOpsStats() {
-    // Fetch all jobs and filter in JS
     const { data: allJobs } = await supabase
       .from('jobs')
       .select('*')
@@ -472,16 +605,34 @@ export const fieldOpsApi = {
 
     const { data: recentIncidents } = await supabase
       .from('incidents')
-      .select('*, employees(first_name, last_name)')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(5)
+
+    // Get employee names for incidents
+    let incidentsWithNames = recentIncidents || []
+    if (incidentsWithNames.length > 0) {
+      const empIds = [...new Set(incidentsWithNames.map(i => i.employee_id).filter(Boolean))]
+      if (empIds.length > 0) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('id, first_name, last_name')
+          .in('id', empIds)
+        const empMap = {}
+        ;(emps || []).forEach(e => { empMap[e.id] = e })
+        incidentsWithNames = incidentsWithNames.map(i => ({
+          ...i,
+          employees: empMap[i.employee_id] || null
+        }))
+      }
+    }
 
     return {
       activeJobs: openJobs.length,
       assignedEmployees: assignedEmployees || 0,
       openIncidents: openIncidents || 0,
       criticalIncidents: 0,
-      recentIncidents: recentIncidents || [],
+      recentIncidents: incidentsWithNames,
       liveJobs: openJobs.slice(0, 10)
     }
   }
