@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { mobileApi } from '../api/mobileApi'
 
 const useMobileStore = create((set, get) => ({
+  openJobs: [],
   myJobs: [],
   selectedJob: null,
   jobTasks: [],
@@ -10,12 +11,43 @@ const useMobileStore = create((set, get) => ({
   loading: false,
   error: null,
 
-  fetchMyJobs: async (employeeId, date = null) => {
+  fetchOpenJobs: async () => {
     set({ loading: true })
-    const { data, error } = await mobileApi.getMyJobs(employeeId, date)
+    const { data, error } = await mobileApi.getOpenJobs()
+    if (error) { set({ error: error.message, loading: false }); return { success: false } }
+    set({ openJobs: data || [], loading: false })
+    return { success: true, data }
+  },
+
+  fetchMyJobs: async (employeeId) => {
+    set({ loading: true })
+    const { data, error } = await mobileApi.getMyJobs(employeeId)
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
     set({ myJobs: data || [], loading: false })
     return { success: true, data }
+  },
+
+  selectJob: async (jobId, employeeId) => {
+    const result = await mobileApi.selectJob(jobId, employeeId)
+    if (!result.success) return result
+    await get().fetchOpenJobs()
+    await get().fetchMyJobs(employeeId)
+    return result
+  },
+
+  startJob: async (jobId, employeeId, lat, lng) => {
+    const result = await mobileApi.startJob(jobId, employeeId, lat, lng)
+    if (!result.success) return result
+    await get().fetchMyJobs(employeeId)
+    return result
+  },
+
+  completeJob: async (jobId, employeeId) => {
+    const result = await mobileApi.completeJob(jobId, employeeId)
+    if (!result.success) return result
+    await get().fetchOpenJobs()
+    await get().fetchMyJobs(employeeId)
+    return result
   },
 
   setSelectedJob: (job) => set({ selectedJob: job }),
@@ -58,16 +90,10 @@ const useMobileStore = create((set, get) => ({
     return { success: true }
   },
 
-  createSuppliesRequest: async (requestData, items) => {
-    const result = await mobileApi.createSuppliesRequest(requestData, items)
+  reportIncident: async (incidentData) => {
+    const result = await mobileApi.reportIncident(incidentData)
     if (result.error) return { success: false }
     return { success: true, data: result.data }
-  },
-
-  reportIncident: async (incidentData) => {
-    const { data, error } = await mobileApi.reportIncident(incidentData)
-    if (error) return { success: false }
-    return { success: true, data }
   },
 
   fetchMyProfile: async (userId) => {
