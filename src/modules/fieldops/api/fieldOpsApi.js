@@ -179,7 +179,7 @@ export const fieldOpsApi = {
   },
 
   // ============================================
-  // EVERYTHING BELOW IS UNCHANGED
+  // ✅ FIXED: .single() → .maybeSingle()
   // ============================================
 
   async getAssignedEmployees(jobId) {
@@ -204,7 +204,7 @@ export const fieldOpsApi = {
         assigned_at: new Date().toISOString()
       }], { onConflict: 'job_id,employee_id' })
       .select('*, employees(first_name, last_name, user_id)')
-      .single()
+      .maybeSingle()  // ✅ FIXED
     
     return { data, error }
   },
@@ -221,7 +221,7 @@ export const fieldOpsApi = {
       })
       .eq('id', assignmentId)
       .select()
-      .single()
+      .maybeSingle()  // ✅ FIXED
     
     return { data, error }
   },
@@ -255,7 +255,7 @@ export const fieldOpsApi = {
       .update(updates)
       .eq('id', jobId)
       .select()
-      .single()
+      .maybeSingle()  // ✅ FIXED
     
     if (!error && employeeId) {
       const assignmentStatus = status === 'in_progress' ? 'in_progress' : 
@@ -311,7 +311,7 @@ export const fieldOpsApi = {
       .from('jobs')
       .select('*, clients(*), job_categories(*)')
       .eq('id', jobId)
-      .single()
+      .maybeSingle()  // ✅ FIXED
     
     return { success: true, job: updatedJob }
   },
@@ -370,6 +370,9 @@ export const fieldOpsApi = {
     return { allLiveJobs: jobsResult.data || [], myAssignedJobs: assignedResult.data || [], timestamp: new Date().toISOString() }
   },
 
+  // ============================================
+  // INCIDENTS (unchanged)
+  // ============================================
   async getIncidents(filters = {}) {
     const { data, error } = await supabase.from('incidents').select('*').order('created_at', { ascending: false }).limit(100)
     if (error || !data || data.length === 0) return { data: data || [], error }
@@ -392,35 +395,35 @@ export const fieldOpsApi = {
     return { data: merged, error: null }
   },
 
-  async getIncident(id) { const { data, error } = await supabase.from('incidents').select('*').eq('id', id).single(); return { data, error } },
-  async createIncident(incidentData) { const { data, error } = await supabase.from('incidents').insert([incidentData]).select().single(); return { data, error } },
-  async updateIncident(id, updates) { const { data, error } = await supabase.from('incidents').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single(); return { data, error } },
-  async resolveIncident(id, resolution) { const { data: userData } = await supabase.auth.getUser(); const { data, error } = await supabase.from('incidents').update({ status: 'resolved', investigation_findings: resolution.findings, root_cause: resolution.root_cause, corrective_actions: resolution.corrective_actions, preventive_actions: resolution.preventive_actions, resolved_by: userData.user?.id, resolved_at: new Date().toISOString() }).eq('id', id).select().single(); return { data, error } },
+  async getIncident(id) { const { data, error } = await supabase.from('incidents').select('*').eq('id', id).maybeSingle(); return { data, error } },
+  async createIncident(incidentData) { const { data, error } = await supabase.from('incidents').insert([incidentData]).select().maybeSingle(); return { data, error } },
+  async updateIncident(id, updates) { const { data, error } = await supabase.from('incidents').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().maybeSingle(); return { data, error } },
+  async resolveIncident(id, resolution) { const { data: userData } = await supabase.auth.getUser(); const { data, error } = await supabase.from('incidents').update({ status: 'resolved', investigation_findings: resolution.findings, root_cause: resolution.root_cause, corrective_actions: resolution.corrective_actions, preventive_actions: resolution.preventive_actions, resolved_by: userData.user?.id, resolved_at: new Date().toISOString() }).eq('id', id).select().maybeSingle(); return { data, error } },
 
   async getAllJobNumbers() { const { data, error } = await supabase.from('jobs').select('job_number, title, status, scheduled_date').order('created_at', { ascending: false }).limit(50); return { data, error } },
 
   async getJobAuditTrail(searchInput) {
     const search = searchInput.trim().toUpperCase()
-    let { data: job } = await supabase.from('jobs').select('*').eq('job_number', search).single()
-    if (!job) { const { data: partial } = await supabase.from('jobs').select('*').ilike('job_number', `%${search}%`).limit(1).single(); job = partial }
-    if (!job) { const { data: titleMatch } = await supabase.from('jobs').select('*').ilike('title', `%${searchInput.trim()}%`).limit(1).single(); job = titleMatch }
+    let { data: job } = await supabase.from('jobs').select('*').eq('job_number', search).maybeSingle()
+    if (!job) { const { data: partial } = await supabase.from('jobs').select('*').ilike('job_number', `%${search}%`).limit(1).maybeSingle(); job = partial }
+    if (!job) { const { data: titleMatch } = await supabase.from('jobs').select('*').ilike('title', `%${searchInput.trim()}%`).limit(1).maybeSingle(); job = titleMatch }
     if (!job) return { error: `No job found for "${searchInput}"`, notFound: true }
     const [{ data: client }, { data: category }, { data: team }, { data: auditLogs }, { data: statusHistory }, { data: assignments }, { data: inspections }, { data: incidents }, { data: checklists }, { data: quotation }, { data: invoice }] = await Promise.all([
-      job.client_id ? supabase.from('clients').select('*').eq('id', job.client_id).single() : { data: null },
-      job.job_category_id ? supabase.from('job_categories').select('*').eq('id', job.job_category_id).single() : { data: null },
-      job.team_id ? supabase.from('teams').select('*').eq('id', job.team_id).single() : { data: null },
+      job.client_id ? supabase.from('clients').select('*').eq('id', job.client_id).maybeSingle() : { data: null },
+      job.job_category_id ? supabase.from('job_categories').select('*').eq('id', job.job_category_id).maybeSingle() : { data: null },
+      job.team_id ? supabase.from('teams').select('*').eq('id', job.team_id).maybeSingle() : { data: null },
       supabase.from('job_full_audit').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_status_history').select('*').eq('job_id', job.id).order('changed_at', { ascending: true }),
       supabase.from('field_job_assignments').select('*').eq('job_id', job.id).order('assigned_at', { ascending: true }),
       supabase.from('quality_inspections').select('*').eq('job_id', job.id).order('inspection_date', { ascending: true }),
       supabase.from('incidents').select('*').eq('job_id', job.id).order('created_at', { ascending: true }),
       supabase.from('job_checklist_items').select('*').eq('job_id', job.id).order('item_number', { ascending: true }),
-      job.quotation_id ? supabase.from('quotations').select('*').eq('id', job.quotation_id).single() : { data: null },
+      job.quotation_id ? supabase.from('quotations').select('*').eq('id', job.quotation_id).maybeSingle() : { data: null },
       supabase.from('invoices').select('*').eq('id', job.id).maybeSingle()
     ])
     let assignmentsWithNames = assignments?.data || []
     if (assignmentsWithNames.length > 0) { const empIds = [...new Set(assignmentsWithNames.map(a => a.employee_id).filter(Boolean))]; if (empIds.length > 0) { const { data: emps } = await supabase.from('employees').select('id, first_name, last_name, employee_code, phone, department, position, user_id').in('id', empIds); const empMap = {}; ;(emps || []).forEach(e => { empMap[e.id] = e }); assignmentsWithNames = assignmentsWithNames.map(a => ({ ...a, employees: empMap[a.employee_id] || null })) } }
-    let creator = null; if (job.created_by) { const { data: creatorData } = await supabase.from('profiles').select('full_name, email, role').eq('id', job.created_by).single(); creator = creatorData }
+    let creator = null; if (job.created_by) { const { data: creatorData } = await supabase.from('profiles').select('full_name, email, role').eq('id', job.created_by).maybeSingle(); creator = creatorData }
     return { data: { job: { ...job, clients: client?.data || null, job_categories: category?.data || null, teams: team?.data || null, quotations: quotation?.data || null, invoices: invoice?.data || null }, creator, auditLogs: auditLogs?.data || [], statusHistory: statusHistory?.data || [], assignments: assignmentsWithNames, inspections: inspections?.data || [], incidents: incidents?.data || [], checklists: checklists?.data || [], client: client?.data || null, quotation: quotation?.data || null, invoice: invoice?.data || null } }
   },
 
