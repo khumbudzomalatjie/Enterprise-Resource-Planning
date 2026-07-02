@@ -178,16 +178,11 @@ export const fieldOpsApi = {
     return { data: merged, error: null }
   },
 
-  // ============================================
-  // ✅ FIXED: .single() → .maybeSingle()
-  // ============================================
-
   async getAssignedEmployees(jobId) {
     const { data, error } = await supabase
       .from('field_job_assignments')
       .select('*, employees(first_name, last_name, employee_code, phone, department, user_id)')
       .eq('job_id', jobId)
-    
     return { data, error }
   },
 
@@ -204,13 +199,22 @@ export const fieldOpsApi = {
         assigned_at: new Date().toISOString()
       }], { onConflict: 'job_id,employee_id' })
       .select('*, employees(first_name, last_name, user_id)')
-      .maybeSingle()  // ✅ FIXED
-    
+      .maybeSingle()
     return { data, error }
   },
 
+  // ✅ FIXED: Release now also resets job status back to pending/scheduled
   async releaseEmployeeFromJob(assignmentId, reason = '') {
     const { data: userData } = await supabase.auth.getUser()
+    
+    // First, get the assignment to know the job_id
+    const { data: assignment } = await supabase
+      .from('field_job_assignments')
+      .select('job_id')
+      .eq('id', assignmentId)
+      .maybeSingle()
+
+    // Update the assignment status to released
     const { data, error } = await supabase
       .from('field_job_assignments')
       .update({
@@ -221,8 +225,31 @@ export const fieldOpsApi = {
       })
       .eq('id', assignmentId)
       .select()
-      .maybeSingle()  // ✅ FIXED
-    
+      .maybeSingle()
+
+    // ✅ ALSO reset the job status back to pending/scheduled
+    if (!error && assignment?.job_id) {
+      // Check if there are any remaining active assignments
+      const { data: remaining } = await supabase
+        .from('field_job_assignments')
+        .select('id')
+        .eq('job_id', assignment.job_id)
+        .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+
+      // If no active assignments remain, reset job status to pending
+      if (!remaining || remaining.length === 0) {
+        await supabase
+          .from('jobs')
+          .update({ 
+            status: 'pending', 
+            updated_at: new Date().toISOString(),
+            actual_start_time: null,
+            actual_end_time: null
+          })
+          .eq('id', assignment.job_id)
+      }
+    }
+
     return { data, error }
   },
 
@@ -236,12 +263,10 @@ export const fieldOpsApi = {
       assignment_status: 'assigned',
       assigned_at: new Date().toISOString()
     }))
-
     const { data, error } = await supabase
       .from('field_job_assignments')
       .upsert(assignments, { onConflict: 'job_id,employee_id' })
       .select('*, employees(first_name, last_name)')
-    
     return { data, error }
   },
 
@@ -249,18 +274,14 @@ export const fieldOpsApi = {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
     if (status === 'completed') updates.actual_end_time = new Date().toISOString()
-    
     const { data, error } = await supabase
       .from('jobs')
       .update(updates)
       .eq('id', jobId)
       .select()
-      .maybeSingle()  // ✅ FIXED
-    
+      .maybeSingle()
     if (!error && employeeId) {
-      const assignmentStatus = status === 'in_progress' ? 'in_progress' : 
-                               status === 'completed' ? 'completed' : 'assigned'
-      
+      const assignmentStatus = status === 'in_progress' ? 'in_progress' : status === 'completed' ? 'completed' : 'assigned'
       await supabase
         .from('field_job_assignments')
         .update({ 
@@ -271,108 +292,45 @@ export const fieldOpsApi = {
         .eq('job_id', jobId)
         .eq('employee_id', employeeId)
     }
-    
     return { data, error }
   },
 
   async syncJobWithMobile(jobId, data) {
     const { employeeId, status, checkInLocation, checkOutLocation, notes } = data
-    
-    if (status) {
-      await this.updateJobStatus(jobId, status, employeeId)
-    }
-    
+    if (status) await this.updateJobStatus(jobId, status, employeeId)
     if (employeeId) {
       const updates = {}
-      if (checkInLocation) {
-        updates.check_in_latitude = checkInLocation.latitude
-        updates.check_in_longitude = checkInLocation.longitude
-        updates.check_in_address = checkInLocation.address || null
-        updates.check_in_time = new Date().toISOString()
-      }
-      if (checkOutLocation) {
-        updates.check_out_latitude = checkOutLocation.latitude
-        updates.check_out_longitude = checkOutLocation.longitude
-        updates.check_out_address = checkOutLocation.address || null
-        updates.check_out_time = new Date().toISOString()
-      }
+      if (checkInLocation) { updates.check_in_latitude = checkInLocation.latitude; updates.check_in_longitude = checkInLocation.longitude; updates.check_in_address = checkInLocation.address || null; updates.check_in_time = new Date().toISOString() }
+      if (checkOutLocation) { updates.check_out_latitude = checkOutLocation.latitude; updates.check_out_longitude = checkOutLocation.longitude; updates.check_out_address = checkOutLocation.address || null; updates.check_out_time = new Date().toISOString() }
       if (notes) updates.employee_notes = notes
-      
-      if (Object.keys(updates).length > 0) {
-        await supabase
-          .from('field_job_assignments')
-          .update(updates)
-          .eq('job_id', jobId)
-          .eq('employee_id', employeeId)
-      }
+      if (Object.keys(updates).length > 0) { await supabase.from('field_job_assignments').update(updates).eq('job_id', jobId).eq('employee_id', employeeId) }
     }
-    
-    const { data: updatedJob } = await supabase
-      .from('jobs')
-      .select('*, clients(*), job_categories(*)')
-      .eq('id', jobId)
-      .maybeSingle()  // ✅ FIXED
-    
+    const { data: updatedJob } = await supabase.from('jobs').select('*, clients(*), job_categories(*)').eq('id', jobId).maybeSingle()
     return { success: true, job: updatedJob }
   },
 
   async getLiveJobsByEmployee(employeeId) {
-    const { data: fieldData } = await supabase
-      .from('field_job_assignments')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .order('assigned_at', { ascending: false })
-
-    const { data: mobileData } = await supabase
-      .from('job_assignments')
-      .select('*')
-      .eq('employee_id', employeeId)
-    
-    const allData = [
-      ...(fieldData || []).map(a => ({ ...a, assignment_status: a.assignment_status || 'assigned' })),
-      ...(mobileData || []).map(a => ({ ...a, assignment_status: a.status || 'assigned', assigned_at: a.assigned_at || a.created_at }))
-    ]
-
+    const { data: fieldData } = await supabase.from('field_job_assignments').select('*').eq('employee_id', employeeId).order('assigned_at', { ascending: false })
+    const { data: mobileData } = await supabase.from('job_assignments').select('*').eq('employee_id', employeeId)
+    const allData = [...(fieldData || []).map(a => ({ ...a, assignment_status: a.assignment_status || 'assigned' })), ...(mobileData || []).map(a => ({ ...a, assignment_status: a.status || 'assigned', assigned_at: a.assigned_at || a.created_at }))]
     if (allData.length === 0) return { data: [], error: null }
-
     const jobIds = [...new Set(allData.map(a => a.job_id).filter(Boolean))]
     const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
-
     const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
     let clients = []
-    if (clientIds.length > 0) {
-      const { data: c } = await supabase.from('clients').select('id, company_name, client_code, phone, city, address_line1').in('id', clientIds)
-      clients = c || []
-    }
-
+    if (clientIds.length > 0) { const { data: c } = await supabase.from('clients').select('id, company_name, client_code, phone, city, address_line1').in('id', clientIds); clients = c || [] }
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     let categories = []
-    if (catIds.length > 0) {
-      const { data: c } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
-      categories = c || []
-    }
-
-    const activeJobs = allData
-      .filter(a => { const job = (jobs || []).find(j => j.id === a.job_id); return job && job.status !== 'completed' && job.status !== 'cancelled' })
-      .map(a => {
-        const job = (jobs || []).find(j => j.id === a.job_id)
-        return { ...a, jobs: job ? { ...job, clients: clients.find(c => c.id === job.client_id) || null, job_categories: categories.find(c => c.id === job.job_category_id) || null } : null }
-      })
-    
+    if (catIds.length > 0) { const { data: c } = await supabase.from('job_categories').select('id, name, color').in('id', catIds); categories = c || [] }
+    const activeJobs = allData.filter(a => { const job = (jobs || []).find(j => j.id === a.job_id); return job && job.status !== 'completed' && job.status !== 'cancelled' }).map(a => { const job = (jobs || []).find(j => j.id === a.job_id); return { ...a, jobs: job ? { ...job, clients: clients.find(c => c.id === job.client_id) || null, job_categories: categories.find(c => c.id === job.job_category_id) || null } : null } })
     return { data: activeJobs, error: null }
   },
 
   async getMobileSyncData(employeeId) {
-    const [jobsResult, assignedResult] = await Promise.all([
-      this.getLiveJobs(),
-      this.getLiveJobsByEmployee(employeeId)
-    ])
+    const [jobsResult, assignedResult] = await Promise.all([this.getLiveJobs(), this.getLiveJobsByEmployee(employeeId)])
     return { allLiveJobs: jobsResult.data || [], myAssignedJobs: assignedResult.data || [], timestamp: new Date().toISOString() }
   },
 
-  // ============================================
-  // INCIDENTS (unchanged)
-  // ============================================
   async getIncidents(filters = {}) {
     const { data, error } = await supabase.from('incidents').select('*').order('created_at', { ascending: false }).limit(100)
     if (error || !data || data.length === 0) return { data: data || [], error }
