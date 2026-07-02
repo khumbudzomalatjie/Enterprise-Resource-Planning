@@ -6,7 +6,7 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw } from 'lucide-react'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
@@ -18,45 +18,32 @@ export default function MyJobs() {
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
-  // ✅ INITIAL LOAD + REAL-TIME REFRESH
+  // Initial load + realtime refresh
   useEffect(() => {
     setupAndLoad()
 
-    // ✅ Subscribe to jobs table changes (status changes from ERP)
     const jobsChannel = supabase
       .channel('mobile-jobs-realtime')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, () => {
-        console.log('🔄 Job updated from ERP - refreshing...')
-        if (myEmployeeId) {
-          Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
-        }
+        if (myEmployeeId) { Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)]) }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'field_job_assignments' }, () => {
-        console.log('🔄 Assignment changed - refreshing...')
-        if (myEmployeeId) {
-          Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
-        }
+        if (myEmployeeId) { Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)]) }
       })
       .subscribe()
 
-    // ✅ Fallback polling every 10 seconds
     const interval = setInterval(() => {
-      if (myEmployeeId) {
-        Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
-      }
+      if (myEmployeeId) { Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)]) }
     }, 10000)
 
-    return () => {
-      supabase.removeChannel(jobsChannel)
-      clearInterval(interval)
-    }
+    return () => { supabase.removeChannel(jobsChannel); clearInterval(interval) }
   }, [myEmployeeId])
 
   const setupAndLoad = async () => {
     const empId = await findOrCreateEmployee()
-    if (empId) { 
+    if (empId) {
       setMyEmployeeId(empId)
-      await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)]) 
+      await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)])
     }
     setLoading(false)
   }
@@ -84,8 +71,8 @@ export default function MyJobs() {
     if (myJobs.length > 0) { toast.error('Complete current job first'); return }
     setUpdatingJob(jobId)
     const result = await selectJob(jobId, myEmployeeId)
-    if (result.success) { 
-      toast.success('Job selected! Synced with ERP')
+    if (result.success) {
+      toast.success('Job selected! Tap Start to begin')
       setActiveTab('mine')
       await Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
     } else { toast.error('Failed') }
@@ -93,30 +80,42 @@ export default function MyJobs() {
   }
 
   const handleStartJob = async (jobId) => {
+    if (!myEmployeeId) return
     setUpdatingJob(jobId)
     navigator.geolocation.getCurrentPosition(async (pos) => {
       await startJob(jobId, myEmployeeId, pos.coords.latitude, pos.coords.longitude)
-      toast.success('Started!')
+      toast.success('Job started! You can now complete it')
       await fetchMyJobs(myEmployeeId)
       setUpdatingJob(null)
-    }, async () => { 
+    }, async () => {
       await startJob(jobId, myEmployeeId, null, null)
-      toast.success('Started!')
+      toast.success('Job started! You can now complete it')
       await fetchMyJobs(myEmployeeId)
-      setUpdatingJob(null) 
+      setUpdatingJob(null)
     })
   }
 
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Complete?')) return
+    if (!window.confirm('Mark this job as completed?')) return
+    if (!myEmployeeId) return
     setUpdatingJob(jobId)
     const result = await completeJob(jobId, myEmployeeId)
-    if (result.success) { 
-      toast.success('Completed!')
+    if (result.success) {
+      toast.success('Job completed! Great work!')
       setActiveTab('open')
       await Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
-    } else { toast.error('Failed') }
+    } else { toast.error('Failed to complete') }
     setUpdatingJob(null)
+  }
+
+  // ✅ Check if job has been started (in_progress)
+  const canComplete = (job) => {
+    return job.assignment_status === 'in_progress'
+  }
+
+  // ✅ Check if job is only selected (assigned) but not started
+  const needsStart = (job) => {
+    return job.assignment_status === 'assigned' || job.assignment_status === 'accepted'
   }
 
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -146,7 +145,14 @@ export default function MyJobs() {
         {myJobs.length > 0 && (
           <div className="mt-3 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
-            <p className="text-amber-200 text-sm font-semibold">Active: {myJobs[0]?.title}</p>
+            <div>
+              <p className="text-amber-200 text-sm font-semibold">Active: {myJobs[0]?.title}</p>
+              <p className="text-amber-300/70 text-xs">
+                {needsStart(myJobs[0]) ? '⏳ Tap Start to begin working' : 
+                 canComplete(myJobs[0]) ? '🔨 Work in progress - Complete when done' : 
+                 'Status: ' + (myJobs[0]?.assignment_status || 'N/A')}
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -199,15 +205,43 @@ export default function MyJobs() {
                 <motion.div key={job.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                   className="bg-white rounded-2xl p-4 shadow-md border-l-4 border-l-amber-400">
                   <div className="flex justify-between mb-2">
-                    <div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name}</p></div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">My Job</span>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3>
+                      <p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      needsStart(job) ? 'bg-blue-100 text-blue-700' : 
+                      canComplete(job) ? 'bg-amber-100 text-amber-700' : 
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {needsStart(job) ? 'Selected' : canComplete(job) ? 'In Progress' : 'My Job'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" />{job.scheduled_date === todayStr ? 'Today' : formatDate(job.scheduled_date)}<span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
+                  
+                  {/* ✅ BUTTONS - Start always active, Complete only after Start */}
                   <div className="flex gap-2 mb-2">
-                    <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"><Play className="w-3.5 h-3.5" /> Start</button>
-                    <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"><CheckCircle2 className="w-3.5 h-3.5" /> Complete</button>
+                    <button 
+                      onClick={() => handleStartJob(job.id)} 
+                      disabled={updatingJob === job.id}
+                      className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm">
+                      <Play className="w-3.5 h-3.5" /> 
+                      {needsStart(job) ? 'Start Job' : canComplete(job) ? 'Restart' : 'Start'}
+                    </button>
+                    <button 
+                      onClick={() => handleCompleteJob(job.id)} 
+                      disabled={updatingJob === job.id || !canComplete(job)}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 shadow-sm ${
+                        canComplete(job) 
+                          ? 'bg-emerald-600 text-white' 
+                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      }`}>
+                      {canComplete(job) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                      {canComplete(job) ? 'Complete' : 'Start First'}
+                    </button>
                   </div>
+
                   <div className="grid grid-cols-3 gap-1.5">
                     <button onClick={() => navigate('/mobile/photos')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Camera className="w-3 h-3" /> Photos</button>
                     <button onClick={() => navigate('/mobile/supplies')} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1"><Package className="w-3 h-3" /> Supplies</button>
