@@ -30,35 +30,34 @@ const useMobileStore = create((set, get) => ({
 
   selectJob: async (jobId, employeeId) => {
     const result = await mobileApi.selectJob(jobId, employeeId)
-    if (!result.success) return result
-    await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
+    if (result.success) {
+      await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
+    }
     return result
   },
 
   startJob: async (jobId, employeeId, lat, lng) => {
     const result = await mobileApi.startJob(jobId, employeeId, lat, lng)
-    if (!result.success) return result
-    await get().fetchMyJobs(employeeId)
+    if (result.success) await get().fetchMyJobs(employeeId)
     return result
   },
 
   completeJob: async (jobId, employeeId) => {
     const result = await mobileApi.completeJob(jobId, employeeId)
-    if (!result.success) return result
-    await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
+    if (result.success) {
+      await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
+    }
     return result
   },
 
   setSelectedJob: (job) => set({ selectedJob: job }),
 
   clockIn: async (employeeId, jobId, lat, lng) => {
-    const result = await mobileApi.clockIn(employeeId, jobId, lat, lng)
-    return result
+    return await mobileApi.clockIn(employeeId, jobId, lat, lng)
   },
 
   clockOut: async (employeeId) => {
-    const result = await mobileApi.clockOut(employeeId)
-    return result
+    return await mobileApi.clockOut(employeeId)
   },
 
   uploadPhoto: async (jobId, employeeId, file, photoType, caption) => {
