@@ -20,6 +20,7 @@ const useMobileStore = create((set, get) => ({
   },
 
   fetchMyJobs: async (employeeId) => {
+    if (!employeeId) return { success: false }
     set({ loading: true })
     const { data, error } = await mobileApi.getMyJobs(employeeId)
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
@@ -30,8 +31,7 @@ const useMobileStore = create((set, get) => ({
   selectJob: async (jobId, employeeId) => {
     const result = await mobileApi.selectJob(jobId, employeeId)
     if (!result.success) return result
-    await get().fetchOpenJobs()
-    await get().fetchMyJobs(employeeId)
+    await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
     return result
   },
 
@@ -45,28 +45,25 @@ const useMobileStore = create((set, get) => ({
   completeJob: async (jobId, employeeId) => {
     const result = await mobileApi.completeJob(jobId, employeeId)
     if (!result.success) return result
-    await get().fetchOpenJobs()
-    await get().fetchMyJobs(employeeId)
+    await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
     return result
   },
 
   setSelectedJob: (job) => set({ selectedJob: job }),
 
   clockIn: async (employeeId, jobId, lat, lng) => {
-    const { data, error } = await mobileApi.clockIn(employeeId, jobId, lat, lng)
-    if (error) return { success: false, error: error.message }
-    return { success: true, data }
+    const result = await mobileApi.clockIn(employeeId, jobId, lat, lng)
+    return result
   },
 
   clockOut: async (employeeId) => {
-    const { data, error } = await mobileApi.clockOut(employeeId)
-    if (error) return { success: false, error: error.message }
-    return { success: true, data }
+    const result = await mobileApi.clockOut(employeeId)
+    return result
   },
 
   uploadPhoto: async (jobId, employeeId, file, photoType, caption) => {
     const { data, error } = await mobileApi.uploadJobPhoto(jobId, employeeId, file, photoType, caption)
-    if (error) return { success: false, error: error.message }
+    if (error) return { success: false, error }
     return { success: true, data }
   },
 
@@ -88,12 +85,6 @@ const useMobileStore = create((set, get) => ({
     if (error) return { success: false }
     set(state => ({ jobTasks: state.jobTasks.map(t => t.id === id ? data : t) }))
     return { success: true }
-  },
-
-  reportIncident: async (incidentData) => {
-    const result = await mobileApi.reportIncident(incidentData)
-    if (result.error) return { success: false }
-    return { success: true, data: result.data }
   },
 
   fetchMyProfile: async (userId) => {
