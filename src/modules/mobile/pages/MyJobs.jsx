@@ -6,7 +6,7 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List } from 'lucide-react'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
@@ -18,11 +18,46 @@ export default function MyJobs() {
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
-  useEffect(() => { setupAndLoad() }, [])
+  // ✅ INITIAL LOAD + REAL-TIME REFRESH
+  useEffect(() => {
+    setupAndLoad()
+
+    // ✅ Subscribe to jobs table changes (status changes from ERP)
+    const jobsChannel = supabase
+      .channel('mobile-jobs-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, () => {
+        console.log('🔄 Job updated from ERP - refreshing...')
+        if (myEmployeeId) {
+          Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'field_job_assignments' }, () => {
+        console.log('🔄 Assignment changed - refreshing...')
+        if (myEmployeeId) {
+          Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+        }
+      })
+      .subscribe()
+
+    // ✅ Fallback polling every 10 seconds
+    const interval = setInterval(() => {
+      if (myEmployeeId) {
+        Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+      }
+    }, 10000)
+
+    return () => {
+      supabase.removeChannel(jobsChannel)
+      clearInterval(interval)
+    }
+  }, [myEmployeeId])
 
   const setupAndLoad = async () => {
     const empId = await findOrCreateEmployee()
-    if (empId) { setMyEmployeeId(empId); await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)]) }
+    if (empId) { 
+      setMyEmployeeId(empId)
+      await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)]) 
+    }
     setLoading(false)
   }
 
@@ -36,13 +71,24 @@ export default function MyJobs() {
     return newEmp?.id || null
   }
 
+  const refreshData = async () => {
+    if (!myEmployeeId) return
+    setLoading(true)
+    await Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+    setLoading(false)
+    toast.success('Refreshed!')
+  }
+
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready'); return }
     if (myJobs.length > 0) { toast.error('Complete current job first'); return }
     setUpdatingJob(jobId)
     const result = await selectJob(jobId, myEmployeeId)
-    if (result.success) { toast.success('Job selected! Synced with ERP'); setActiveTab('mine') }
-    else { toast.error('Failed') }
+    if (result.success) { 
+      toast.success('Job selected! Synced with ERP')
+      setActiveTab('mine')
+      await Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+    } else { toast.error('Failed') }
     setUpdatingJob(null)
   }
 
@@ -51,16 +97,25 @@ export default function MyJobs() {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       await startJob(jobId, myEmployeeId, pos.coords.latitude, pos.coords.longitude)
       toast.success('Started!')
+      await fetchMyJobs(myEmployeeId)
       setUpdatingJob(null)
-    }, async () => { await startJob(jobId, myEmployeeId, null, null); toast.success('Started!'); setUpdatingJob(null) })
+    }, async () => { 
+      await startJob(jobId, myEmployeeId, null, null)
+      toast.success('Started!')
+      await fetchMyJobs(myEmployeeId)
+      setUpdatingJob(null) 
+    })
   }
 
   const handleCompleteJob = async (jobId) => {
     if (!window.confirm('Complete?')) return
     setUpdatingJob(jobId)
     const result = await completeJob(jobId, myEmployeeId)
-    if (result.success) { toast.success('Completed!'); setActiveTab('open') }
-    else { toast.error('Failed') }
+    if (result.success) { 
+      toast.success('Completed!')
+      setActiveTab('open')
+      await Promise.all([fetchOpenJobs(), fetchMyJobs(myEmployeeId)])
+    } else { toast.error('Failed') }
     setUpdatingJob(null)
   }
 
@@ -79,8 +134,15 @@ export default function MyJobs() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
       <div className="px-5 pt-8 pb-5 text-white">
-        <h1 className="text-2xl font-bold">Jobs</h1>
-        <p className="text-blue-100 text-sm mt-1">Synced with Main ERP</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Jobs</h1>
+            <p className="text-blue-100 text-sm mt-1">Auto-refreshes every 10s</p>
+          </div>
+          <button onClick={refreshData} className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-colors">
+            <RefreshCw className="w-5 h-5 text-white" />
+          </button>
+        </div>
         {myJobs.length > 0 && (
           <div className="mt-3 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
             <Briefcase className="w-5 h-5 text-amber-300 flex-shrink-0" />
