@@ -6,10 +6,7 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { 
-  Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, 
-  CheckCircle2, Camera, Package, AlertCircle, User, List
-} from 'lucide-react'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
@@ -25,10 +22,7 @@ export default function MyJobs() {
 
   const setupAndLoad = async () => {
     const empId = await findOrCreateEmployee()
-    if (empId) {
-      setMyEmployeeId(empId)
-      await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)])
-    }
+    if (empId) { setMyEmployeeId(empId); await Promise.all([fetchOpenJobs(), fetchMyJobs(empId)]) }
     setLoading(false)
   }
 
@@ -38,45 +32,35 @@ export default function MyJobs() {
     const { data: empByEmail } = await supabase.from('employees').select('id').eq('email', user?.email).single()
     if (empByEmail) { await supabase.from('employees').update({ user_id: user?.id }).eq('id', empByEmail.id); return empByEmail.id }
     const firstName = user?.email?.split('@')[0] || 'Cleaner'
-    const { data: newEmp } = await supabase.from('employees').insert([{
-      user_id: user?.id, first_name: firstName, last_name: '',
-      email: user?.email, employment_status: 'active', department: 'Cleaning',
-      employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4)
-    }]).select('id').single()
+    const { data: newEmp } = await supabase.from('employees').insert([{ user_id: user?.id, first_name: firstName, last_name: '', email: user?.email, employment_status: 'active', department: 'Cleaning', employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4) }]).select('id').single()
     return newEmp?.id || null
   }
 
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready'); return }
-    if (myJobs.length > 0) { toast.error('Complete your current job first'); return }
+    if (myJobs.length > 0) { toast.error('Complete current job first'); return }
     setUpdatingJob(jobId)
     const result = await selectJob(jobId, myEmployeeId)
-    if (result.success) { toast.success('Job selected!'); setActiveTab('mine') }
-    else { toast.error('Failed to select job') }
+    if (result.success) { toast.success('Job selected! Synced with ERP'); setActiveTab('mine') }
+    else { toast.error('Failed') }
     setUpdatingJob(null)
   }
 
   const handleStartJob = async (jobId) => {
-    if (!myEmployeeId) return
     setUpdatingJob(jobId)
     navigator.geolocation.getCurrentPosition(async (pos) => {
       await startJob(jobId, myEmployeeId, pos.coords.latitude, pos.coords.longitude)
-      toast.success('Job started!')
+      toast.success('Started!')
       setUpdatingJob(null)
-    }, async () => {
-      await startJob(jobId, myEmployeeId, null, null)
-      toast.success('Job started!')
-      setUpdatingJob(null)
-    })
+    }, async () => { await startJob(jobId, myEmployeeId, null, null); toast.success('Started!'); setUpdatingJob(null) })
   }
 
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark job as completed?')) return
-    if (!myEmployeeId) return
+    if (!window.confirm('Complete?')) return
     setUpdatingJob(jobId)
     const result = await completeJob(jobId, myEmployeeId)
-    if (result.success) { toast.success('Job completed!'); setActiveTab('open') }
-    else { toast.error('Failed to complete') }
+    if (result.success) { toast.success('Completed!'); setActiveTab('open') }
+    else { toast.error('Failed') }
     setUpdatingJob(null)
   }
 
@@ -107,10 +91,10 @@ export default function MyJobs() {
 
       <div className="px-5 -mt-2">
         <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
-          <button onClick={() => setActiveTab('open')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700' : 'text-white/70'}`}>
+          <button onClick={() => setActiveTab('open')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700 shadow-lg' : 'text-white/70'}`}>
             <List className="w-4 h-4" /> Open ({filteredOpen.length})
           </button>
-          <button onClick={() => setActiveTab('mine')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'mine' ? 'bg-white text-amber-700' : 'text-white/70'}`}>
+          <button onClick={() => setActiveTab('mine')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'mine' ? 'bg-white text-amber-700 shadow-lg' : 'text-white/70'}`}>
             <User className="w-4 h-4" /> My Jobs ({filteredMine.length})
           </button>
         </div>
