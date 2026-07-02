@@ -8,7 +8,11 @@ export const mobileApi = {
     const { data, error } = await supabase
       .from('jobs')
       .select(`
-        *,
+        id, job_number, title, description, status, priority,
+        scheduled_date, scheduled_start_time, scheduled_end_time,
+        site_address, site_city, site_contact_name, site_contact_phone,
+        access_instructions, special_instructions, notes,
+        cleaners_required, estimated_duration_minutes, quoted_amount,
         clients(company_name, client_code, phone, city),
         job_categories(name, color)
       `)
@@ -21,14 +25,15 @@ export const mobileApi = {
   },
 
   // ============================================
-  // GET MY JOBS - Same field_job_assignments as main ERP
+  // GET MY JOBS - From field_job_assignments (SAME as main ERP)
   // ============================================
   async getMyJobs(employeeId) {
     if (!employeeId) return { data: [] }
 
+    // ✅ Read from field_job_assignments - SAME TABLE as main ERP
     const { data: assignments, error } = await supabase
       .from('field_job_assignments')
-      .select('job_id, assignment_status, assigned_at')
+      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
       .order('assigned_at', { ascending: false })
@@ -43,7 +48,11 @@ export const mobileApi = {
     const { data: jobs } = await supabase
       .from('jobs')
       .select(`
-        *,
+        id, job_number, title, description, status, priority,
+        scheduled_date, scheduled_start_time, scheduled_end_time,
+        site_address, site_city, site_contact_name, site_contact_phone,
+        access_instructions, special_instructions, notes,
+        cleaners_required, estimated_duration_minutes, quoted_amount,
         clients(company_name, client_code, phone, city),
         job_categories(name, color)
       `)
@@ -61,12 +70,12 @@ export const mobileApi = {
   },
 
   // ============================================
-  // SELECT JOB - Write to field_job_assignments
+  // SELECT JOB - Write to field_job_assignments (SAME as main ERP)
   // ============================================
   async selectJob(jobId, employeeId) {
     const { data: userData } = await supabase.auth.getUser()
 
-    // Check existing
+    // Check if already assigned in field_job_assignments
     const { data: existing } = await supabase
       .from('field_job_assignments')
       .select('id')
@@ -94,7 +103,7 @@ export const mobileApi = {
       return { success: !error }
     }
 
-    // Create new
+    // Create new assignment in field_job_assignments
     const { error } = await supabase
       .from('field_job_assignments')
       .insert([{
@@ -112,7 +121,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // START JOB
+  // START JOB - Update field_job_assignments
   // ============================================
   async startJob(jobId, employeeId, lat, lng) {
     const { error } = await supabase
@@ -138,7 +147,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // COMPLETE JOB
+  // COMPLETE JOB - Update field_job_assignments
   // ============================================
   async completeJob(jobId, employeeId) {
     const { error } = await supabase
@@ -192,9 +201,7 @@ export const mobileApi = {
   async uploadJobPhoto(jobId, employeeId, file, photoType, caption) {
     const fileExt = file.name.split('.').pop()
     const fileName = `job-photos/${jobId}/${Date.now()}.${fileExt}`
-    try {
-      await supabase.storage.createBucket('fleet', { public: true, fileSizeLimit: 10485760 })
-    } catch {}
+    try { await supabase.storage.createBucket('fleet', { public: true, fileSizeLimit: 10485760 }) } catch {}
     const { error: uploadError } = await supabase.storage.from('fleet').upload(fileName, file, { upsert: true })
     if (uploadError) return { error: uploadError.message }
     const { data: { publicUrl } } = supabase.storage.from('fleet').getPublicUrl(fileName)
