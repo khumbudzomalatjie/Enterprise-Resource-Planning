@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export const fieldOpsApi = {
   // ============================================
-  // LIVE JOBS - Simple separate queries, merge in JS
+  // LIVE JOBS - See EVERYTHING from mobile
   // ============================================
   async getLiveJobs() {
     // 1. Get all jobs
@@ -56,7 +56,7 @@ export const fieldOpsApi = {
       teams = data || []
     }
 
-    // 5. Get assignments for these jobs
+    // 5. Get ALL assignments - NO STATUS FILTER (see everything from mobile)
     const jobIds = jobs.map(j => j.id)
     let assignments = []
     if (jobIds.length > 0) {
@@ -64,11 +64,14 @@ export const fieldOpsApi = {
         .from('field_job_assignments')
         .select('*')
         .in('job_id', jobIds)
-        .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+      // ❌ REMOVED: .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+      // ✅ NOW: Gets ALL assignments regardless of status
       assignments = data || []
     }
 
-    // 6. Get employees for assignments
+    console.log(`📊 Total assignments fetched: ${assignments.length}`)
+
+    // 6. Get employees for ALL assignments
     let employees = []
     if (assignments.length > 0) {
       const empIds = [...new Set(assignments.map(a => a.employee_id).filter(Boolean))]
@@ -101,9 +104,9 @@ export const fieldOpsApi = {
       checklists = data || []
     }
 
-    // 9. Merge everything together
+    // 9. Merge everything together - SHOW ALL JOBS (even completed for oversight)
     const merged = jobs
-      .filter(job => job.status !== 'completed' && job.status !== 'cancelled')
+      .filter(job => job.status !== 'cancelled') // Only filter out cancelled
       .map(job => ({
         ...job,
         clients: clients.find(c => c.id === job.client_id) || null,
@@ -119,7 +122,17 @@ export const fieldOpsApi = {
         job_checklist_items: checklists.filter(c => c.job_id === job.id)
       }))
 
-    console.log('📊 Live jobs merged:', merged.length)
+    // Log what we found
+    console.log(`📊 Live jobs merged: ${merged.length}`)
+    const jobsWithAssignments = merged.filter(j => j.field_job_assignments?.length > 0)
+    console.log(`📊 Jobs with assignments: ${jobsWithAssignments.length}`)
+    jobsWithAssignments.forEach(job => {
+      console.log(`📋 ${job.job_number} | Status: ${job.status} | Assignments: ${job.field_job_assignments.length}`)
+      job.field_job_assignments.forEach(a => {
+        console.log(`   👤 ${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''} | Status: ${a.assignment_status}`)
+      })
+    })
+
     return { data: merged, error: null }
   },
 
@@ -128,7 +141,6 @@ export const fieldOpsApi = {
       .from('field_job_assignments')
       .select('*, employees(first_name, last_name, employee_code, phone, department, user_id)')
       .eq('job_id', jobId)
-      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     
     return { data, error }
   },
@@ -263,21 +275,18 @@ export const fieldOpsApi = {
       .from('field_job_assignments')
       .select('*')
       .eq('employee_id', employeeId)
-      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
       .order('assigned_at', { ascending: false })
     
     if (error || !data || data.length === 0) {
       return { data: [], error }
     }
 
-    // Get the actual jobs
     const jobIds = [...new Set(data.map(a => a.job_id).filter(Boolean))]
     const { data: jobs } = await supabase
       .from('jobs')
       .select('*')
       .in('id', jobIds)
 
-    // Get clients
     const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
     let clients = []
     if (clientIds.length > 0) {
@@ -288,7 +297,6 @@ export const fieldOpsApi = {
       clients = c || []
     }
 
-    // Get categories
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     let categories = []
     if (catIds.length > 0) {
@@ -299,7 +307,6 @@ export const fieldOpsApi = {
       categories = c || []
     }
 
-    // Merge and filter
     const activeJobs = data
       .filter(a => {
         const job = (jobs || []).find(j => j.id === a.job_id)
@@ -347,7 +354,6 @@ export const fieldOpsApi = {
       return { data: data || [], error }
     }
 
-    // Get related employees
     const empIds = [...new Set(data.map(i => i.employee_id).filter(Boolean))]
     let employees = []
     if (empIds.length > 0) {
@@ -358,7 +364,6 @@ export const fieldOpsApi = {
       employees = e || []
     }
 
-    // Get related jobs
     const jobIds = [...new Set(data.map(i => i.job_id).filter(Boolean))]
     let jobs = []
     if (jobIds.length > 0) {
@@ -369,7 +374,6 @@ export const fieldOpsApi = {
       jobs = j || []
     }
 
-    // Get related clients
     const clientIds = [...new Set(data.map(i => i.client_id).filter(Boolean))]
     let clients = []
     if (clientIds.length > 0) {
@@ -380,7 +384,6 @@ export const fieldOpsApi = {
       clients = c || []
     }
 
-    // Apply filters
     let filtered = data
     if (filters.status) filtered = filtered.filter(i => i.status === filters.status)
     if (filters.severity) filtered = filtered.filter(i => i.severity === filters.severity)
@@ -395,7 +398,6 @@ export const fieldOpsApi = {
       )
     }
 
-    // Merge
     const merged = filtered.map(i => ({
       ...i,
       employees: employees.find(e => e.id === i.employee_id) || null,
@@ -468,7 +470,6 @@ export const fieldOpsApi = {
   async getJobAuditTrail(searchInput) {
     const search = searchInput.trim().toUpperCase()
     
-    // Find job
     let { data: job } = await supabase
       .from('jobs')
       .select('*')
@@ -499,7 +500,6 @@ export const fieldOpsApi = {
       return { error: `No job found for "${searchInput}"`, notFound: true }
     }
 
-    // Get all related data
     const [
       { data: client },
       { data: category },
@@ -526,7 +526,6 @@ export const fieldOpsApi = {
       supabase.from('invoices').select('*').eq('id', job.id).maybeSingle()
     ])
 
-    // Get employee names for assignments
     let assignmentsWithNames = assignments?.data || []
     if (assignmentsWithNames.length > 0) {
       const empIds = [...new Set(assignmentsWithNames.map(a => a.employee_id).filter(Boolean))]
@@ -544,7 +543,6 @@ export const fieldOpsApi = {
       }
     }
 
-    // Get creator
     let creator = null
     if (job.created_by) {
       const { data: creatorData } = await supabase
@@ -609,7 +607,6 @@ export const fieldOpsApi = {
       .order('created_at', { ascending: false })
       .limit(5)
 
-    // Get employee names for incidents
     let incidentsWithNames = recentIncidents || []
     if (incidentsWithNames.length > 0) {
       const empIds = [...new Set(incidentsWithNames.map(i => i.employee_id).filter(Boolean))]
