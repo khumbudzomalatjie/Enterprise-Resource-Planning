@@ -58,13 +58,12 @@ export const fieldOpsApi = {
 
     const jobIds = jobs.map(j => j.id)
 
-    // 5a. Get assignments from field_job_assignments (Main ERP)
+    // 5. Get ALL assignments from BOTH tables
     const { data: fieldAssignments } = await supabase
       .from('field_job_assignments')
       .select('*')
       .in('job_id', jobIds)
 
-    // 5b. ✅ NEW: Get assignments from job_assignments (Mobile app writes here)
     const { data: mobileAssignments } = await supabase
       .from('job_assignments')
       .select('*')
@@ -73,7 +72,7 @@ export const fieldOpsApi = {
     console.log(`📊 field_job_assignments: ${fieldAssignments?.length || 0}`)
     console.log(`📊 job_assignments (mobile): ${mobileAssignments?.length || 0}`)
 
-    // 5c. Merge both into unified format
+    // Merge both into unified format
     const allAssignments = [
       ...(fieldAssignments || []).map(a => ({
         id: a.id,
@@ -178,6 +177,10 @@ export const fieldOpsApi = {
 
     return { data: merged, error: null }
   },
+
+  // ============================================
+  // EVERYTHING BELOW IS UNCHANGED
+  // ============================================
 
   async getAssignedEmployees(jobId) {
     const { data, error } = await supabase
@@ -314,7 +317,6 @@ export const fieldOpsApi = {
   },
 
   async getLiveJobsByEmployee(employeeId) {
-    // ✅ Also check job_assignments for mobile
     const { data: fieldData } = await supabase
       .from('field_job_assignments')
       .select('*')
@@ -368,9 +370,6 @@ export const fieldOpsApi = {
     return { allLiveJobs: jobsResult.data || [], myAssignedJobs: assignedResult.data || [], timestamp: new Date().toISOString() }
   },
 
-  // ============================================
-  // INCIDENTS
-  // ============================================
   async getIncidents(filters = {}) {
     const { data, error } = await supabase.from('incidents').select('*').order('created_at', { ascending: false }).limit(100)
     if (error || !data || data.length === 0) return { data: data || [], error }
