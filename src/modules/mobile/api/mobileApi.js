@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabaseClient'
 
 export const mobileApi = {
   // ============================================
-  // GET OPEN JOBS - Same query as main ERP
+  // GET OPEN JOBS
   // ============================================
   async getOpenJobs() {
     const { data, error } = await supabase
@@ -25,12 +25,11 @@ export const mobileApi = {
   },
 
   // ============================================
-  // GET MY JOBS - From field_job_assignments (SAME as main ERP)
+  // GET MY JOBS - From field_job_assignments
   // ============================================
   async getMyJobs(employeeId) {
     if (!employeeId) return { data: [] }
 
-    // ✅ Read from field_job_assignments - SAME TABLE as main ERP
     const { data: assignments, error } = await supabase
       .from('field_job_assignments')
       .select('job_id, assignment_status, assigned_at, started_at, completed_at')
@@ -60,7 +59,6 @@ export const mobileApi = {
       .not('status', 'eq', 'completed')
       .not('status', 'eq', 'cancelled')
 
-    // Merge assignment status into jobs
     const merged = (jobs || []).map(job => {
       const assignment = assignments.find(a => a.job_id === job.id)
       return { ...job, assignment_status: assignment?.assignment_status || null }
@@ -70,12 +68,11 @@ export const mobileApi = {
   },
 
   // ============================================
-  // SELECT JOB - Write to field_job_assignments (SAME as main ERP)
+  // SELECT JOB - Write to field_job_assignments
   // ============================================
   async selectJob(jobId, employeeId) {
     const { data: userData } = await supabase.auth.getUser()
 
-    // Check if already assigned in field_job_assignments
     const { data: existing } = await supabase
       .from('field_job_assignments')
       .select('id')
@@ -84,7 +81,6 @@ export const mobileApi = {
       .maybeSingle()
 
     if (existing) {
-      // Reactivate
       const { error } = await supabase
         .from('field_job_assignments')
         .update({
@@ -103,7 +99,6 @@ export const mobileApi = {
       return { success: !error }
     }
 
-    // Create new assignment in field_job_assignments
     const { error } = await supabase
       .from('field_job_assignments')
       .insert([{
@@ -121,7 +116,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // START JOB - Update field_job_assignments
+  // START JOB
   // ============================================
   async startJob(jobId, employeeId, lat, lng) {
     const { error } = await supabase
@@ -147,7 +142,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // COMPLETE JOB - Update field_job_assignments
+  // COMPLETE JOB
   // ============================================
   async completeJob(jobId, employeeId) {
     const { error } = await supabase
