@@ -25,12 +25,12 @@ export const mobileApi = {
   },
 
   // ============================================
-  // GET MY JOBS - Only show jobs that are in_progress AND assigned to me
+  // GET MY JOBS - Only active (not completed/released)
   // ============================================
   async getMyJobs(employeeId) {
     if (!employeeId) return { data: [] }
 
-    // Get assignments that are NOT released
+    // Get ONLY active assignments (assigned, accepted, in_progress)
     const { data: assignments, error } = await supabase
       .from('field_job_assignments')
       .select('job_id, assignment_status, assigned_at, started_at, completed_at')
@@ -45,7 +45,7 @@ export const mobileApi = {
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
 
-    // ✅ ONLY get jobs that are still in_progress (not released back to pending)
+    // Get the actual jobs - only those still in_progress
     const { data: jobs } = await supabase
       .from('jobs')
       .select(`
@@ -58,7 +58,7 @@ export const mobileApi = {
         job_categories(name, color)
       `)
       .in('id', jobIds)
-      .eq('status', 'in_progress')  // ✅ Only show jobs still in_progress
+      .in('status', ['in_progress'])  // Only show jobs still in_progress
 
     const merged = (jobs || []).map(job => {
       const assignment = assignments.find(a => a.job_id === job.id)
@@ -68,9 +68,12 @@ export const mobileApi = {
     return { data: merged }
   },
 
-  // ... rest of file unchanged ...
+  // ============================================
+  // SELECT JOB
+  // ============================================
   async selectJob(jobId, employeeId) {
     const { data: userData } = await supabase.auth.getUser()
+
     const { data: existing } = await supabase
       .from('field_job_assignments')
       .select('id')
@@ -80,36 +83,90 @@ export const mobileApi = {
 
     if (existing) {
       await supabase.from('field_job_assignments').update({
-        assignment_status: 'assigned', assigned_by: userData.user?.id,
-        assigned_at: new Date().toISOString(), released_at: null, released_by: null, release_reason: null
+        assignment_status: 'assigned',
+        assigned_by: userData.user?.id,
+        assigned_at: new Date().toISOString(),
+        released_at: null, released_by: null, release_reason: null
       }).eq('id', existing.id)
     } else {
       await supabase.from('field_job_assignments').insert([{
-        job_id: jobId, employee_id: employeeId, assigned_by: userData.user?.id,
-        assignment_status: 'assigned', assigned_at: new Date().toISOString()
+        job_id: jobId, employee_id: employeeId,
+        assigned_by: userData.user?.id,
+        assignment_status: 'assigned',
+        assigned_at: new Date().toISOString()
       }])
     }
-    await supabase.from('jobs').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', jobId)
+
+    // Update job status to in_progress
+    await supabase.from('jobs').update({ 
+      status: 'in_progress', 
+      updated_at: new Date().toISOString() 
+    }).eq('id', jobId)
+
     return { success: true }
   },
 
+  // ============================================
+  // START JOB
+  // ============================================
   async startJob(jobId, employeeId, lat, lng) {
     await supabase.from('field_job_assignments').update({
-      assignment_status: 'in_progress', started_at: new Date().toISOString(),
-      check_in_time: new Date().toISOString(), check_in_latitude: lat, check_in_longitude: lng
+      assignment_status: 'in_progress',
+      started_at: new Date().toISOString(),
+      check_in_time: new Date().toISOString(),
+      check_in_latitude: lat, check_in_longitude: lng
     }).eq('job_id', jobId).eq('employee_id', employeeId)
-    await supabase.from('jobs').update({ status: 'in_progress', actual_start_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', jobId)
+
+    await supabase.from('jobs').update({ 
+      status: 'in_progress', 
+      actual_start_time: new Date().toISOString(),
+      updated_at: new Date().toISOString() 
+    }).eq('id', jobId)
+
     return { success: true }
   },
 
+  // ============================================
+  // ✅ FIXED: COMPLETE JOB - Updates both assignment AND job status
+  // ============================================
   async completeJob(jobId, employeeId) {
-    await supabase.from('field_job_assignments').update({
-      assignment_status: 'completed', completed_at: new Date().toISOString()
-    }).eq('job_id', jobId).eq('employee_id', employeeId)
-    await supabase.from('jobs').update({ status: 'completed', actual_end_time: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', jobId)
+    console.log('🔴 Completing job:', jobId, 'employee:', employeeId)
+
+    // 1. Update assignment to completed
+    const { error: assignError } = await supabase
+      .from('field_job_assignments')
+      .update({
+        assignment_status: 'completed',
+        completed_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId)
+      .eq('employee_id', employeeId)
+
+    if (assignError) {
+      console.error('❌ Assignment update error:', assignError)
+      return { success: false, error: assignError.message }
+    }
+
+    // 2. Update job status to completed
+    const { error: jobError } = await supabase
+      .from('jobs')
+      .update({ 
+        status: 'completed', 
+        actual_end_time: new Date().toISOString(),
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', jobId)
+
+    if (jobError) {
+      console.error('❌ Job update error:', jobError)
+      return { success: false, error: jobError.message }
+    }
+
+    console.log('✅ Job completed successfully')
     return { success: true }
   },
 
+  // Clock in/out
   async clockIn(employeeId, jobId, lat, lng) {
     if (!employeeId) return { success: false }
     await supabase.from('attendance_records').upsert([{
@@ -123,10 +180,13 @@ export const mobileApi = {
   async clockOut(employeeId) {
     if (!employeeId) return { success: false }
     const today = new Date().toISOString().split('T')[0]
-    await supabase.from('attendance_records').update({ clock_out_time: new Date().toISOString(), check_out_method: 'gps' }).eq('employee_id', employeeId).eq('attendance_date', today)
+    await supabase.from('attendance_records').update({ 
+      clock_out_time: new Date().toISOString(), check_out_method: 'gps' 
+    }).eq('employee_id', employeeId).eq('attendance_date', today)
     return { success: true }
   },
 
+  // Photos
   async uploadJobPhoto(jobId, employeeId, file, photoType, caption) {
     const fileExt = file.name.split('.').pop()
     const fileName = `job-photos/${jobId}/${Date.now()}.${fileExt}`
@@ -134,15 +194,22 @@ export const mobileApi = {
     const { error: uploadError } = await supabase.storage.from('fleet').upload(fileName, file, { upsert: true })
     if (uploadError) return { error: uploadError.message }
     const { data: { publicUrl } } = supabase.storage.from('fleet').getPublicUrl(fileName)
-    const { data, error } = await supabase.from('job_photos').insert([{ job_id: jobId, employee_id: employeeId, photo_type: photoType, photo_url: publicUrl, caption }]).select().single()
+    const { data, error } = await supabase.from('job_photos').insert([{ 
+      job_id: jobId, employee_id: employeeId, photo_type: photoType, photo_url: publicUrl, caption 
+    }]).select().single()
     return { data, error }
   },
 
+  // Signature
   async saveSignature(jobId, signatureUrl, clientName, rating) {
-    const { data, error } = await supabase.from('client_signatures').insert([{ job_id: jobId, signature_url: signatureUrl, signed_by: clientName, client_name: clientName, satisfaction_rating: rating }]).select().single()
+    const { data, error } = await supabase.from('client_signatures').insert([{ 
+      job_id: jobId, signature_url: signatureUrl, signed_by: clientName, 
+      client_name: clientName, satisfaction_rating: rating 
+    }]).select().single()
     return { data, error }
   },
 
+  // Tasks
   async getJobTasks(jobId) {
     const { data, error } = await supabase.from('job_checklist_items').select('*').eq('job_id', jobId).order('item_number')
     return { data, error }
@@ -160,6 +227,11 @@ export const mobileApi = {
     const today = new Date().toISOString().split('T')[0]
     const { data: myJobs } = await mobileApi.getMyJobs(employeeId)
     const { data: attendance } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).eq('attendance_date', today).single()
-    return { jobsToday: myJobs?.length || 0, isClockedIn: !!attendance?.clock_in_time && !attendance?.clock_out_time, clockInTime: attendance?.clock_in_time || null, completedJobs: myJobs?.filter(j => j.status === 'completed').length || 0 }
+    return { 
+      jobsToday: myJobs?.length || 0, 
+      isClockedIn: !!attendance?.clock_in_time && !attendance?.clock_out_time, 
+      clockInTime: attendance?.clock_in_time || null, 
+      completedJobs: myJobs?.filter(j => j.status === 'completed').length || 0 
+    }
   }
 }
