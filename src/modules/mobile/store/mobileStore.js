@@ -2,30 +2,48 @@ import { create } from 'zustand'
 import { mobileApi } from '../api/mobileApi'
 
 const useMobileStore = create((set, get) => ({
+  employee: null,
   openJobs: [],
   myJobs: [],
   selectedJob: null,
-  jobTasks: [],
-  myProfile: null,
+  attendance: null,
+  leaveRequests: [],
+  leaveTypes: [],
+  messages: [],
+  notifications: [],
   stats: {},
   loading: false,
-  error: null,
+
+  init: async (userId) => {
+    set({ loading: true })
+    const { data: employee } = await mobileApi.getEmployee(userId)
+    if (employee) {
+      set({ employee })
+      await Promise.all([
+        get().fetchOpenJobs(),
+        get().fetchMyJobs(employee.id),
+        get().fetchAttendance(employee.id),
+        get().fetchStats(employee.id),
+      ])
+    }
+    set({ loading: false })
+  },
 
   fetchOpenJobs: async () => {
-    set({ loading: true })
-    const { data, error } = await mobileApi.getOpenJobs()
-    if (error) { set({ error: error.message, loading: false }); return { success: false } }
-    set({ openJobs: data || [], loading: false })
-    return { success: true, data }
+    const { data } = await mobileApi.getOpenJobs()
+    set({ openJobs: data })
   },
 
   fetchMyJobs: async (employeeId) => {
-    if (!employeeId) return { success: false }
-    set({ loading: true })
-    const { data, error } = await mobileApi.getMyJobs(employeeId)
-    if (error) { set({ error: error.message, loading: false }); return { success: false } }
-    set({ myJobs: data || [], loading: false })
-    return { success: true, data }
+    if (!employeeId) return
+    const { data } = await mobileApi.getMyJobs(employeeId)
+    set({ myJobs: data })
+  },
+
+  fetchJobDetail: async (jobId) => {
+    const { data } = await mobileApi.getJobDetail(jobId)
+    set({ selectedJob: data })
+    return data
   },
 
   selectJob: async (jobId, employeeId) => {
@@ -34,8 +52,8 @@ const useMobileStore = create((set, get) => ({
     return result
   },
 
-  startJob: async (jobId, employeeId, lat, lng) => {
-    const result = await mobileApi.startJob(jobId, employeeId, lat, lng)
+  startJob: async (jobId, employeeId) => {
+    const result = await mobileApi.startJob(jobId, employeeId)
     if (result.success) await get().fetchMyJobs(employeeId)
     return result
   },
@@ -46,67 +64,77 @@ const useMobileStore = create((set, get) => ({
     return result
   },
 
-  setSelectedJob: (job) => set({ selectedJob: job }),
-
-  clockIn: async (employeeId, jobId, lat, lng) => {
-    return await mobileApi.clockIn(employeeId, jobId, lat, lng)
+  clockIn: async (employeeId, lat, lng) => {
+    await mobileApi.clockIn(employeeId, lat, lng)
+    await get().fetchAttendance(employeeId)
+    await get().fetchStats(employeeId)
   },
 
-  clockOut: async (employeeId) => {
-    return await mobileApi.clockOut(employeeId)
+  clockOut: async (employeeId, lat, lng) => {
+    await mobileApi.clockOut(employeeId, lat, lng)
+    await get().fetchAttendance(employeeId)
+    await get().fetchStats(employeeId)
   },
 
-  uploadPhoto: async (jobId, employeeId, file, photoType, caption) => {
-    const { data, error } = await mobileApi.uploadJobPhoto(jobId, employeeId, file, photoType, caption)
-    if (error) return { success: false, error }
-    return { success: true, data }
+  fetchAttendance: async (employeeId) => {
+    const { data } = await mobileApi.getTodayAttendance(employeeId)
+    set({ attendance: data })
   },
 
-  saveSignature: async (jobId, signatureUrl, clientName, rating) => {
-    const { data, error } = await mobileApi.saveSignature(jobId, signatureUrl, clientName, rating)
-    if (error) return { success: false, error: error.message }
-    return { success: true, data }
+  uploadPhoto: async (jobId, employeeId, file, type, caption) => {
+    return await mobileApi.uploadPhoto(jobId, employeeId, file, type, caption)
   },
 
-  createSuppliesRequest: async (requestData, items) => {
-    const result = await mobileApi.createSuppliesRequest(requestData, items)
-    if (result.error) return { success: false, error: result.error.message }
-    return { success: true, data: result.data }
+  reportIncident: async (data) => {
+    return await mobileApi.reportIncident(data)
   },
 
-  reportIncident: async (incidentData) => {
-    const { data, error } = await mobileApi.reportIncident(incidentData)
-    if (error) return { success: false, error: error.message }
-    return { success: true, data }
+  saveJobReport: async (data) => {
+    return await mobileApi.saveJobReport(data)
   },
 
-  fetchJobTasks: async (jobId) => {
-    const { data, error } = await mobileApi.getJobTasks(jobId)
-    if (error) return { success: false }
-    set({ jobTasks: data || [] })
-    return { success: true, data }
+  getJobReport: async (jobId, employeeId) => {
+    return await mobileApi.getJobReport(jobId, employeeId)
   },
 
-  updateTaskItem: async (id, updates) => {
-    const { data, error } = await mobileApi.updateTaskItem(id, updates)
-    if (error) return { success: false }
-    set(state => ({ jobTasks: state.jobTasks.map(t => t.id === id ? data : t) }))
-    return { success: true }
+  fetchLeaveRequests: async (employeeId) => {
+    const { data } = await mobileApi.getLeaveRequests(employeeId)
+    set({ leaveRequests: data })
   },
 
-  fetchMyProfile: async (userId) => {
-    const { data, error } = await mobileApi.getMyProfile(userId)
-    if (error) return { success: false }
-    set({ myProfile: data })
-    return { success: true, data }
+  fetchLeaveTypes: async () => {
+    const { data } = await mobileApi.getLeaveTypes()
+    set({ leaveTypes: data })
   },
 
-  fetchMobileStats: async (employeeId) => {
+  applyLeave: async (data) => {
+    return await mobileApi.applyLeave(data)
+  },
+
+  fetchMessages: async (userId) => {
+    const { data } = await mobileApi.getMessages(userId)
+    set({ messages: data })
+  },
+
+  sendMessage: async (data) => {
+    return await mobileApi.sendMessage(data)
+  },
+
+  fetchNotifications: async (userId) => {
+    const { data } = await mobileApi.getNotifications(userId)
+    set({ notifications: data })
+  },
+
+  markNotificationRead: async (id) => {
+    await mobileApi.markNotificationRead(id)
+  },
+
+  fetchStats: async (employeeId) => {
     const stats = await mobileApi.getMobileStats(employeeId)
     set({ stats })
-    return stats
   },
 
+  setSelectedJob: (job) => set({ selectedJob: job }),
   clearError: () => set({ error: null }),
 }))
 
