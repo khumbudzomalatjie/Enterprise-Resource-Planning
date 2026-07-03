@@ -25,12 +25,11 @@ export const mobileApi = {
   },
 
   // ============================================
-  // GET MY JOBS - Only active (not completed/released)
+  // GET MY JOBS - Only active assignments
   // ============================================
   async getMyJobs(employeeId) {
     if (!employeeId) return { data: [] }
 
-    // Get ONLY active assignments (assigned, accepted, in_progress)
     const { data: assignments, error } = await supabase
       .from('field_job_assignments')
       .select('job_id, assignment_status, assigned_at, started_at, completed_at')
@@ -45,7 +44,6 @@ export const mobileApi = {
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
 
-    // Get the actual jobs - only those still in_progress
     const { data: jobs } = await supabase
       .from('jobs')
       .select(`
@@ -58,7 +56,7 @@ export const mobileApi = {
         job_categories(name, color)
       `)
       .in('id', jobIds)
-      .in('status', ['in_progress'])  // Only show jobs still in_progress
+      .in('status', ['in_progress'])
 
     const merged = (jobs || []).map(job => {
       const assignment = assignments.find(a => a.job_id === job.id)
@@ -97,7 +95,6 @@ export const mobileApi = {
       }])
     }
 
-    // Update job status to in_progress
     await supabase.from('jobs').update({ 
       status: 'in_progress', 
       updated_at: new Date().toISOString() 
@@ -119,7 +116,6 @@ export const mobileApi = {
 
     await supabase.from('jobs').update({ 
       status: 'in_progress', 
-      actual_start_time: new Date().toISOString(),
       updated_at: new Date().toISOString() 
     }).eq('id', jobId)
 
@@ -127,12 +123,11 @@ export const mobileApi = {
   },
 
   // ============================================
-  // ✅ FIXED: COMPLETE JOB - Updates both assignment AND job status
+  // COMPLETE JOB - Only updates existing columns
   // ============================================
   async completeJob(jobId, employeeId) {
     console.log('🔴 Completing job:', jobId, 'employee:', employeeId)
 
-    // 1. Update assignment to completed
     const { error: assignError } = await supabase
       .from('field_job_assignments')
       .update({
@@ -147,12 +142,10 @@ export const mobileApi = {
       return { success: false, error: assignError.message }
     }
 
-    // 2. Update job status to completed
     const { error: jobError } = await supabase
       .from('jobs')
       .update({ 
         status: 'completed', 
-        actual_end_time: new Date().toISOString(),
         updated_at: new Date().toISOString() 
       })
       .eq('id', jobId)
