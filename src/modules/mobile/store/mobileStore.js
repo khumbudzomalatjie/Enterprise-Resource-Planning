@@ -30,9 +30,7 @@ const useMobileStore = create((set, get) => ({
 
   selectJob: async (jobId, employeeId) => {
     const result = await mobileApi.selectJob(jobId, employeeId)
-    if (result.success) {
-      await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
-    }
+    if (result.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
     return result
   },
 
@@ -44,21 +42,14 @@ const useMobileStore = create((set, get) => ({
 
   completeJob: async (jobId, employeeId) => {
     const result = await mobileApi.completeJob(jobId, employeeId)
-    if (result.success) {
-      await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
-    }
+    if (result.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
     return result
   },
 
   setSelectedJob: (job) => set({ selectedJob: job }),
 
-  clockIn: async (employeeId, jobId, lat, lng) => {
-    return await mobileApi.clockIn(employeeId, jobId, lat, lng)
-  },
-
-  clockOut: async (employeeId) => {
-    return await mobileApi.clockOut(employeeId)
-  },
+  clockIn: async (employeeId, jobId, lat, lng) => await mobileApi.clockIn(employeeId, jobId, lat, lng),
+  clockOut: async (employeeId) => await mobileApi.clockOut(employeeId),
 
   uploadPhoto: async (jobId, employeeId, file, photoType, caption) => {
     const { data, error } = await mobileApi.uploadJobPhoto(jobId, employeeId, file, photoType, caption)
@@ -68,6 +59,18 @@ const useMobileStore = create((set, get) => ({
 
   saveSignature: async (jobId, signatureUrl, clientName, rating) => {
     const { data, error } = await mobileApi.saveSignature(jobId, signatureUrl, clientName, rating)
+    if (error) return { success: false, error: error.message }
+    return { success: true, data }
+  },
+
+  createSuppliesRequest: async (requestData, items) => {
+    const result = await mobileApi.createSuppliesRequest(requestData, items)
+    if (result.error) return { success: false, error: result.error.message }
+    return { success: true, data: result.data }
+  },
+
+  reportIncident: async (incidentData) => {
+    const { data, error } = await mobileApi.reportIncident(incidentData)
     if (error) return { success: false, error: error.message }
     return { success: true, data }
   },
