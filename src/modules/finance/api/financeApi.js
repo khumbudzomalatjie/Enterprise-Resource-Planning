@@ -19,7 +19,6 @@ export const financeApi = {
     })
     
     if (!error) {
-      // Get the approval to know what was approved
       const { data: approval } = await supabase
         .from('approvals_queue')
         .select('*')
@@ -55,7 +54,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Get pending vendors for approval
   async getPendingVendors() {
     const { data, error } = await supabase
       .from('vendors')
@@ -65,7 +63,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Accounts Payable
   async getAccountsPayable(filters = {}) {
     let query = supabase
       .from('accounts_payable')
@@ -96,7 +93,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Accounts Receivable
   async getAccountsReceivable(filters = {}) {
     let query = supabase
       .from('accounts_receivable')
@@ -108,7 +104,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Payments
   async getPayments() {
     const { data, error } = await supabase
       .from('finance_payments')
@@ -125,7 +120,6 @@ export const financeApi = {
       .select()
       .single()
     
-    // Update payable/receivable balance
     if (!error && paymentData.reference_id) {
       if (paymentData.payment_type === 'accounts_payable') {
         const { data: payable } = await supabase
@@ -155,7 +149,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Budgets
   async getBudgets(fiscalYear = null) {
     let query = supabase
       .from('finance_budgets')
@@ -176,7 +169,6 @@ export const financeApi = {
     return { data, error }
   },
 
-  // General Ledger
   async getLedger(filters = {}) {
     let query = supabase
       .from('general_ledger')
@@ -191,20 +183,107 @@ export const financeApi = {
     return { data, error }
   },
 
-  // Dashboard Stats
+  // ✅ NEW: Get completed jobs ready for invoicing
+  async getCompletedJobs() {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select(`
+        id, job_number, title, status, scheduled_date, actual_start_time, actual_end_time,
+        quoted_amount, cleaners_required, site_address, site_city,
+        clients(company_name, client_code, phone, email),
+        job_categories(name, color),
+        field_job_assignments(
+          id, employee_id, assignment_status, started_at, completed_at,
+          employees(first_name, last_name, employee_code)
+        )
+      `)
+      .eq('status', 'completed')
+      .order('actual_end_time', { ascending: false })
+      .limit(50)
+
+    // Get quotation/invoice info for these jobs
+    const jobIds = (data || []).map(j => j.id)
+    let quotations = []
+    let invoices = []
+    
+    if (jobIds.length > 0) {
+      const { data: quots } = await supabase
+        .from('quotations')
+        .select('id, quotation_number, total_amount, status, job_id')
+        .in('job_id', jobIds)
+      quotations = quots || []
+
+      const { data: invs } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, total_amount, status, job_id')
+        .in('job_id', jobIds)
+      invoices = invs || []
+    }
+
+    const merged = (data || []).map(job => ({
+      ...job,
+      quotation: quotations.find(q => q.job_id === job.id) || null,
+      invoice: invoices.find(i => i.job_id === job.id) || null,
+      hasInvoice: invoices.some(i => i.job_id === job.id),
+      hasQuotation: quotations.some(q => q.job_id === job.id)
+    }))
+
+    return { data: merged, error }
+  },
+
+  // ✅ NEW: Generate invoice from completed job
+  async generateInvoiceFromJob(jobId) {
+    const { data: job } = await supabase
+      .from('jobs')
+      .select('*, clients(company_name, client_code, email, phone, address_line1, city)')
+      .eq('id', jobId)
+      .single()
+
+    if (!job) return { error: 'Job not found' }
+
+    const invoiceNumber = 'INV-' + Date.now().toString(36).toUpperCase().slice(-6)
+    
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .insert([{
+        invoice_number: invoiceNumber,
+        job_id: jobId,
+        client_id: job.client_id,
+        client_name: job.clients?.company_name,
+        client_email: job.clients?.email,
+        client_address: `${job.clients?.address_line1 || ''}, ${job.clients?.city || ''}`,
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal: job.quoted_amount || 0,
+        tax_rate: 15,
+        tax_amount: (job.quoted_amount || 0) * 0.15,
+        total_amount: (job.quoted_amount || 0) * 1.15,
+        status: 'draft',
+        notes: `Invoice for job ${job.job_number} - ${job.title}`
+      }])
+      .select()
+      .single()
+
+    return { data: invoice, error }
+  },
+
   async getFinanceStats() {
     const [
       { count: pendingApprovals },
       { data: payables },
       { data: receivables },
       { data: recentPayments },
-      { data: budgets }
+      { data: budgets },
+      { count: completedJobs },  // ✅ NEW
+      { count: unbilledJobs }    // ✅ NEW
     ] = await Promise.all([
       supabase.from('approvals_queue').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('accounts_payable').select('amount, amount_paid').neq('status', 'paid'),
       supabase.from('accounts_receivable').select('amount, amount_received').neq('status', 'paid'),
       supabase.from('finance_payments').select('amount').order('payment_date', { ascending: false }).limit(50),
-      supabase.from('finance_budgets').select('*').eq('status', 'active')
+      supabase.from('finance_budgets').select('*').eq('status', 'active'),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
+      supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'completed').not('id', 'in', supabase.from('invoices').select('job_id'))
     ])
 
     const totalPayables = payables?.reduce((sum, p) => sum + (p.amount - (p.amount_paid || 0)), 0) || 0
@@ -219,7 +298,9 @@ export const financeApi = {
       totalBudget,
       totalSpent,
       monthlyPayments: recentPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0,
-      budgetUtilization: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
+      budgetUtilization: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
+      completedJobs: completedJobs || 0,    // ✅ NEW
+      unbilledJobs: unbilledJobs || 0       // ✅ NEW
     }
   }
 }
