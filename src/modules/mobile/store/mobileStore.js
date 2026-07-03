@@ -42,11 +42,9 @@ const useMobileStore = create((set, get) => ({
     return result
   },
 
-  // ✅ FIXED: Refresh both lists after completion
   completeJob: async (jobId, employeeId) => {
     const result = await mobileApi.completeJob(jobId, employeeId)
     if (result.success) {
-      // Refresh both - completed job disappears from myJobs, appears in openJobs
       await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
     }
     return result
