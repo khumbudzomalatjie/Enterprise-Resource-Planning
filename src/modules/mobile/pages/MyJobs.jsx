@@ -17,8 +17,7 @@ export default function MyJobs() {
   const [jobSearch, setJobSearch] = useState('')
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
-  
-  // Photo modal
+
   const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [photoJobId, setPhotoJobId] = useState(null)
   const [photoType, setPhotoType] = useState('before')
@@ -26,13 +25,11 @@ export default function MyJobs() {
   const [selectedFile, setSelectedFile] = useState(null)
   const fileInputRef = useRef(null)
 
-  // Supplies modal
   const [showSuppliesModal, setShowSuppliesModal] = useState(false)
   const [suppliesJobId, setSuppliesJobId] = useState(null)
   const [supplyItem, setSupplyItem] = useState('')
   const [supplyQty, setSupplyQty] = useState(1)
 
-  // Incident modal
   const [showIncidentModal, setShowIncidentModal] = useState(false)
   const [incidentJobId, setIncidentJobId] = useState(null)
   const [incidentTitle, setIncidentTitle] = useState('')
@@ -70,7 +67,6 @@ export default function MyJobs() {
     toast.success('Refreshed!')
   }
 
-  // === JOB ACTIONS ===
   const handleSelectJob = async (jobId) => {
     if (!myEmployeeId) { toast.error('Profile not ready'); return }
     if (myJobs.length > 0) { toast.error('Complete current job first'); return }
@@ -100,24 +96,11 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  // === PHOTO UPLOAD ===
-  const openPhotoModal = (jobId, type) => {
-    setPhotoJobId(jobId)
-    setPhotoType(type)
-    setPhotoCaption('')
-    setSelectedFile(null)
-    setShowPhotoModal(true)
-  }
-
-  const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0])
-    }
-  }
+  const openPhotoModal = (jobId, type) => { setPhotoJobId(jobId); setPhotoType(type); setPhotoCaption(''); setSelectedFile(null); setShowPhotoModal(true) }
+  const handleFileSelect = (e) => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]) }
 
   const handleUploadPhoto = async () => {
     if (!selectedFile) { toast.error('Please select a photo'); return }
-    if (!photoJobId || !myEmployeeId) return
     setUpdatingJob(photoJobId)
     const result = await uploadPhoto(photoJobId, myEmployeeId, selectedFile, photoType, photoCaption)
     result.success ? toast.success(`${photoType} photo uploaded!`) : toast.error('Upload failed')
@@ -125,20 +108,13 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  // === SUPPLIES REQUEST ===
-  const openSuppliesModal = (jobId) => {
-    setSuppliesJobId(jobId)
-    setSupplyItem('')
-    setSupplyQty(1)
-    setShowSuppliesModal(true)
-  }
+  const openSuppliesModal = (jobId) => { setSuppliesJobId(jobId); setSupplyItem(''); setSupplyQty(1); setShowSuppliesModal(true) }
 
   const handleSuppliesRequest = async () => {
     if (!supplyItem) { toast.error('Enter item name'); return }
-    if (!suppliesJobId || !myEmployeeId) return
     setUpdatingJob(suppliesJobId)
     const result = await createSuppliesRequest(
-      { job_id: suppliesJobId, employee_id: myEmployeeId, status: 'pending', notes: `Requested from mobile for job` },
+      { job_id: suppliesJobId, employee_id: myEmployeeId, status: 'pending', notes: 'Requested from mobile' },
       [{ item_name: supplyItem, quantity: supplyQty, unit: 'each' }]
     )
     result.success ? toast.success('Supplies requested!') : toast.error('Failed')
@@ -146,34 +122,23 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  // === INCIDENT REPORT ===
-  const openIncidentModal = (jobId) => {
-    setIncidentJobId(jobId)
-    setIncidentTitle('')
-    setIncidentDesc('')
-    setIncidentType('other')
-    setIncidentSeverity('medium')
-    setShowIncidentModal(true)
-  }
+  const openIncidentModal = (jobId) => { setIncidentJobId(jobId); setIncidentTitle(''); setIncidentDesc(''); setIncidentType('other'); setIncidentSeverity('medium'); setShowIncidentModal(true) }
 
   const handleIncidentReport = async () => {
     if (!incidentTitle) { toast.error('Enter incident title'); return }
-    if (!incidentJobId || !myEmployeeId) return
     setUpdatingJob(incidentJobId)
     const result = await reportIncident({
       job_id: incidentJobId, employee_id: myEmployeeId, reported_by: user?.id,
       title: incidentTitle, description: incidentDesc,
       incident_type: incidentType, severity: incidentSeverity,
       incident_date: new Date().toISOString().split('T')[0],
-      incident_time: new Date().toTimeString().slice(0, 5),
-      status: 'reported'
+      incident_time: new Date().toTimeString().slice(0, 5), status: 'reported'
     })
     result.success ? toast.success('Incident reported!') : toast.error('Failed')
     setShowIncidentModal(false)
     setUpdatingJob(null)
   }
 
-  // === HELPERS ===
   const canComplete = (job) => job.assignment_status === 'in_progress'
   const needsStart = (job) => job.assignment_status === 'assigned' || job.assignment_status === 'accepted'
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -188,7 +153,6 @@ export default function MyJobs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
-      {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white">
         <div className="flex items-center justify-between">
           <div><h1 className="text-2xl font-bold">Jobs</h1><p className="text-blue-100 text-sm mt-1">Auto-refreshes</p></div>
@@ -205,7 +169,6 @@ export default function MyJobs() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="px-5 -mt-2">
         <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
           <button onClick={() => setActiveTab('open')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700 shadow-lg' : 'text-white/70'}`}><List className="w-4 h-4" /> Open ({filteredOpen.length})</button>
@@ -213,12 +176,8 @@ export default function MyJobs() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-5 mt-3 mb-3">
-        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" /><input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" /></div>
-      </div>
+      <div className="px-5 mt-3 mb-3"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" /><input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" /></div></div>
 
-      {/* Job Lists */}
       <div className="px-5">
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
@@ -243,14 +202,10 @@ export default function MyJobs() {
                   <div className="flex justify-between mb-2"><div className="flex-1"><h3 className="font-semibold text-slate-800 text-sm">{job.title}</h3><p className="text-xs text-slate-400">{job.job_number} · {job.clients?.company_name}</p></div><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${needsStart(job) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{needsStart(job) ? 'Selected' : 'In Progress'}</span></div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" />{job.scheduled_date === todayStr ? 'Today' : formatDate(job.scheduled_date)}<span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
-                  
-                  {/* Start / Complete Buttons */}
                   <div className="flex gap-2 mb-2">
                     <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><Play className="w-3.5 h-3.5" /> {needsStart(job) ? 'Start Job' : 'Restart'}</button>
                     <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id || !canComplete(job)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm ${canComplete(job) ? 'bg-emerald-600 text-white active:scale-95' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>{canComplete(job) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}{canComplete(job) ? 'Complete' : 'Start First'}</button>
                   </div>
-
-                  {/* Photo / Supplies / Incident Buttons - ALWAYS VISIBLE */}
                   <div className="grid grid-cols-3 gap-1.5">
                     <button onClick={() => openPhotoModal(job.id, 'before')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Camera className="w-3 h-3" /> Photos</button>
                     <button onClick={() => openSuppliesModal(job.id)} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Package className="w-3 h-3" /> Supplies</button>
@@ -263,7 +218,6 @@ export default function MyJobs() {
         )}
       </div>
 
-      {/* === PHOTO MODAL === */}
       {showPhotoModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowPhotoModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
@@ -279,7 +233,6 @@ export default function MyJobs() {
         </div>
       )}
 
-      {/* === SUPPLIES MODAL === */}
       {showSuppliesModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowSuppliesModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
@@ -294,7 +247,6 @@ export default function MyJobs() {
         </div>
       )}
 
-      {/* === INCIDENT MODAL === */}
       {showIncidentModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowIncidentModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
