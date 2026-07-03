@@ -9,7 +9,7 @@ import {
   AlertCircle, FileText, 
   Sparkles, Sun, Moon, ArrowLeft,
   ShoppingCart, Receipt, BarChart3,
-  Briefcase, Building2, CheckCircle2, FileInvoice
+  Briefcase, Building2, CheckCircle2, FileText as FileInvoice, ChevronRight
 } from 'lucide-react'
 
 export default function FinanceDashboard() {
@@ -71,7 +71,7 @@ export default function FinanceDashboard() {
           ))}
         </div>
 
-        {/* ✅ NEW: Completed Jobs Ready for Invoicing */}
+        {/* Completed Jobs Ready for Invoicing */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="neu-raised rounded-3xl p-6 mb-8 border-l-4 border-emerald-500">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
