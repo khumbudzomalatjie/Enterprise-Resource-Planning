@@ -48,8 +48,13 @@ const useMobileStore = create((set, get) => ({
 
   setSelectedJob: (job) => set({ selectedJob: job }),
 
-  clockIn: async (employeeId, jobId, lat, lng) => await mobileApi.clockIn(employeeId, jobId, lat, lng),
-  clockOut: async (employeeId) => await mobileApi.clockOut(employeeId),
+  clockIn: async (employeeId, jobId, lat, lng) => {
+    return await mobileApi.clockIn(employeeId, jobId, lat, lng)
+  },
+
+  clockOut: async (employeeId) => {
+    return await mobileApi.clockOut(employeeId)
+  },
 
   uploadPhoto: async (jobId, employeeId, file, photoType, caption) => {
     const { data, error } = await mobileApi.uploadJobPhoto(jobId, employeeId, file, photoType, caption)
