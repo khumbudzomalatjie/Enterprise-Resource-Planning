@@ -18,7 +18,6 @@ export default function MyJobs() {
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
-  // Initial load + realtime refresh
   useEffect(() => {
     setupAndLoad()
 
@@ -108,15 +107,8 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  // ✅ Check if job has been started (in_progress)
-  const canComplete = (job) => {
-    return job.assignment_status === 'in_progress'
-  }
-
-  // ✅ Check if job is only selected (assigned) but not started
-  const needsStart = (job) => {
-    return job.assignment_status === 'assigned' || job.assignment_status === 'accepted'
-  }
+  const canComplete = (job) => job.assignment_status === 'in_progress'
+  const needsStart = (job) => job.assignment_status === 'assigned' || job.assignment_status === 'accepted'
 
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
   const todayStr = new Date().toISOString().split('T')[0]
@@ -220,22 +212,14 @@ export default function MyJobs() {
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-2"><Calendar className="w-3 h-3" />{job.scheduled_date === todayStr ? 'Today' : formatDate(job.scheduled_date)}<span className="mx-1">·</span><Clock className="w-3 h-3" />{job.scheduled_start_time?.slice(0,5)}</div>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-3"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 40)}</div>
                   
-                  {/* ✅ BUTTONS - Start always active, Complete only after Start */}
                   <div className="flex gap-2 mb-2">
-                    <button 
-                      onClick={() => handleStartJob(job.id)} 
-                      disabled={updatingJob === job.id}
+                    <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id}
                       className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm">
-                      <Play className="w-3.5 h-3.5" /> 
-                      {needsStart(job) ? 'Start Job' : canComplete(job) ? 'Restart' : 'Start'}
+                      <Play className="w-3.5 h-3.5" /> {needsStart(job) ? 'Start Job' : canComplete(job) ? 'Restart' : 'Start'}
                     </button>
-                    <button 
-                      onClick={() => handleCompleteJob(job.id)} 
-                      disabled={updatingJob === job.id || !canComplete(job)}
+                    <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id || !canComplete(job)}
                       className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 shadow-sm ${
-                        canComplete(job) 
-                          ? 'bg-emerald-600 text-white' 
-                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        canComplete(job) ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                       }`}>
                       {canComplete(job) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                       {canComplete(job) ? 'Complete' : 'Start First'}
