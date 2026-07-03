@@ -10,7 +10,6 @@ export const mobileApi = {
       .select('*, clients(company_name, client_code, phone, city), job_categories(name, color)')
       .in('status', ['pending', 'scheduled'])
       .order('scheduled_date', { ascending: true })
-      .order('scheduled_start_time', { ascending: true })
       .limit(50)
     return { data, error }
   },
@@ -22,27 +21,21 @@ export const mobileApi = {
     if (!employeeId) return { data: [] }
     const { data: assignments, error } = await supabase
       .from('field_job_assignments')
-      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
+      .select('job_id, assignment_status')
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
-      .order('assigned_at', { ascending: false })
-    if (error || !assignments || assignments.length === 0) return { data: [] }
+    if (error || !assignments?.length) return { data: [] }
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
-    if (jobIds.length === 0) return { data: [] }
     const { data: jobs } = await supabase
       .from('jobs')
       .select('*, clients(company_name, client_code, phone, city), job_categories(name, color)')
       .in('id', jobIds)
-      .in('status', ['in_progress'])
-    const merged = (jobs || []).map(job => {
-      const a = assignments.find(x => x.job_id === job.id)
-      return { ...job, assignment_status: a?.assignment_status || null }
-    })
-    return { data: merged }
+      .eq('status', 'in_progress')
+    return { data: (jobs || []).map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
   },
 
   // ============================================
-  // SELECT JOB
+  // SELECT JOB - Only update columns that exist
   // ============================================
   async selectJob(jobId, employeeId) {
     const { data: userData } = await supabase.auth.getUser()
@@ -52,10 +45,11 @@ export const mobileApi = {
       .eq('job_id', jobId)
       .eq('employee_id', employeeId)
       .maybeSingle()
+
     if (existing) {
       await supabase.from('field_job_assignments').update({
         assignment_status: 'assigned', assigned_by: userData.user?.id,
-        assigned_at: new Date().toISOString(), released_at: null, released_by: null, release_reason: null
+        assigned_at: new Date().toISOString(), released_at: null, release_reason: null
       }).eq('id', existing.id)
     } else {
       await supabase.from('field_job_assignments').insert([{
@@ -63,7 +57,8 @@ export const mobileApi = {
         assignment_status: 'assigned', assigned_at: new Date().toISOString()
       }])
     }
-    await supabase.from('jobs').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', jobId)
+    // Only update status - safest column
+    await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
     return { success: true }
   },
 
@@ -71,35 +66,47 @@ export const mobileApi = {
   // START JOB
   // ============================================
   async startJob(jobId, employeeId, lat, lng) {
-    await supabase.from('field_job_assignments').update({
-      assignment_status: 'in_progress', started_at: new Date().toISOString(),
-      check_in_time: new Date().toISOString(), check_in_latitude: lat, check_in_longitude: lng
-    }).eq('job_id', jobId).eq('employee_id', employeeId)
-    await supabase.from('jobs').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', jobId)
+    const updates = { assignment_status: 'in_progress', started_at: new Date().toISOString() }
+    if (lat) { updates.check_in_latitude = lat; updates.check_in_longitude = lng }
+    await supabase.from('field_job_assignments').update(updates).eq('job_id', jobId).eq('employee_id', employeeId)
     return { success: true }
   },
 
   // ============================================
-  // COMPLETE JOB
+  // COMPLETE JOB - Only update status column
   // ============================================
   async completeJob(jobId, employeeId) {
     await supabase.from('field_job_assignments').update({
       assignment_status: 'completed', completed_at: new Date().toISOString()
     }).eq('job_id', jobId).eq('employee_id', employeeId)
-    await supabase.from('jobs').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', jobId)
+    // Only update status - no other columns
+    await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobId)
     return { success: true }
   },
 
   // ============================================
-  // CLOCK IN / OUT
+  // CLOCK IN - Fixed column name
   // ============================================
-  async clockIn(employeeId, jobId, lat, lng) {
+  async clockIn(employeeId, lat, lng) {
     if (!employeeId) return { success: false }
-    await supabase.from('attendance_records').upsert([{
-      employee_id: employeeId, attendance_date: new Date().toISOString().split('T')[0],
-      clock_in_time: new Date().toISOString(), check_in_method: 'gps',
-      check_in_latitude: lat, check_in_longitude: lng, status: 'present'
-    }], { onConflict: 'employee_id,attendance_date' })
+    const today = new Date().toISOString().split('T')[0]
+    const { data: existing } = await supabase.from('attendance_records')
+      .select('id').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle()
+
+    const record = {
+      employee_id: employeeId,
+      attendance_date: today,
+      clock_in_time: new Date().toISOString(),
+      check_in_method: 'gps',
+      status: 'present'
+    }
+    if (lat) { record.check_in_latitude = lat; record.check_in_longitude = lng }
+
+    if (existing) {
+      await supabase.from('attendance_records').update(record).eq('id', existing.id)
+    } else {
+      await supabase.from('attendance_records').insert([record])
+    }
     return { success: true }
   },
 
@@ -140,7 +147,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // SUPPLIES REQUEST
+  // SUPPLIES
   // ============================================
   async createSuppliesRequest(requestData, items) {
     const { data: request, error } = await supabase.from('supplies_requests').insert([requestData]).select().single()
@@ -152,7 +159,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // INCIDENT REPORT
+  // INCIDENT
   // ============================================
   async reportIncident(incidentData) {
     const { data, error } = await supabase.from('incidents').insert([incidentData]).select().single()
@@ -166,7 +173,6 @@ export const mobileApi = {
     const { data, error } = await supabase.from('job_checklist_items').select('*').eq('job_id', jobId).order('item_number')
     return { data, error }
   },
-
   async updateTaskItem(id, updates) {
     const { data, error } = await supabase.from('job_checklist_items').update(updates).eq('id', id).select().single()
     return { data, error }
@@ -181,18 +187,22 @@ export const mobileApi = {
   },
 
   // ============================================
-  // STATS
+  // STATS - Fixed employee_id reference
   // ============================================
   async getMobileStats(employeeId) {
     if (!employeeId) return { jobsToday: 0, isClockedIn: false, clockInTime: null, completedJobs: 0 }
     const today = new Date().toISOString().split('T')[0]
     const { data: myJobs } = await mobileApi.getMyJobs(employeeId)
-    const { data: attendance } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).eq('attendance_date', today).single()
+    const { data: attendance } = await supabase.from('attendance_records')
+      .select('clock_in_time, clock_out_time')
+      .eq('employee_id', employeeId)
+      .eq('attendance_date', today)
+      .maybeSingle()
     return {
       jobsToday: myJobs?.length || 0,
       isClockedIn: !!attendance?.clock_in_time && !attendance?.clock_out_time,
       clockInTime: attendance?.clock_in_time || null,
-      completedJobs: myJobs?.filter(j => j.status === 'completed').length || 0
+      completedJobs: 0
     }
   }
 }
