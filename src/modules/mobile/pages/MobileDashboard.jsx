@@ -5,14 +5,18 @@ import useAuthStore from '../../../store/authStore'
 import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
-import { Clock, Briefcase, Calendar, MessageCircle, Bell, User, LogIn, LogOut, MapPin, CheckCircle2, TrendingUp, BarChart3 } from 'lucide-react'
+import { Clock, Briefcase, MessageCircle, Bell, LogIn, LogOut, MapPin, CheckCircle2 } from 'lucide-react'
 
 export default function MobileDashboard() {
   const { user } = useAuthStore()
-  const { employee, stats, kpiData, attendance, myJobs, openJobs, init, clockIn, clockOut } = useMobileStore()
+  const { employee, stats, attendance, myJobs, openJobs, init, clockIn, clockOut } = useMobileStore()
   const navigate = useNavigate()
 
   useEffect(() => { if (user?.id) init(user.id) }, [user?.id])
+
+  // ✅ Only management roles see KPI/performance
+  const managementRoles = ['super_admin', 'admin', 'operations_manager', 'supervisor', 'hr_manager']
+  const isManagement = managementRoles.includes(user?.role)
 
   const handleClock = async () => {
     if (!employee) return
@@ -39,7 +43,6 @@ export default function MobileDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
-      {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -47,11 +50,10 @@ export default function MobileDashboard() {
             <p className="text-blue-100 text-sm">{new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           </div>
           <button onClick={() => navigate('/mobile/profile')} className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
+            <span className="text-white font-bold text-lg">{employee?.first_name?.[0]}{employee?.last_name?.[0]}</span>
           </button>
         </div>
 
-        {/* Clock In/Out Button */}
         <motion.button whileTap={{ scale: 0.95 }} onClick={handleClock}
           className={`w-full py-5 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 shadow-lg ${isClockedIn ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
           {isClockedIn ? <LogOut className="w-6 h-6" /> : <LogIn className="w-6 h-6" />}
@@ -62,7 +64,7 @@ export default function MobileDashboard() {
         )}
       </div>
 
-      {/* Live Stats Cards */}
+      {/* Stats Cards - Employee operational data only */}
       <div className="px-5 -mt-2">
         <div className="grid grid-cols-3 gap-3">
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/mobile/jobs')}
@@ -79,36 +81,12 @@ export default function MobileDashboard() {
             <p className="text-xs text-slate-500">Week Hrs</p>
           </motion.button>
 
-          <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/mobile/jobs')}
+          <motion.button whileTap={{ scale: 0.95 }}
             className="bg-white rounded-2xl p-4 shadow-md text-center">
             <CheckCircle2 className="w-6 h-6 text-purple-600 mx-auto mb-1" />
             <p className="text-2xl font-bold text-slate-800">{stats?.completedToday || 0}</p>
             <p className="text-xs text-slate-500">Completed</p>
           </motion.button>
-        </div>
-      </div>
-
-      {/* KPI Performance */}
-      <div className="px-5 mt-4">
-        <h3 className="text-white font-semibold mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4" />Performance</h3>
-        <div className="bg-white rounded-2xl p-4 shadow-md">
-          <div className="grid grid-cols-4 gap-2 text-center">
-            {[
-              { label: 'Today', value: kpiData?.completedToday || 0 },
-              { label: 'Week', value: kpiData?.completedWeek || 0 },
-              { label: 'Month', value: kpiData?.completedMonth || 0 },
-              { label: 'Year', value: kpiData?.completedYear || 0 },
-            ].map(k => (
-              <div key={k.label}>
-                <p className="text-xl font-bold text-slate-800">{k.value}</p>
-                <p className="text-[10px] text-slate-500">{k.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-xs text-slate-500">
-            <span>Avg: {kpiData?.avgPerDay || 0}/day</span>
-            <span>Total: {kpiData?.totalCompleted || 0}</span>
-          </div>
         </div>
       </div>
 
