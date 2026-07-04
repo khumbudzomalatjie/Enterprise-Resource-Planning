@@ -5,135 +5,70 @@ const useMobileStore = create((set, get) => ({
   employee: null,
   openJobs: [],
   myJobs: [],
+  completedJobs: [],
   selectedJob: null,
   attendance: null,
+  weeklyAttendance: [],
   leaveRequests: [],
   leaveTypes: [],
+  leaveBalances: [],
   messages: [],
   notifications: [],
   stats: {},
   loading: false,
+  error: null,
 
   init: async (userId) => {
     set({ loading: true })
     const { data: employee } = await mobileApi.getEmployee(userId)
     if (employee) {
       set({ employee })
+      // Register device
+      await mobileApi.registerDevice(userId, employee.id, {
+        device_type: 'web', device_name: navigator.userAgent, device_os: navigator.platform, app_version: '1.0.0'
+      })
       await Promise.all([
-        get().fetchOpenJobs(),
-        get().fetchMyJobs(employee.id),
-        get().fetchAttendance(employee.id),
-        get().fetchStats(employee.id),
+        get().fetchOpenJobs(), get().fetchMyJobs(employee.id), get().fetchCompletedJobs(employee.id),
+        get().fetchAttendance(employee.id), get().fetchWeeklyAttendance(employee.id),
+        get().fetchNotifications(userId), get().fetchStats(employee.id),
+        get().fetchLeaveTypes(), get().fetchLeaveBalances(employee.id), get().fetchLeaveRequests(employee.id)
       ])
     }
     set({ loading: false })
   },
 
-  fetchOpenJobs: async () => {
-    const { data } = await mobileApi.getOpenJobs()
-    set({ openJobs: data })
-  },
+  fetchOpenJobs: async () => { const { data } = await mobileApi.getOpenJobs(); set({ openJobs: data }) },
+  fetchMyJobs: async (eid) => { if (!eid) return; const { data } = await mobileApi.getMyJobs(eid); set({ myJobs: data }) },
+  fetchCompletedJobs: async (eid) => { if (!eid) return; const { data } = await mobileApi.getCompletedJobs(eid); set({ completedJobs: data }) },
+  fetchJobDetail: async (jobId) => { const { data } = await mobileApi.getJobDetail(jobId); set({ selectedJob: data }); return data },
 
-  fetchMyJobs: async (employeeId) => {
-    if (!employeeId) return
-    const { data } = await mobileApi.getMyJobs(employeeId)
-    set({ myJobs: data })
-  },
+  selectJob: async (jobId, eid) => { const r = await mobileApi.selectJob(jobId, eid); if (r.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(eid)]); return r },
+  startJob: async (jobId, eid, lat, lng) => { const r = await mobileApi.startJob(jobId, eid, lat, lng); if (r.success) await get().fetchMyJobs(eid); return r },
+  completeJob: async (jobId, eid, lat, lng) => { const r = await mobileApi.completeJob(jobId, eid, lat, lng); if (r.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(eid), get().fetchCompletedJobs(eid)]); return r },
 
-  fetchJobDetail: async (jobId) => {
-    const { data } = await mobileApi.getJobDetail(jobId)
-    set({ selectedJob: data })
-    return data
-  },
+  clockIn: async (eid, lat, lng) => { await mobileApi.clockIn(eid, lat, lng); await Promise.all([get().fetchAttendance(eid), get().fetchWeeklyAttendance(eid), get().fetchStats(eid)]) },
+  clockOut: async (eid, lat, lng) => { await mobileApi.clockOut(eid, lat, lng); await Promise.all([get().fetchAttendance(eid), get().fetchWeeklyAttendance(eid), get().fetchStats(eid)]) },
+  fetchAttendance: async (eid) => { const { data } = await mobileApi.getTodayAttendance(eid); set({ attendance: data }) },
+  fetchWeeklyAttendance: async (eid) => { const { data } = await mobileApi.getWeeklyAttendance(eid); set({ weeklyAttendance: data }) },
 
-  selectJob: async (jobId, employeeId) => {
-    const result = await mobileApi.selectJob(jobId, employeeId)
-    if (result.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
-    return result
-  },
+  uploadPhoto: async (jobId, eid, file, type, caption) => await mobileApi.uploadPhoto(jobId, eid, file, type, caption),
+  reportIncident: async (data) => await mobileApi.reportIncident(data),
+  saveJobReport: async (data) => await mobileApi.saveJobReport(data),
+  getJobReport: async (jobId, eid) => await mobileApi.getJobReport(jobId, eid),
 
-  startJob: async (jobId, employeeId) => {
-    const result = await mobileApi.startJob(jobId, employeeId)
-    if (result.success) await get().fetchMyJobs(employeeId)
-    return result
-  },
+  fetchLeaveRequests: async (eid) => { const { data } = await mobileApi.getLeaveRequests(eid); set({ leaveRequests: data }) },
+  fetchLeaveTypes: async () => { const { data } = await mobileApi.getLeaveTypes(); set({ leaveTypes: data }) },
+  fetchLeaveBalances: async (eid) => { const { data } = await mobileApi.getLeaveBalances(eid); set({ leaveBalances: data }) },
+  applyLeave: async (data) => await mobileApi.applyLeave(data),
 
-  completeJob: async (jobId, employeeId) => {
-    const result = await mobileApi.completeJob(jobId, employeeId)
-    if (result.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(employeeId)])
-    return result
-  },
+  fetchMessages: async (userId) => { const { data } = await mobileApi.getMessages(userId); set({ messages: data }) },
+  sendMessage: async (data) => await mobileApi.sendMessage(data),
 
-  clockIn: async (employeeId, lat, lng) => {
-    await mobileApi.clockIn(employeeId, lat, lng)
-    await get().fetchAttendance(employeeId)
-    await get().fetchStats(employeeId)
-  },
+  fetchNotifications: async (userId) => { const { data } = await mobileApi.getNotifications(userId); set({ notifications: data }) },
+  markNotificationRead: async (id) => { await mobileApi.markNotificationRead(id); set(s => ({ notifications: s.notifications.map(n => n.id === id ? { ...n, is_read: true } : n) })) },
+  markAllNotificationsRead: async (userId) => { await mobileApi.markAllNotificationsRead(userId); set(s => ({ notifications: s.notifications.map(n => ({ ...n, is_read: true })) })) },
 
-  clockOut: async (employeeId, lat, lng) => {
-    await mobileApi.clockOut(employeeId, lat, lng)
-    await get().fetchAttendance(employeeId)
-    await get().fetchStats(employeeId)
-  },
-
-  fetchAttendance: async (employeeId) => {
-    const { data } = await mobileApi.getTodayAttendance(employeeId)
-    set({ attendance: data })
-  },
-
-  uploadPhoto: async (jobId, employeeId, file, type, caption) => {
-    return await mobileApi.uploadPhoto(jobId, employeeId, file, type, caption)
-  },
-
-  reportIncident: async (data) => {
-    return await mobileApi.reportIncident(data)
-  },
-
-  saveJobReport: async (data) => {
-    return await mobileApi.saveJobReport(data)
-  },
-
-  getJobReport: async (jobId, employeeId) => {
-    return await mobileApi.getJobReport(jobId, employeeId)
-  },
-
-  fetchLeaveRequests: async (employeeId) => {
-    const { data } = await mobileApi.getLeaveRequests(employeeId)
-    set({ leaveRequests: data })
-  },
-
-  fetchLeaveTypes: async () => {
-    const { data } = await mobileApi.getLeaveTypes()
-    set({ leaveTypes: data })
-  },
-
-  applyLeave: async (data) => {
-    return await mobileApi.applyLeave(data)
-  },
-
-  fetchMessages: async (userId) => {
-    const { data } = await mobileApi.getMessages(userId)
-    set({ messages: data })
-  },
-
-  sendMessage: async (data) => {
-    return await mobileApi.sendMessage(data)
-  },
-
-  fetchNotifications: async (userId) => {
-    const { data } = await mobileApi.getNotifications(userId)
-    set({ notifications: data })
-  },
-
-  markNotificationRead: async (id) => {
-    await mobileApi.markNotificationRead(id)
-  },
-
-  fetchStats: async (employeeId) => {
-    const stats = await mobileApi.getMobileStats(employeeId)
-    set({ stats })
-  },
-
+  fetchStats: async (eid) => { const stats = await mobileApi.getMobileStats(eid); set({ stats }) },
   setSelectedJob: (job) => set({ selectedJob: job }),
   clearError: () => set({ error: null }),
 }))
