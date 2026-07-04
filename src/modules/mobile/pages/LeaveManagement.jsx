@@ -8,97 +8,28 @@ import toast from 'react-hot-toast'
 import { 
   Calendar, Plus, Clock, AlertCircle, CheckCircle2, XCircle, 
   ChevronRight, Info, Umbrella, Stethoscope, Users, Baby, 
-  UserPlus, Briefcase, Calculator, X, RefreshCw
+  UserPlus, Briefcase, Calculator, X, RefreshCw, ArrowLeft
 } from 'lucide-react'
 
 // ============================================
 // SOUTH AFRICAN PUBLIC HOLIDAYS 2025
 // ============================================
 const SA_PUBLIC_HOLIDAYS_2025 = [
-  '2025-01-01', // New Year's Day
-  '2025-03-21', // Human Rights Day
-  '2025-04-18', // Good Friday
-  '2025-04-21', // Family Day
-  '2025-04-27', // Freedom Day
-  '2025-05-01', // Workers' Day
-  '2025-06-16', // Youth Day
-  '2025-08-09', // National Women's Day
-  '2025-09-24', // Heritage Day
-  '2025-12-16', // Day of Reconciliation
-  '2025-12-25', // Christmas Day
-  '2025-12-26', // Day of Goodwill
+  '2025-01-01', '2025-03-21', '2025-04-18', '2025-04-21',
+  '2025-04-27', '2025-05-01', '2025-06-16', '2025-08-09',
+  '2025-09-24', '2025-12-16', '2025-12-25', '2025-12-26',
 ]
 
 // ============================================
-// SA LEAVE CONFIGURATION (Backend logic only)
+// SA LEAVE CONFIGURATION
 // ============================================
 const LEAVE_CONFIG = {
-  annual: {
-    name: 'Annual Leave',
-    icon: Umbrella,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    barColor: 'bg-emerald-500',
-    daysPerYear: 21,
-    accruesPerMonth: 1.75,
-    requiresAdvanceNotice: true,
-    advanceDays: 7,
-    maxConsecutive: 30
-  },
-  sick: {
-    name: 'Sick Leave',
-    icon: Stethoscope,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    barColor: 'bg-red-500',
-    daysPerCycle: 30,
-    cycleMonths: 36,
-    requiresDoctorNote: true,
-    doctorNoteThreshold: 2,
-    maxPerOccurrence: 2
-  },
-  family_responsibility: {
-    name: 'Family Responsibility',
-    icon: Users,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    barColor: 'bg-purple-500',
-    daysPerYear: 3,
-    maxPerOccurrence: 3,
-    allowedReasons: ['child_sick', 'child_birth', 'family_death']
-  },
-  maternity: {
-    name: 'Maternity Leave',
-    icon: Baby,
-    color: 'text-pink-600',
-    bg: 'bg-pink-50',
-    barColor: 'bg-pink-500',
-    daysTotal: 120,
-    requiresMedicalCertificate: true,
-    canStartBefore: 28,
-    appliesTo: 'female'
-  },
-  parental: {
-    name: 'Parental Leave',
-    icon: UserPlus,
-    color: 'text-indigo-600',
-    bg: 'bg-indigo-50',
-    barColor: 'bg-indigo-500',
-    daysTotal: 10,
-    appliesToFathers: true,
-    appliesToAdoptiveParents: true,
-    consecutiveDays: true
-  },
-  unpaid: {
-    name: 'Unpaid Leave',
-    icon: Briefcase,
-    color: 'text-slate-600',
-    bg: 'bg-slate-50',
-    barColor: 'bg-slate-500',
-    daysPerYear: 90,
-    requiresApproval: true,
-    maxPerRequest: 30
-  }
+  annual: { name: 'Annual Leave', icon: Umbrella, color: 'text-emerald-600', bg: 'bg-emerald-50', barColor: 'bg-emerald-500', daysPerYear: 21, accruesPerMonth: 1.75 },
+  sick: { name: 'Sick Leave', icon: Stethoscope, color: 'text-red-600', bg: 'bg-red-50', barColor: 'bg-red-500', daysPerCycle: 30, cycleMonths: 36, maxPerOccurrence: 2 },
+  family_responsibility: { name: 'Family Responsibility', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50', barColor: 'bg-purple-500', daysPerYear: 3, maxPerOccurrence: 3 },
+  maternity: { name: 'Maternity Leave', icon: Baby, color: 'text-pink-600', bg: 'bg-pink-50', barColor: 'bg-pink-500', daysTotal: 120 },
+  parental: { name: 'Parental Leave', icon: UserPlus, color: 'text-indigo-600', bg: 'bg-indigo-50', barColor: 'bg-indigo-500', daysTotal: 10 },
+  unpaid: { name: 'Unpaid Leave', icon: Briefcase, color: 'text-slate-600', bg: 'bg-slate-50', barColor: 'bg-slate-500', daysPerYear: 90, maxPerRequest: 30 }
 }
 
 export default function LeaveManagement() {
@@ -112,7 +43,6 @@ export default function LeaveManagement() {
   const [validationError, setValidationError] = useState('')
   const [validationWarnings, setValidationWarnings] = useState([])
   const [activeTab, setActiveTab] = useState('balances')
-  const [showCalculator, setShowCalculator] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
@@ -121,10 +51,7 @@ export default function LeaveManagement() {
   }, [employee?.id])
 
   const loadData = async () => {
-    await Promise.all([
-      fetchLeaveRequests(employee.id),
-      fetchLeaveBalances(employee.id)
-    ])
+    await Promise.all([fetchLeaveRequests(employee.id), fetchLeaveBalances(employee.id)])
   }
 
   const handleRefresh = async () => {
@@ -137,117 +64,61 @@ export default function LeaveManagement() {
   // ============================================
   // LEAVE CALCULATOR
   // ============================================
-  const isWeekend = (date) => {
-    const d = new Date(date)
-    return d.getDay() === 0 || d.getDay() === 6
-  }
-
-  const isPublicHoliday = (date) => {
-    return SA_PUBLIC_HOLIDAYS_2025.includes(date)
-  }
-
-  const isWorkingDay = (date) => {
-    return !isWeekend(date) && !isPublicHoliday(date)
-  }
+  const isWeekend = (date) => { const d = new Date(date); return d.getDay() === 0 || d.getDay() === 6 }
+  const isPublicHoliday = (date) => SA_PUBLIC_HOLIDAYS_2025.includes(date)
+  const isWorkingDay = (date) => !isWeekend(date) && !isPublicHoliday(date)
 
   const calculateWorkingDays = (startDate, endDate) => {
     if (!startDate || !endDate) return 0
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    const start = new Date(startDate), end = new Date(endDate)
     let count = 0
-    const current = new Date(start)
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0]
-      if (isWorkingDay(dateStr)) count++
-      current.setDate(current.getDate() + 1)
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (isWorkingDay(d.toISOString().split('T')[0])) count++
     }
     return count
   }
 
   const getLeaveBreakdown = (startDate, endDate) => {
     if (!startDate || !endDate) return { workingDays: 0, weekends: 0, holidays: 0, totalCalendar: 0 }
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    const start = new Date(startDate), end = new Date(endDate)
     let workingDays = 0, weekends = 0, holidays = 0
-    const current = new Date(start)
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0]
-      if (isPublicHoliday(dateStr)) holidays++
-      else if (isWeekend(dateStr)) weekends++
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const ds = d.toISOString().split('T')[0]
+      if (isPublicHoliday(ds)) holidays++
+      else if (isWeekend(ds)) weekends++
       else workingDays++
-      current.setDate(current.getDate() + 1)
     }
-    const totalCalendar = Math.ceil((end - start) / 86400000) + 1
-    return { workingDays, weekends, holidays, totalCalendar }
+    return { workingDays, weekends, holidays, totalCalendar: Math.ceil((end - start) / 86400000) + 1 }
   }
 
-  const getBalanceForType = (typeId) => {
-    if (!typeId) return null
-    return leaveBalances.find(b => b.leave_type_id === typeId) || null
-  }
+  const getBalanceForType = (typeId) => leaveBalances.find(b => b.leave_type_id === typeId) || null
 
   const validateLeaveRequest = (typeId, startDate, endDate) => {
-    const errors = []
-    const warnings = []
+    const errors = [], warnings = []
     const days = calculateWorkingDays(startDate, endDate)
-
-    if (!typeId) return { errors: ['Please select a leave type'], warnings: [], days: 0 }
-    if (!startDate) return { errors: ['Please select a start date'], warnings: [], days: 0 }
-    if (!endDate) return { errors: ['Please select an end date'], warnings: [], days: 0 }
-    if (new Date(startDate) < new Date(new Date().toISOString().split('T')[0])) {
-      errors.push('Start date cannot be in the past')
-    }
-    if (new Date(endDate) < new Date(startDate)) {
-      errors.push('End date must be after start date')
-    }
-    if (days < 1) {
-      errors.push('Selected dates contain no working days')
-    }
-
+    if (!typeId) return { errors: ['Select a leave type'], warnings: [], days: 0 }
+    if (!startDate) return { errors: ['Select start date'], warnings: [], days: 0 }
+    if (!endDate) return { errors: ['Select end date'], warnings: [], days: 0 }
+    if (new Date(startDate) < new Date(new Date().toISOString().split('T')[0])) errors.push('Start date cannot be in the past')
+    if (new Date(endDate) < new Date(startDate)) errors.push('End date must be after start date')
+    if (days < 1) errors.push('No working days in selected period')
     const balance = getBalanceForType(typeId)
-    const leaveType = leaveTypes.find(t => t.id === typeId)
-    const typeKey = leaveType?.name?.toLowerCase().replace(/\s+/g, '_') || 'annual'
-    const config = LEAVE_CONFIG[typeKey] || LEAVE_CONFIG.annual
-
-    // Check balance
     if (balance) {
       const available = balance.remaining_days ?? (balance.total_days - (balance.used_days || 0))
-      if (days > available) {
-        errors.push(`Insufficient balance. You have ${Math.floor(available)} day(s) available`)
-      }
-      if (days > available * 0.8) {
-        warnings.push(`This uses ${Math.round((days / available) * 100)}% of your remaining balance`)
-      }
+      if (days > available) errors.push(`Insufficient balance. ${Math.floor(available)} day(s) available`)
+      if (days > available * 0.8) warnings.push(`Uses ${Math.round((days / available) * 100)}% of remaining balance`)
     }
-
-    // Check overlapping requests
-    const overlapping = leaveRequests.filter(lr =>
-      lr.status !== 'rejected' && lr.status !== 'cancelled' &&
+    const overlapping = leaveRequests.filter(lr => lr.status !== 'rejected' && lr.status !== 'cancelled' &&
       ((new Date(startDate) >= new Date(lr.start_date) && new Date(startDate) <= new Date(lr.end_date)) ||
        (new Date(endDate) >= new Date(lr.start_date) && new Date(endDate) <= new Date(lr.end_date)) ||
-       (new Date(startDate) <= new Date(lr.start_date) && new Date(endDate) >= new Date(lr.end_date)))
-    )
-    if (overlapping.length > 0) {
-      errors.push('You already have leave during this period')
-    }
-
-    // Sick leave specific
-    if (typeKey === 'sick' && days > config.maxPerOccurrence) {
-      warnings.push(`Sick leave is typically ${config.maxPerOccurrence} days per occurrence. Doctor's note required`)
-    }
-
-    // Family responsibility
-    if (typeKey === 'family_responsibility' && days > config.maxPerOccurrence) {
-      errors.push(`Family responsibility leave is limited to ${config.maxPerOccurrence} days per occurrence`)
-    }
-
+       (new Date(startDate) <= new Date(lr.start_date) && new Date(endDate) >= new Date(lr.end_date))))
+    if (overlapping.length > 0) errors.push('Already have leave during this period')
     return { errors, warnings, days }
   }
 
   const handleDateChange = (field, value) => {
     const newForm = { ...form, [field]: value }
     setForm(newForm)
-    
     if (newForm.start_date && newForm.end_date) {
       const days = calculateWorkingDays(newForm.start_date, newForm.end_date)
       setCalculatedDays(days)
@@ -260,7 +131,6 @@ export default function LeaveManagement() {
   const handleTypeChange = (typeId) => {
     const newForm = { ...form, leave_type_id: typeId }
     setForm(newForm)
-    
     if (newForm.start_date && newForm.end_date && typeId) {
       const days = calculateWorkingDays(newForm.start_date, newForm.end_date)
       setCalculatedDays(days)
@@ -272,28 +142,11 @@ export default function LeaveManagement() {
 
   const handleApply = async () => {
     const { errors, days } = validateLeaveRequest(form.leave_type_id, form.start_date, form.end_date)
-    if (errors.length > 0) {
-      setValidationError(errors[0])
-      return
-    }
-    if (days < 1) {
-      setValidationError('No working days in selected period')
-      return
-    }
-
-    const result = await applyLeave({
-      ...form,
-      employee_id: employee.id,
-      total_days: days,
-      status: 'pending'
-    })
-
-    if (result.error) {
-      toast.error(result.error.message || 'Failed to apply')
-      return
-    }
-
-    toast.success('Leave applied successfully!')
+    if (errors.length > 0) { setValidationError(errors[0]); return }
+    if (days < 1) { setValidationError('No working days in selected period'); return }
+    const result = await applyLeave({ ...form, employee_id: employee.id, total_days: days, status: 'pending' })
+    if (result.error) { toast.error(result.error.message || 'Failed'); return }
+    toast.success('Leave applied!')
     setShowForm(false)
     setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
     setCalculatedDays(0)
@@ -302,38 +155,176 @@ export default function LeaveManagement() {
     await loadData()
   }
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'approved': return <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-      case 'rejected': return <XCircle className="w-4 h-4 text-red-500" />
-      case 'cancelled': return <XCircle className="w-4 h-4 text-slate-400" />
-      default: return <Clock className="w-4 h-4 text-amber-500" />
-    }
-  }
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'approved': return 'bg-emerald-100 text-emerald-700'
-      case 'rejected': return 'bg-red-100 text-red-700'
-      case 'cancelled': return 'bg-slate-100 text-slate-500'
-      default: return 'bg-amber-100 text-amber-700'
-    }
-  }
-
-  const getLeaveTypeConfig = (typeName) => {
-    const key = typeName?.toLowerCase().replace(/\s+/g, '_') || 'annual'
-    return LEAVE_CONFIG[key] || LEAVE_CONFIG.annual
-  }
-
-  const formatDate = (d) => {
-    if (!d) return ''
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
-  }
-
+  const getStatusIcon = (s) => s === 'approved' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : s === 'rejected' ? <XCircle className="w-4 h-4 text-red-500" /> : s === 'cancelled' ? <XCircle className="w-4 h-4 text-slate-400" /> : <Clock className="w-4 h-4 text-amber-500" />
+  const getStatusColor = (s) => s === 'approved' ? 'bg-emerald-100 text-emerald-700' : s === 'rejected' ? 'bg-red-100 text-red-700' : s === 'cancelled' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-700'
+  const getLeaveTypeConfig = (n) => LEAVE_CONFIG[n?.toLowerCase().replace(/\s+/g, '_')] || LEAVE_CONFIG.annual
+  const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   const breakdown = form.start_date && form.end_date ? getLeaveBreakdown(form.start_date, form.end_date) : null
 
+  // ============================================
+  // APPLY LEAVE SCREEN (full page, scrollable)
+  // ============================================
+  if (showForm) {
+    return (
+      <div className="min-h-screen bg-slate-100 font-['Inter']">
+        {/* Header */}
+        <div className="bg-gradient-to-b from-blue-600 to-blue-700 text-white px-5 pt-8 pb-5 sticky top-0 z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <button onClick={() => { setShowForm(false); setValidationError(''); setValidationWarnings([]) }}>
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+            <h1 className="text-xl font-bold">Apply for Leave</h1>
+          </div>
+          <p className="text-blue-100 text-sm">Fill in the details below</p>
+        </div>
+
+        {/* Scrollable Form Content */}
+        <div className="px-5 py-4 space-y-4 pb-24">
+          {/* Validation Errors */}
+          {validationError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{validationError}</p>
+            </div>
+          )}
+
+          {/* Validation Warnings */}
+          {validationWarnings.map((w, i) => (
+            <div key={i} className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700">{w}</p>
+            </div>
+          ))}
+
+          {/* Leave Type Selection */}
+          <div>
+            <label className="text-sm font-semibold text-slate-700 mb-2 block">Leave Type *</label>
+            <div className="space-y-2">
+              {leaveTypes.map(type => {
+                const config = getLeaveTypeConfig(type.name)
+                const Icon = config.icon
+                const balance = getBalanceForType(type.id)
+                const remaining = balance?.remaining_days ?? (balance?.total_days || 0) - (balance?.used_days || 0)
+                return (
+                  <button key={type.id} onClick={() => handleTypeChange(type.id)}
+                    className={`w-full p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
+                      form.leave_type_id === type.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center`}>
+                      <Icon className={`w-5 h-5 ${config.color}`} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-sm text-slate-800">{type.name}</p>
+                      <p className="text-xs text-slate-500">{Math.floor(remaining)} day(s) available</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.leave_type_id === type.id ? 'border-blue-500 bg-blue-500' : 'border-slate-300'}`}>
+                      {form.leave_type_id === type.id && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Date Selection */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-slate-700 mb-1 block">Start Date *</label>
+              <input type="date" value={form.start_date} onChange={e => handleDateChange('start_date', e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700 mb-1 block">End Date *</label>
+              <input type="date" value={form.end_date} onChange={e => handleDateChange('end_date', e.target.value)}
+                min={form.start_date || new Date().toISOString().split('T')[0]}
+                className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+            </div>
+          </div>
+
+          {/* Leave Calculator */}
+          {calculatedDays > 0 && breakdown && (
+            <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Calculator className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-semibold text-slate-700">Leave Calculator</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                  <p className="text-2xl font-bold text-blue-600">{calculatedDays}</p>
+                  <p className="text-xs text-slate-500">Working Days</p>
+                </div>
+                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                  <p className="text-2xl font-bold text-slate-400">{breakdown.totalCalendar}</p>
+                  <p className="text-xs text-slate-500">Calendar Days</p>
+                </div>
+              </div>
+              <div className="flex gap-3 text-xs text-slate-500 justify-center">
+                <span>🚫 {breakdown.weekends} weekends</span>
+                <span>🎌 {breakdown.holidays} public holidays</span>
+              </div>
+              {form.leave_type_id && (() => {
+                const balance = getBalanceForType(form.leave_type_id)
+                const remaining = balance?.remaining_days ?? (balance?.total_days || 0) - (balance?.used_days || 0)
+                const afterRequest = remaining - calculatedDays
+                return (
+                  <div className="pt-2 border-t border-slate-200 flex justify-between text-xs">
+                    <span className="text-slate-500">Remaining after request:</span>
+                    <span className={`font-bold ${afterRequest < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{Math.floor(afterRequest)} day(s)</span>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Reason */}
+          <div>
+            <label className="text-sm font-semibold text-slate-700 mb-1 block">Reason (optional)</label>
+            <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })}
+              placeholder="Brief reason for leave request..." rows={3}
+              className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none" />
+          </div>
+
+          {/* Balance Summary */}
+          {form.leave_type_id && (() => {
+            const balance = getBalanceForType(form.leave_type_id)
+            if (!balance) return null
+            const total = balance.total_days || 0
+            const used = balance.used_days || 0
+            const remaining = balance.remaining_days ?? (total - used)
+            return (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-700 mb-1">Balance Summary</p>
+                <div className="flex justify-between text-xs text-blue-600">
+                  <span>Total: {Math.floor(total)} days</span>
+                  <span>Used: {Math.floor(used)} days</span>
+                  <span className="font-bold">Available: {Math.floor(remaining)} days</span>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* Fixed Bottom Buttons */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-5 py-4 flex gap-3 z-20">
+          <button onClick={() => { setShowForm(false); setValidationError(''); setValidationWarnings([]) }}
+            className="flex-1 py-3.5 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 transition-colors">
+            Cancel
+          </button>
+          <button onClick={handleApply}
+            disabled={!form.leave_type_id || !form.start_date || !form.end_date || !!validationError}
+            className="flex-1 py-3.5 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            Submit Request
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================
+  // MAIN LEAVE PAGE (Balances + History)
+  // ============================================
   return (
-    <div className="min-h-screen bg-slate-100 font-['Inter'] pb-20 overflow-y-auto">
+    <div className="min-h-screen bg-slate-100 font-['Inter'] pb-20">
       {/* Header */}
       <div className="bg-gradient-to-b from-blue-600 to-blue-700 text-white px-5 pt-8 pb-6 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-1">
@@ -348,22 +339,15 @@ export default function LeaveManagement() {
       {/* Tabs */}
       <div className="px-5 -mt-3 sticky top-[88px] z-10">
         <div className="flex gap-2 bg-white rounded-2xl p-1 shadow-md">
-          <button onClick={() => setActiveTab('balances')} 
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'balances' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
-            📊 Balances
-          </button>
-          <button onClick={() => setActiveTab('history')} 
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
-            📋 History
-          </button>
+          <button onClick={() => setActiveTab('balances')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'balances' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>📊 Balances</button>
+          <button onClick={() => setActiveTab('history')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-blue-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>📋 History</button>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Scrollable Content */}
       <div className="px-5 mt-3 pb-4">
         {activeTab === 'balances' && (
           <>
-            {/* Leave Balances Cards */}
             <div className="space-y-3 mb-4">
               {leaveBalances.length === 0 && (
                 <div className="text-center py-8 bg-white rounded-2xl shadow-sm">
@@ -379,14 +363,12 @@ export default function LeaveManagement() {
                 const pending = balance.pending_days || 0
                 const remaining = balance.remaining_days ?? (total - used - pending)
                 const percentUsed = total > 0 ? (used / total) * 100 : 0
-                const percentRemaining = total > 0 ? (remaining / total) * 100 : 0
-
                 return (
                   <motion.div key={balance.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     className={`${typeConfig.bg} rounded-2xl p-4 shadow-sm border border-slate-100`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm`}>
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
                           <Icon className={`w-5 h-5 ${typeConfig.color}`} />
                         </div>
                         <div>
@@ -396,8 +378,6 @@ export default function LeaveManagement() {
                       </div>
                       <p className={`text-2xl font-bold ${typeConfig.color}`}>{Math.floor(remaining)}</p>
                     </div>
-
-                    {/* Progress Bar */}
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs text-slate-500">
                         <span>Used: {used}</span>
@@ -405,28 +385,18 @@ export default function LeaveManagement() {
                         {pending > 0 && <span className="text-amber-600">Pending: {pending}</span>}
                       </div>
                       <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                        <div className={`h-full ${typeConfig.barColor} rounded-full transition-all duration-500`} 
-                          style={{ width: `${Math.min(percentUsed, 100)}%` }}></div>
-                      </div>
-                      <div className="flex justify-between text-[10px] text-slate-400">
-                        <span>{Math.round(percentUsed)}% used</span>
-                        <span>{Math.round(percentRemaining)}% available</span>
+                        <div className={`h-full ${typeConfig.barColor} rounded-full transition-all duration-500`} style={{ width: `${Math.min(percentUsed, 100)}%` }}></div>
                       </div>
                     </div>
-
                     {pending > 0 && (
                       <div className="mt-2 pt-2 border-t border-slate-200/50">
-                        <p className="text-xs text-amber-600 flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {pending} day(s) pending approval
-                        </p>
+                        <p className="text-xs text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> {pending} day(s) pending approval</p>
                       </div>
                     )}
                   </motion.div>
                 )
               })}
             </div>
-
-            {/* Apply Button */}
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setShowForm(true); setValidationError(''); setValidationWarnings([]); setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' }); setCalculatedDays(0) }}
               className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-colors mb-2">
               <Plus className="w-5 h-5" /> Apply for Leave
@@ -444,13 +414,10 @@ export default function LeaveManagement() {
               </div>
             )}
             {leaveRequests.map(lr => (
-              <motion.div key={lr.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-4 shadow-sm">
+              <motion.div key={lr.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl p-4 shadow-sm">
                 <div className="flex justify-between items-start">
                   <div className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      lr.status === 'approved' ? 'bg-emerald-100' : lr.status === 'rejected' ? 'bg-red-100' : 'bg-amber-100'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${lr.status === 'approved' ? 'bg-emerald-100' : lr.status === 'rejected' ? 'bg-red-100' : 'bg-amber-100'}`}>
                       {getStatusIcon(lr.status)}
                     </div>
                     <div>
@@ -460,173 +427,13 @@ export default function LeaveManagement() {
                       {lr.reason && <p className="text-xs text-slate-400 mt-1 italic">"{lr.reason.slice(0, 80)}"</p>}
                     </div>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold capitalize ${getStatusColor(lr.status)}`}>
-                    {lr.status}
-                  </span>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold capitalize ${getStatusColor(lr.status)}`}>{lr.status}</span>
                 </div>
               </motion.div>
             ))}
           </div>
         )}
       </div>
-
-      {/* Apply Leave Modal */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50 flex items-end"
-            onClick={() => setShowForm(false)}>
-            <motion.div 
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25 }}
-              className="bg-white rounded-t-3xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              
-              {/* Modal Header */}
-              <div className="sticky top-0 bg-white rounded-t-3xl px-5 pt-5 pb-3 border-b border-slate-100 z-10">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Apply for Leave</h3>
-                  <button onClick={() => setShowForm(false)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200">
-                    <X className="w-5 h-5 text-slate-500" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="px-5 py-4 space-y-4">
-                {/* Validation Errors */}
-                {validationError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-700">{validationError}</p>
-                  </div>
-                )}
-
-                {/* Validation Warnings */}
-                {validationWarnings.length > 0 && validationWarnings.map((w, i) => (
-                  <div key={i} className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-                    <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-amber-700">{w}</p>
-                  </div>
-                ))}
-
-                {/* Leave Type Selection */}
-                <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-2 block">Leave Type *</label>
-                  <div className="space-y-2">
-                    {leaveTypes.map(type => {
-                      const config = getLeaveTypeConfig(type.name)
-                      const Icon = config.icon
-                      const balance = getBalanceForType(type.id)
-                      const remaining = balance?.remaining_days ?? (balance?.total_days || 0) - (balance?.used_days || 0)
-                      
-                      return (
-                        <button key={type.id} onClick={() => handleTypeChange(type.id)}
-                          className={`w-full p-3 rounded-xl border text-left flex items-center gap-3 transition-all ${
-                            form.leave_type_id === type.id 
-                              ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                              : 'border-slate-200 hover:border-slate-300'
-                          }`}>
-                          <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center`}>
-                            <Icon className={`w-5 h-5 ${config.color}`} />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-sm text-slate-800">{type.name}</p>
-                            <p className="text-xs text-slate-500">{Math.floor(remaining)} day(s) available</p>
-                          </div>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                            form.leave_type_id === type.id ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
-                          }`}>
-                            {form.leave_type_id === type.id && <CheckCircle2 className="w-3 h-3 text-white" />}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Date Selection */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-1 block">Start Date *</label>
-                    <input type="date" value={form.start_date} 
-                      onChange={e => handleDateChange('start_date', e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700 mb-1 block">End Date *</label>
-                    <input type="date" value={form.end_date}
-                      onChange={e => handleDateChange('end_date', e.target.value)}
-                      min={form.start_date || new Date().toISOString().split('T')[0]}
-                      className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                  </div>
-                </div>
-
-                {/* Leave Calculator Result */}
-                {calculatedDays > 0 && breakdown && (
-                  <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calculator className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-semibold text-slate-700">Leave Calculator</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="bg-white rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-blue-600">{calculatedDays}</p>
-                        <p className="text-xs text-slate-500">Working Days</p>
-                      </div>
-                      <div className="bg-white rounded-xl p-3 text-center">
-                        <p className="text-2xl font-bold text-slate-400">{breakdown.totalCalendar}</p>
-                        <p className="text-xs text-slate-500">Calendar Days</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 text-xs text-slate-500">
-                      <span>🚫 {breakdown.weekends} weekends</span>
-                      <span>🎌 {breakdown.holidays} holidays</span>
-                    </div>
-                    {form.leave_type_id && (
-                      <div className="pt-2 border-t border-slate-200">
-                        {(() => {
-                          const balance = getBalanceForType(form.leave_type_id)
-                          const remaining = balance?.remaining_days ?? (balance?.total_days || 0) - (balance?.used_days || 0)
-                          const afterRequest = remaining - calculatedDays
-                          return (
-                            <div className="flex justify-between text-xs">
-                              <span className="text-slate-500">Remaining after request:</span>
-                              <span className={`font-bold ${afterRequest < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                {Math.floor(afterRequest)} day(s)
-                              </span>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Reason */}
-                <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Reason (optional)</label>
-                  <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })}
-                    placeholder="Brief reason for leave request..."
-                    rows={2} className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none" />
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-2 pb-4">
-                  <button onClick={() => setShowForm(false)}
-                    className="flex-1 py-3.5 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={handleApply}
-                    disabled={!form.leave_type_id || !form.start_date || !form.end_date || !!validationError}
-                    className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                    Submit Request
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <BottomNav active="leave" />
     </div>
