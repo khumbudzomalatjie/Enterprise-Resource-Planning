@@ -5,23 +5,38 @@ export const mobileApi = {
   // EMPLOYEE
   // ============================================
   async getEmployee(userId) {
-    let { data } = await supabase.from('employees').select('*').eq('user_id', userId).single()
+    let { data } = await supabase.from('employees').select('*, teams:team_id(team_name)').eq('user_id', userId).single()
     if (!data) {
       const { data: user } = await supabase.auth.getUser()
       const email = user?.user?.email
       const { data: byEmail } = await supabase.from('employees').select('*').eq('email', email).single()
       if (byEmail) {
         await supabase.from('employees').update({ user_id: userId }).eq('id', byEmail.id)
-        return { data: byEmail }
+        data = byEmail
+      } else {
+        const { data: created } = await supabase.from('employees').insert([{
+          user_id: userId, email, first_name: email?.split('@')[0] || 'Worker',
+          last_name: '', employment_status: 'active', department: 'Cleaning',
+          employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4)
+        }]).select().single()
+        data = created
       }
-      const { data: created } = await supabase.from('employees').insert([{
-        user_id: userId, email, first_name: email?.split('@')[0] || 'Worker',
-        last_name: '', employment_status: 'active', department: 'Cleaning',
-        employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4)
-      }]).select().single()
-      return { data: created }
     }
+    // Log login
+    await supabase.rpc('log_employee_action', {
+      p_employee_id: data?.id, p_action_type: 'mobile_login',
+      p_description: 'Logged into mobile app', p_module: 'mobile'
+    })
     return { data }
+  },
+
+  async logAction(employeeId, actionType, description, refId = null, refType = null, lat = null, lng = null) {
+    await supabase.rpc('log_employee_action', {
+      p_employee_id: employeeId, p_action_type: actionType,
+      p_description: description, p_module: 'mobile',
+      p_reference_id: refId, p_reference_type: refType,
+      p_lat: lat, p_lng: lng
+    })
   },
 
   // ============================================
@@ -30,14 +45,13 @@ export const mobileApi = {
   async getOpenJobs() {
     const { data } = await supabase.from('jobs')
       .select('*, clients(company_name, phone, city), job_categories(name, color)')
-      .in('status', ['pending', 'scheduled'])
-      .order('scheduled_date').limit(50)
+      .in('status', ['pending', 'scheduled']).order('scheduled_date').limit(50)
     return { data: data || [] }
   },
 
   async getMyJobs(employeeId) {
     const { data: assignments } = await supabase.from('field_job_assignments')
-      .select('job_id, assignment_status, assigned_at, started_at')
+      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     if (!assignments?.length) return { data: [] }
@@ -48,39 +62,50 @@ export const mobileApi = {
     return { data: (jobs || []).map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
   },
 
+  async getCompletedJobs(employeeId) {
+    const { data: assignments } = await supabase.from('field_job_assignments')
+      .select('job_id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').order('completed_at', { ascending: false }).limit(20)
+    if (!assignments?.length) return { data: [] }
+    const jobIds = assignments.map(a => a.job_id)
+    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('id', jobIds)
+    return { data: jobs || [] }
+  },
+
   async getJobDetail(jobId) {
     const { data } = await supabase.from('jobs')
-      .select('*, clients(*), job_categories(*), field_job_assignments(*, employees(first_name, last_name, phone)), job_checklist_items(*)')
+      .select('*, clients(*), job_categories(*), field_job_assignments(*, employees(first_name, last_name, phone, employee_code)), job_checklist_items(*), job_photos(*), job_reports(*)')
       .eq('id', jobId).single()
     return { data }
   },
 
   // ============================================
-  // JOB ACTIONS - Simple and reliable
+  // JOB ACTIONS
   // ============================================
   async selectJob(jobId, employeeId) {
     const { error: aErr } = await supabase.from('field_job_assignments').upsert({
-      job_id: jobId, employee_id: employeeId,
-      assignment_status: 'assigned', assigned_at: new Date().toISOString()
+      job_id: jobId, employee_id: employeeId, assignment_status: 'assigned', assigned_at: new Date().toISOString()
     }, { onConflict: 'job_id,employee_id' })
     if (aErr) return { success: false, error: aErr.message }
-    const { error: jErr } = await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
-    return { success: !jErr, error: jErr?.message }
+    await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
+    await mobileApi.logAction(employeeId, 'job_selected', `Selected job`, jobId, 'job')
+    return { success: true }
   },
 
-  async startJob(jobId, employeeId) {
-    const { error } = await supabase.from('field_job_assignments').update({
-      assignment_status: 'in_progress', started_at: new Date().toISOString()
-    }).eq('job_id', jobId).eq('employee_id', employeeId)
-    return { success: !error }
+  async startJob(jobId, employeeId, lat, lng) {
+    const updates = { assignment_status: 'in_progress', started_at: new Date().toISOString() }
+    if (lat) { updates.check_in_latitude = lat; updates.check_in_longitude = lng; updates.check_in_time = new Date().toISOString() }
+    await supabase.from('field_job_assignments').update(updates).eq('job_id', jobId).eq('employee_id', employeeId)
+    await mobileApi.logAction(employeeId, 'job_started', `Started job`, jobId, 'job', lat, lng)
+    return { success: true }
   },
 
-  async completeJob(jobId, employeeId) {
+  async completeJob(jobId, employeeId, lat, lng) {
     await supabase.from('field_job_assignments').update({
       assignment_status: 'completed', completed_at: new Date().toISOString()
     }).eq('job_id', jobId).eq('employee_id', employeeId)
-    const { error } = await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobId)
-    return { success: !error }
+    await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobId)
+    await mobileApi.logAction(employeeId, 'job_completed', `Completed job`, jobId, 'job', lat, lng)
+    return { success: true }
   },
 
   // ============================================
@@ -96,6 +121,7 @@ export const mobileApi = {
     } else {
       await supabase.from('attendance_records').insert([record])
     }
+    await mobileApi.logAction(employeeId, 'clock_in', `Clocked in`, null, null, lat, lng)
     return { success: true }
   },
 
@@ -104,6 +130,7 @@ export const mobileApi = {
     const record = { clock_out_time: new Date().toISOString(), check_out_method: lat ? 'gps' : 'mobile_app' }
     if (lat) { record.check_out_latitude = lat; record.check_out_longitude = lng }
     await supabase.from('attendance_records').update(record).eq('employee_id', employeeId).eq('attendance_date', today)
+    await mobileApi.logAction(employeeId, 'clock_out', `Clocked out`, null, null, lat, lng)
     return { success: true }
   },
 
@@ -111,6 +138,12 @@ export const mobileApi = {
     const today = new Date().toISOString().split('T')[0]
     const { data } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle()
     return { data }
+  },
+
+  async getWeeklyAttendance(employeeId) {
+    const start = new Date(); start.setDate(start.getDate() - start.getDay() + 1)
+    const { data } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).gte('attendance_date', start.toISOString().split('T')[0]).order('attendance_date')
+    return { data: data || [] }
   },
 
   // ============================================
@@ -124,6 +157,7 @@ export const mobileApi = {
     if (upErr) return { error: upErr.message }
     const { data: { publicUrl } } = supabase.storage.from('job-photos').getPublicUrl(path)
     const { data, error } = await supabase.from('job_photos').insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption }]).select().single()
+    if (!error) await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
     return { data, error }
   },
 
@@ -132,6 +166,7 @@ export const mobileApi = {
   // ============================================
   async reportIncident(data) {
     const { data: result, error } = await supabase.from('incidents').insert([data]).select().single()
+    if (!error) await mobileApi.logAction(data.employee_id, 'incident_reported', `Reported incident: ${data.title}`, result?.id, 'incident')
     return { data: result, error }
   },
 
@@ -140,6 +175,7 @@ export const mobileApi = {
   // ============================================
   async saveJobReport(reportData) {
     const { data, error } = await supabase.from('job_reports').upsert(reportData, { onConflict: 'job_id,employee_id' }).select().single()
+    if (!error) await mobileApi.logAction(reportData.employee_id, 'report_saved', `Saved job report`, reportData.job_id, 'job')
     return { data, error }
   },
 
@@ -157,12 +193,19 @@ export const mobileApi = {
   },
 
   async getLeaveTypes() {
-    const { data } = await supabase.from('leave_types').select('*')
+    const { data } = await supabase.from('leave_types').select('*').eq('is_active', true)
+    return { data: data || [] }
+  },
+
+  async getLeaveBalances(employeeId) {
+    const year = new Date().getFullYear()
+    const { data } = await supabase.from('leave_balances').select('*, leave_types(name, days_per_year)').eq('employee_id', employeeId).eq('year', year)
     return { data: data || [] }
   },
 
   async applyLeave(leaveData) {
     const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select().single()
+    if (!error) await mobileApi.logAction(leaveData.employee_id, 'leave_applied', `Applied for leave`, data?.id, 'leave')
     return { data, error }
   },
 
@@ -171,10 +214,12 @@ export const mobileApi = {
   // ============================================
   async getMessages(userId) {
     const { data } = await supabase.from('messages')
-      .select('*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)')
-      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-      .order('created_at', { ascending: false }).limit(50)
-    return { data: data || [] }
+      .select('*').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(50)
+    // Get sender/receiver names
+    const userIds = [...new Set((data || []).flatMap(m => [m.sender_id, m.receiver_id]))]
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
+    const nameMap = {}; (profiles || []).forEach(p => { nameMap[p.id] = p.full_name })
+    return { data: (data || []).map(m => ({ ...m, sender_name: nameMap[m.sender_id] || 'Unknown', receiver_name: nameMap[m.receiver_id] || 'Unknown' })) }
   },
 
   async sendMessage(messageData) {
@@ -194,21 +239,42 @@ export const mobileApi = {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)
   },
 
+  async markAllNotificationsRead(userId) {
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false)
+  },
+
+  // ============================================
+  // DEVICE REGISTRATION
+  // ============================================
+  async registerDevice(userId, employeeId, deviceInfo) {
+    const { data } = await supabase.from('device_registrations').upsert({
+      user_id: userId, employee_id: employeeId, ...deviceInfo, last_active: new Date().toISOString()
+    }, { onConflict: 'user_id' }).select().single()
+    return { data }
+  },
+
   // ============================================
   // STATS
   // ============================================
   async getMobileStats(employeeId) {
     const today = new Date().toISOString().split('T')[0]
-    const [{ data: myJobs }, { data: attendance }, { data: notifications }] = await Promise.all([
+    const [{ data: myJobs }, { data: attendance }, { data: notifications }, { data: weeklyAttendance }] = await Promise.all([
       mobileApi.getMyJobs(employeeId),
       mobileApi.getTodayAttendance(employeeId),
-      supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false)
+      supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false),
+      mobileApi.getWeeklyAttendance(employeeId)
     ])
+    const totalWeekHours = (weeklyAttendance || []).reduce((sum, a) => {
+      if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time)) / 3600000
+      return sum
+    }, 0)
     return {
       jobsToday: myJobs?.length || 0,
       isClockedIn: !!attendance?.clock_in_time && !attendance?.clock_out_time,
       clockInTime: attendance?.clock_in_time || null,
-      unreadNotifications: notifications?.count || 0
+      clockOutTime: attendance?.clock_out_time || null,
+      unreadNotifications: notifications?.count || 0,
+      weeklyHours: Math.round(totalWeekHours * 10) / 10
     }
   }
 }
