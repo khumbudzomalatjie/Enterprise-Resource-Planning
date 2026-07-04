@@ -22,72 +22,48 @@ export const mobileApi = {
         data = created
       }
     }
-    // Log login
-    await supabase.rpc('log_employee_action', {
-      p_employee_id: data?.id, p_action_type: 'mobile_login',
-      p_description: 'Logged into mobile app', p_module: 'mobile'
-    })
+    await supabase.rpc('log_employee_action', { p_employee_id: data?.id, p_action_type: 'mobile_login', p_description: 'Logged into mobile app', p_module: 'mobile' })
     return { data }
   },
 
   async logAction(employeeId, actionType, description, refId = null, refType = null, lat = null, lng = null) {
-    await supabase.rpc('log_employee_action', {
-      p_employee_id: employeeId, p_action_type: actionType,
-      p_description: description, p_module: 'mobile',
-      p_reference_id: refId, p_reference_type: refType,
-      p_lat: lat, p_lng: lng
-    })
+    await supabase.rpc('log_employee_action', { p_employee_id: employeeId, p_action_type: actionType, p_description: description, p_module: 'mobile', p_reference_id: refId, p_reference_type: refType, p_lat: lat, p_lng: lng })
   },
 
   // ============================================
   // JOBS
   // ============================================
   async getOpenJobs() {
-    const { data } = await supabase.from('jobs')
-      .select('*, clients(company_name, phone, city), job_categories(name, color)')
-      .in('status', ['pending', 'scheduled']).order('scheduled_date').limit(50)
+    const { data } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('status', ['pending', 'scheduled']).order('scheduled_date').limit(50)
     return { data: data || [] }
   },
 
   async getMyJobs(employeeId) {
-    const { data: assignments } = await supabase.from('field_job_assignments')
-      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
-      .eq('employee_id', employeeId)
-      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, assignment_status, assigned_at, started_at, completed_at').eq('employee_id', employeeId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     if (!assignments?.length) return { data: [] }
     const jobIds = assignments.map(a => a.job_id)
-    const { data: jobs } = await supabase.from('jobs')
-      .select('*, clients(company_name, phone, city), job_categories(name, color)')
-      .in('id', jobIds).eq('status', 'in_progress')
+    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('id', jobIds).eq('status', 'in_progress')
     return { data: (jobs || []).map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
   },
 
   async getCompletedJobs(employeeId) {
-    const { data: assignments } = await supabase.from('field_job_assignments')
-      .select('job_id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').order('completed_at', { ascending: false }).limit(20)
+    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').order('completed_at', { ascending: false }).limit(50)
     if (!assignments?.length) return { data: [] }
     const jobIds = assignments.map(a => a.job_id)
     const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('id', jobIds)
-    return { data: jobs || [] }
+    return { data: (jobs || []).map(j => ({ ...j, completed_at: assignments.find(a => a.job_id === j.id)?.completed_at })) }
   },
 
   async getJobDetail(jobId) {
-    const { data } = await supabase.from('jobs')
-      .select('*, clients(*), job_categories(*), field_job_assignments(*, employees(first_name, last_name, phone, employee_code)), job_checklist_items(*), job_photos(*), job_reports(*)')
-      .eq('id', jobId).single()
+    const { data } = await supabase.from('jobs').select('*, clients(*), job_categories(*), field_job_assignments(*, employees(first_name, last_name, phone, employee_code)), job_checklist_items(*), job_photos(*), job_reports(*)').eq('id', jobId).single()
     return { data }
   },
 
-  // ============================================
-  // JOB ACTIONS
-  // ============================================
   async selectJob(jobId, employeeId) {
-    const { error: aErr } = await supabase.from('field_job_assignments').upsert({
-      job_id: jobId, employee_id: employeeId, assignment_status: 'assigned', assigned_at: new Date().toISOString()
-    }, { onConflict: 'job_id,employee_id' })
+    const { error: aErr } = await supabase.from('field_job_assignments').upsert({ job_id: jobId, employee_id: employeeId, assignment_status: 'assigned', assigned_at: new Date().toISOString() }, { onConflict: 'job_id,employee_id' })
     if (aErr) return { success: false, error: aErr.message }
     await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
-    await mobileApi.logAction(employeeId, 'job_selected', `Selected job`, jobId, 'job')
+    await mobileApi.logAction(employeeId, 'job_selected', 'Selected job', jobId, 'job')
     return { success: true }
   },
 
@@ -95,16 +71,14 @@ export const mobileApi = {
     const updates = { assignment_status: 'in_progress', started_at: new Date().toISOString() }
     if (lat) { updates.check_in_latitude = lat; updates.check_in_longitude = lng; updates.check_in_time = new Date().toISOString() }
     await supabase.from('field_job_assignments').update(updates).eq('job_id', jobId).eq('employee_id', employeeId)
-    await mobileApi.logAction(employeeId, 'job_started', `Started job`, jobId, 'job', lat, lng)
+    await mobileApi.logAction(employeeId, 'job_started', 'Started job', jobId, 'job', lat, lng)
     return { success: true }
   },
 
   async completeJob(jobId, employeeId, lat, lng) {
-    await supabase.from('field_job_assignments').update({
-      assignment_status: 'completed', completed_at: new Date().toISOString()
-    }).eq('job_id', jobId).eq('employee_id', employeeId)
+    await supabase.from('field_job_assignments').update({ assignment_status: 'completed', completed_at: new Date().toISOString() }).eq('job_id', jobId).eq('employee_id', employeeId)
     await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobId)
-    await mobileApi.logAction(employeeId, 'job_completed', `Completed job`, jobId, 'job', lat, lng)
+    await mobileApi.logAction(employeeId, 'job_completed', 'Completed job', jobId, 'job', lat, lng)
     return { success: true }
   },
 
@@ -116,12 +90,9 @@ export const mobileApi = {
     const record = { employee_id: employeeId, attendance_date: today, clock_in_time: new Date().toISOString(), check_in_method: lat ? 'gps' : 'mobile_app', status: 'present' }
     if (lat) { record.check_in_latitude = lat; record.check_in_longitude = lng }
     const { data: existing } = await supabase.from('attendance_records').select('id').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle()
-    if (existing) {
-      await supabase.from('attendance_records').update(record).eq('id', existing.id)
-    } else {
-      await supabase.from('attendance_records').insert([record])
-    }
-    await mobileApi.logAction(employeeId, 'clock_in', `Clocked in`, null, null, lat, lng)
+    if (existing) { await supabase.from('attendance_records').update(record).eq('id', existing.id) }
+    else { await supabase.from('attendance_records').insert([record]) }
+    await mobileApi.logAction(employeeId, 'clock_in', 'Clocked in', null, null, lat, lng)
     return { success: true }
   },
 
@@ -130,7 +101,7 @@ export const mobileApi = {
     const record = { clock_out_time: new Date().toISOString(), check_out_method: lat ? 'gps' : 'mobile_app' }
     if (lat) { record.check_out_latitude = lat; record.check_out_longitude = lng }
     await supabase.from('attendance_records').update(record).eq('employee_id', employeeId).eq('attendance_date', today)
-    await mobileApi.logAction(employeeId, 'clock_out', `Clocked out`, null, null, lat, lng)
+    await mobileApi.logAction(employeeId, 'clock_out', 'Clocked out', null, null, lat, lng)
     return { success: true }
   },
 
@@ -141,8 +112,10 @@ export const mobileApi = {
   },
 
   async getWeeklyAttendance(employeeId) {
-    const start = new Date(); start.setDate(start.getDate() - start.getDay() + 1)
-    const { data } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).gte('attendance_date', start.toISOString().split('T')[0]).order('attendance_date')
+    const now = new Date()
+    const start = new Date(now); start.setDate(now.getDate() - now.getDay() + 1); start.setHours(0, 0, 0, 0)
+    const end = new Date(now); end.setDate(start.getDate() + 6); end.setHours(23, 59, 59, 999)
+    const { data } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).gte('attendance_date', start.toISOString().split('T')[0]).lte('attendance_date', end.toISOString().split('T')[0]).order('attendance_date')
     return { data: data || [] }
   },
 
@@ -175,7 +148,7 @@ export const mobileApi = {
   // ============================================
   async saveJobReport(reportData) {
     const { data, error } = await supabase.from('job_reports').upsert(reportData, { onConflict: 'job_id,employee_id' }).select().single()
-    if (!error) await mobileApi.logAction(reportData.employee_id, 'report_saved', `Saved job report`, reportData.job_id, 'job')
+    if (!error) await mobileApi.logAction(reportData.employee_id, 'report_saved', 'Saved job report', reportData.job_id, 'job')
     return { data, error }
   },
 
@@ -205,7 +178,7 @@ export const mobileApi = {
 
   async applyLeave(leaveData) {
     const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select().single()
-    if (!error) await mobileApi.logAction(leaveData.employee_id, 'leave_applied', `Applied for leave`, data?.id, 'leave')
+    if (!error) await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave', data?.id, 'leave')
     return { data, error }
   },
 
@@ -213,9 +186,7 @@ export const mobileApi = {
   // MESSAGES
   // ============================================
   async getMessages(userId) {
-    const { data } = await supabase.from('messages')
-      .select('*').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(50)
-    // Get sender/receiver names
+    const { data } = await supabase.from('messages').select('*').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(50)
     const userIds = [...new Set((data || []).flatMap(m => [m.sender_id, m.receiver_id]))]
     const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
     const nameMap = {}; (profiles || []).forEach(p => { nameMap[p.id] = p.full_name })
@@ -235,46 +206,89 @@ export const mobileApi = {
     return { data: data || [] }
   },
 
-  async markNotificationRead(id) {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id)
-  },
-
-  async markAllNotificationsRead(userId) {
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false)
-  },
-
   // ============================================
-  // DEVICE REGISTRATION
+  // PROFILE
   // ============================================
-  async registerDevice(userId, employeeId, deviceInfo) {
-    const { data } = await supabase.from('device_registrations').upsert({
-      user_id: userId, employee_id: employeeId, ...deviceInfo, last_active: new Date().toISOString()
-    }, { onConflict: 'user_id' }).select().single()
+  async getEmployeeProfile(employeeId) {
+    const { data } = await supabase.from('employees').select('*, teams:team_id(team_name)').eq('id', employeeId).single()
     return { data }
   },
 
+  async getEmployeeAuditLog(employeeId) {
+    const { data } = await supabase.from('employee_audit_log').select('*').eq('employee_id', employeeId).order('created_at', { ascending: false }).limit(50)
+    return { data: data || [] }
+  },
+
   // ============================================
-  // STATS
+  // STATS - Real ERP data
   // ============================================
   async getMobileStats(employeeId) {
     const today = new Date().toISOString().split('T')[0]
-    const [{ data: myJobs }, { data: attendance }, { data: notifications }, { data: weeklyAttendance }] = await Promise.all([
+    const now = new Date()
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
+    const weekEnd = new Date(now); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23, 59, 59, 999)
+
+    const [
+      { data: myJobs },
+      { data: todayAttendance },
+      { data: weeklyAttendance },
+      { data: completedToday },
+      { data: notifications }
+    ] = await Promise.all([
       mobileApi.getMyJobs(employeeId),
       mobileApi.getTodayAttendance(employeeId),
-      supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false),
-      mobileApi.getWeeklyAttendance(employeeId)
+      mobileApi.getWeeklyAttendance(employeeId),
+      supabase.from('field_job_assignments').select('id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`).lte('completed_at', `${today}T23:59:59`),
+      supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false)
     ])
-    const totalWeekHours = (weeklyAttendance || []).reduce((sum, a) => {
-      if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time)) / 3600000
+
+    // Calculate weekly hours from attendance records
+    const totalWeekMs = (weeklyAttendance || []).reduce((sum, a) => {
+      if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time))
       return sum
     }, 0)
+    const weeklyHours = Math.round((totalWeekMs / 3600000) * 10) / 10
+
     return {
-      jobsToday: myJobs?.length || 0,
-      isClockedIn: !!attendance?.clock_in_time && !attendance?.clock_out_time,
-      clockInTime: attendance?.clock_in_time || null,
-      clockOutTime: attendance?.clock_out_time || null,
-      unreadNotifications: notifications?.count || 0,
-      weeklyHours: Math.round(totalWeekHours * 10) / 10
+      myJobsCount: myJobs?.length || 0,
+      weeklyHours,
+      completedToday: completedToday?.length || 0,
+      isClockedIn: !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time,
+      clockInTime: todayAttendance?.clock_in_time || null,
+      clockOutTime: todayAttendance?.clock_out_time || null,
+      unreadNotifications: notifications?.count || 0
+    }
+  },
+
+  // KPI Performance data
+  async getKPIData(employeeId) {
+    const today = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
+
+    const [
+      { data: completedToday },
+      { data: completedWeek },
+      { data: completedMonth },
+      { data: completedYear },
+      { data: allCompleted }
+    ] = await Promise.all([
+      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`),
+      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', weekStart.toISOString()),
+      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${monthStart}T00:00:00`),
+      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${yearStart}T00:00:00`),
+      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed')
+    ])
+
+    return {
+      completedToday: completedToday?.length || 0,
+      completedWeek: completedWeek?.length || 0,
+      completedMonth: completedMonth?.length || 0,
+      completedYear: completedYear?.length || 0,
+      totalCompleted: allCompleted?.length || 0,
+      avgPerDay: allCompleted?.length > 0 ? Math.round((allCompleted.length / Math.max(1, Math.ceil((now - new Date(yearStart)) / (86400000)))) * 10) / 10 : 0
     }
   }
 }
