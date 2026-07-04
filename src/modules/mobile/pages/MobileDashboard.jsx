@@ -5,11 +5,11 @@ import useAuthStore from '../../../store/authStore'
 import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
-import { Clock, Briefcase, Calendar, MessageCircle, Bell, User, LogIn, LogOut, ChevronRight, MapPin, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Clock, Briefcase, Calendar, MessageCircle, Bell, User, LogIn, LogOut, MapPin, CheckCircle2, TrendingUp, BarChart3 } from 'lucide-react'
 
 export default function MobileDashboard() {
   const { user } = useAuthStore()
-  const { employee, stats, attendance, myJobs, notifications, openJobs, init, clockIn, clockOut } = useMobileStore()
+  const { employee, stats, kpiData, attendance, myJobs, openJobs, init, clockIn, clockOut } = useMobileStore()
   const navigate = useNavigate()
 
   useEffect(() => { if (user?.id) init(user.id) }, [user?.id])
@@ -39,18 +39,19 @@ export default function MobileDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
+      {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold">Welcome, {employee?.first_name || 'Worker'}</h1>
             <p className="text-blue-100 text-sm">{new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
           </div>
-          <button onClick={() => navigate('/mobile/notifications')} className="relative w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-            <Bell className="w-5 h-5 text-white" />
-            {stats?.unreadNotifications > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">{stats.unreadNotifications}</span>}
+          <button onClick={() => navigate('/mobile/profile')} className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+            <User className="w-5 h-5 text-white" />
           </button>
         </div>
 
+        {/* Clock In/Out Button */}
         <motion.button whileTap={{ scale: 0.95 }} onClick={handleClock}
           className={`w-full py-5 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 shadow-lg ${isClockedIn ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
           {isClockedIn ? <LogOut className="w-6 h-6" /> : <LogIn className="w-6 h-6" />}
@@ -59,38 +60,70 @@ export default function MobileDashboard() {
         {isClockedIn && attendance?.clock_in_time && (
           <p className="text-center text-blue-100 text-xs mt-2">Clocked in at {new Date(attendance.clock_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
         )}
-        {attendance?.clock_out_time && !isClockedIn && (
-          <p className="text-center text-blue-100 text-xs mt-2">Clocked out at {new Date(attendance.clock_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-        )}
       </div>
 
+      {/* Live Stats Cards */}
       <div className="px-5 -mt-2">
         <div className="grid grid-cols-3 gap-3">
-          {[
-            { icon: Briefcase, label: 'My Jobs', value: myJobs?.length || 0, path: '/mobile/jobs' },
-            { icon: Clock, label: 'Week Hrs', value: `${stats?.weeklyHours || 0}h`, path: '/mobile/attendance' },
-            { icon: CheckCircle2, label: 'Completed', value: stats?.jobsToday || 0, path: '/mobile/jobs' },
-          ].map(s => (
-            <motion.button key={s.label} whileTap={{ scale: 0.95 }} onClick={() => navigate(s.path)} className="bg-white rounded-2xl p-4 shadow-md text-center">
-              <s.icon className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-              <p className="text-xl font-bold text-slate-800">{s.value}</p>
-              <p className="text-xs text-slate-500">{s.label}</p>
-            </motion.button>
-          ))}
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/mobile/jobs')}
+            className="bg-white rounded-2xl p-4 shadow-md text-center">
+            <Briefcase className="w-6 h-6 text-blue-600 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-slate-800">{stats?.myJobsCount || 0}</p>
+            <p className="text-xs text-slate-500">My Jobs</p>
+          </motion.button>
+
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/mobile/attendance')}
+            className="bg-white rounded-2xl p-4 shadow-md text-center">
+            <Clock className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-slate-800">{stats?.weeklyHours || 0}<span className="text-sm font-normal text-slate-500">hrs</span></p>
+            <p className="text-xs text-slate-500">Week Hrs</p>
+          </motion.button>
+
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/mobile/jobs')}
+            className="bg-white rounded-2xl p-4 shadow-md text-center">
+            <CheckCircle2 className="w-6 h-6 text-purple-600 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-slate-800">{stats?.completedToday || 0}</p>
+            <p className="text-xs text-slate-500">Completed</p>
+          </motion.button>
         </div>
       </div>
 
+      {/* KPI Performance */}
+      <div className="px-5 mt-4">
+        <h3 className="text-white font-semibold mb-2 flex items-center gap-2"><TrendingUp className="w-4 h-4" />Performance</h3>
+        <div className="bg-white rounded-2xl p-4 shadow-md">
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: 'Today', value: kpiData?.completedToday || 0 },
+              { label: 'Week', value: kpiData?.completedWeek || 0 },
+              { label: 'Month', value: kpiData?.completedMonth || 0 },
+              { label: 'Year', value: kpiData?.completedYear || 0 },
+            ].map(k => (
+              <div key={k.label}>
+                <p className="text-xl font-bold text-slate-800">{k.value}</p>
+                <p className="text-[10px] text-slate-500">{k.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+            <span>Avg: {kpiData?.avgPerDay || 0}/day</span>
+            <span>Total: {kpiData?.totalCompleted || 0}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Jobs */}
       {myJobs?.length > 0 && (
         <div className="px-5 mt-4">
-          <h3 className="text-white font-semibold mb-2">Active Job</h3>
+          <h3 className="text-white font-semibold mb-2">Active Jobs</h3>
           {myJobs.map(job => (
             <motion.div key={job.id} whileTap={{ scale: 0.98 }} onClick={() => navigate(`/mobile/jobs/${job.id}`)}
               className="bg-white rounded-2xl p-4 shadow-md border-l-4 border-amber-400 cursor-pointer mb-2">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-semibold text-slate-800">{job.title}</p>
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-800 text-sm">{job.title}</p>
                   <p className="text-xs text-slate-500">{job.job_number} · {job.clients?.company_name}</p>
-                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 30)}</p>
+                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 35)}</p>
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 capitalize">{job.assignment_status}</span>
               </div>
@@ -99,37 +132,26 @@ export default function MobileDashboard() {
         </div>
       )}
 
-      {openJobs?.length > 0 && !myJobs?.length && (
+      {/* Available Jobs */}
+      {openJobs?.length > 0 && (
         <div className="px-5 mt-4">
-          <h3 className="text-white font-semibold mb-2">Available Jobs</h3>
+          <h3 className="text-white font-semibold mb-2">Available Jobs ({openJobs.length})</h3>
           {openJobs.slice(0, 3).map(job => (
             <motion.div key={job.id} whileTap={{ scale: 0.98 }} onClick={() => navigate('/mobile/jobs')}
-              className="bg-white rounded-2xl p-4 shadow-md cursor-pointer mb-2">
+              className="bg-white/90 rounded-2xl p-3 shadow-sm cursor-pointer mb-2">
               <p className="font-semibold text-slate-800 text-sm">{job.title}</p>
               <p className="text-xs text-slate-500">{job.clients?.company_name} · {job.site_city}</p>
             </motion.div>
           ))}
+          {openJobs.length > 3 && (
+            <button onClick={() => navigate('/mobile/jobs')} className="w-full text-center text-white text-sm py-2 bg-white/10 rounded-xl">
+              +{openJobs.length - 3} more jobs available
+            </button>
+          )}
         </div>
       )}
 
-      <div className="px-5 mt-4">
-        <h3 className="text-white font-semibold mb-2">Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { icon: Briefcase, label: 'Open Jobs', path: '/mobile/jobs' },
-            { icon: Calendar, label: 'Leave', path: '/mobile/leave' },
-            { icon: MessageCircle, label: 'Messages', path: '/mobile/messages' },
-            { icon: AlertCircle, label: 'Attendance', path: '/mobile/attendance' },
-          ].map(a => (
-            <motion.button key={a.label} whileTap={{ scale: 0.95 }} onClick={() => navigate(a.path)} className="bg-white rounded-2xl p-4 shadow-md flex flex-col items-center gap-2">
-              <a.icon className="w-6 h-6 text-blue-600" />
-              <span className="text-sm font-medium text-slate-700">{a.label}</span>
-            </motion.button>
-          ))}
-        </div>
-      </div>
-
-      <BottomNav active="dashboard" />
+      <BottomNav active="home" />
     </div>
   )
 }
