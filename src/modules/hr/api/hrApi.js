@@ -34,7 +34,7 @@ export const hrApi = {
     if (!employee) return { data: null, error: { message: 'Employee not found' } }
 
     // Try to fetch related data separately (won't break if tables don't exist)
-    let contracts = [], leaveRequests = [], trainingRecords = [], disciplinaryRecords = []
+    let contracts = [], leaveRequests = [], leaveBalances = [], trainingRecords = [], disciplinaryRecords = [], attendanceRecords = [], auditLog = []
 
     try {
       const { data: c } = await supabase.from('contracts').select('*').eq('employee_id', id).order('created_at', { ascending: false })
@@ -47,6 +47,12 @@ export const hrApi = {
     } catch (e) {}
 
     try {
+      const year = new Date().getFullYear()
+      const { data: lb } = await supabase.from('leave_balances').select('*, leave_types(name, color, icon, days_per_year)').eq('employee_id', id).eq('year', year)
+      leaveBalances = lb || []
+    } catch (e) {}
+
+    try {
       const { data: t } = await supabase.from('training_records').select('*').eq('employee_id', id).order('created_at', { ascending: false })
       trainingRecords = t || []
     } catch (e) {}
@@ -56,13 +62,26 @@ export const hrApi = {
       disciplinaryRecords = d || []
     } catch (e) {}
 
+    try {
+      const { data: a } = await supabase.from('attendance_records').select('*').eq('employee_id', id).order('attendance_date', { ascending: false }).limit(30)
+      attendanceRecords = a || []
+    } catch (e) {}
+
+    try {
+      const { data: al } = await supabase.from('employee_audit_log').select('*').eq('employee_id', id).order('created_at', { ascending: false }).limit(50)
+      auditLog = al || []
+    } catch (e) {}
+
     return {
       data: {
         ...employee,
         contracts,
         leave_requests: leaveRequests,
+        leave_balances: leaveBalances,
         training_records: trainingRecords,
-        disciplinary_records: disciplinaryRecords
+        disciplinary_records: disciplinaryRecords,
+        attendance_records: attendanceRecords,
+        audit_log: auditLog
       },
       error: null
     }
@@ -106,6 +125,9 @@ export const hrApi = {
       .insert([safeData])
       .select()
       .single()
+    
+    // Note: Leave balances are auto-created by PostgreSQL trigger
+    
     return { data, error }
   },
 
@@ -149,6 +171,16 @@ export const hrApi = {
       })
       .eq('id', id)
     return { error }
+  },
+
+  async bulkUpdateEmployeeStatus(employeeIds, status) {
+    const { data, error } = await supabase.from('employees').update({ employment_status: status }).in('id', employeeIds).select()
+    return { data, error }
+  },
+
+  async searchEmployees(query) {
+    const { data, error } = await supabase.from('employees').select('id, first_name, last_name, employee_code, email, position, department').or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,employee_code.ilike.%${query}%`).limit(20)
+    return { data, error }
   },
 
   // ============================================
@@ -227,7 +259,28 @@ export const hrApi = {
     const { data, error } = await supabase
       .from('leave_types')
       .select('*')
-      .order('name')
+      .order('sort_order')
+    return { data, error }
+  },
+
+  async getEmployeeLeaveBalances(employeeId) {
+    const year = new Date().getFullYear()
+    const { data, error } = await supabase
+      .from('leave_balances')
+      .select('*, leave_types(name, color, icon, days_per_year)')
+      .eq('employee_id', employeeId)
+      .eq('year', year)
+      .order('created_at')
+    return { data, error }
+  },
+
+  async updateLeaveBalance(id, updates) {
+    const { data, error } = await supabase
+      .from('leave_balances')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
     return { data, error }
   },
 
@@ -298,6 +351,25 @@ export const hrApi = {
       .eq('id', id)
       .select()
       .single()
+    return { data, error }
+  },
+
+  // ============================================
+  // ATTENDANCE RECORDS
+  // ============================================
+
+  async getEmployeeAttendance(employeeId, filters = {}) {
+    let query = supabase
+      .from('attendance_records')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('attendance_date', { ascending: false })
+
+    if (filters.date_from) query = query.gte('attendance_date', filters.date_from)
+    if (filters.date_to) query = query.lte('attendance_date', filters.date_to)
+    if (filters.limit) query = query.limit(filters.limit)
+
+    const { data, error } = await query
     return { data, error }
   },
 
@@ -397,15 +469,5 @@ export const hrApi = {
     } catch (error) {
       return { totalEmployees: 0, activeEmployees: 0, pendingLeave: 0, activeContracts: 0, ongoingTraining: 0, disciplinaryCases: 0 }
     }
-  },
-
-  async bulkUpdateEmployeeStatus(employeeIds, status) {
-    const { data, error } = await supabase.from('employees').update({ employment_status: status }).in('id', employeeIds).select()
-    return { data, error }
-  },
-
-  async searchEmployees(query) {
-    const { data, error } = await supabase.from('employees').select('id, first_name, last_name, employee_code, email, position, department').or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,employee_code.ilike.%${query}%`).limit(20)
-    return { data, error }
   },
 }
