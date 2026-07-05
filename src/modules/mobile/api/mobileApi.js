@@ -182,6 +182,20 @@ export const mobileApi = {
     return { data, error }
   },
 
+  // ✅ Upload leave attachment (medical certificate, etc.)
+  async uploadLeaveAttachment(leaveRequestId, employeeId, file) {
+    const ext = file.name.split('.').pop()
+    const path = `leave/${employeeId}/${leaveRequestId}-${Date.now()}.${ext}`
+    try { await supabase.storage.createBucket('leave-attachments', { public: true, fileSizeLimit: 10485760 }) } catch {}
+    const { error: upErr } = await supabase.storage.from('leave-attachments').upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) return { error: upErr.message }
+    const { data: { publicUrl } } = supabase.storage.from('leave-attachments').getPublicUrl(path)
+    const { data, error } = await supabase.from('leave_requests').update({
+      attachment_url: publicUrl, attachment_name: file.name, attachment_type: file.type, attachment_size: file.size
+    }).eq('id', leaveRequestId).select().single()
+    return { data, error }
+  },
+
   // ============================================
   // MESSAGES
   // ============================================
@@ -220,7 +234,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // STATS - Real ERP data
+  // STATS
   // ============================================
   async getMobileStats(employeeId) {
     const today = new Date().toISOString().split('T')[0]
@@ -229,38 +243,27 @@ export const mobileApi = {
     const weekEnd = new Date(now); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23, 59, 59, 999)
 
     const [
-      { data: myJobs },
-      { data: todayAttendance },
-      { data: weeklyAttendance },
-      { data: completedToday },
-      { data: notifications }
+      { data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance },
+      { data: completedToday }, { data: notifications }
     ] = await Promise.all([
-      mobileApi.getMyJobs(employeeId),
-      mobileApi.getTodayAttendance(employeeId),
-      mobileApi.getWeeklyAttendance(employeeId),
+      mobileApi.getMyJobs(employeeId), mobileApi.getTodayAttendance(employeeId), mobileApi.getWeeklyAttendance(employeeId),
       supabase.from('field_job_assignments').select('id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`).lte('completed_at', `${today}T23:59:59`),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false)
     ])
 
-    // Calculate weekly hours from attendance records
     const totalWeekMs = (weeklyAttendance || []).reduce((sum, a) => {
       if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time))
       return sum
     }, 0)
-    const weeklyHours = Math.round((totalWeekMs / 3600000) * 10) / 10
 
     return {
-      myJobsCount: myJobs?.length || 0,
-      weeklyHours,
-      completedToday: completedToday?.length || 0,
-      isClockedIn: !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time,
-      clockInTime: todayAttendance?.clock_in_time || null,
-      clockOutTime: todayAttendance?.clock_out_time || null,
+      myJobsCount: myJobs?.length || 0, weeklyHours: Math.round((totalWeekMs / 3600000) * 10) / 10,
+      completedToday: completedToday?.length || 0, isClockedIn: !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time,
+      clockInTime: todayAttendance?.clock_in_time || null, clockOutTime: todayAttendance?.clock_out_time || null,
       unreadNotifications: notifications?.count || 0
     }
   },
 
-  // KPI Performance data
   async getKPIData(employeeId) {
     const today = new Date().toISOString().split('T')[0]
     const now = new Date()
@@ -268,13 +271,7 @@ export const mobileApi = {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
     const yearStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
 
-    const [
-      { data: completedToday },
-      { data: completedWeek },
-      { data: completedMonth },
-      { data: completedYear },
-      { data: allCompleted }
-    ] = await Promise.all([
+    const [{ data: completedToday }, { data: completedWeek }, { data: completedMonth }, { data: completedYear }, { data: allCompleted }] = await Promise.all([
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', weekStart.toISOString()),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${monthStart}T00:00:00`),
@@ -283,12 +280,10 @@ export const mobileApi = {
     ])
 
     return {
-      completedToday: completedToday?.length || 0,
-      completedWeek: completedWeek?.length || 0,
-      completedMonth: completedMonth?.length || 0,
-      completedYear: completedYear?.length || 0,
+      completedToday: completedToday?.length || 0, completedWeek: completedWeek?.length || 0,
+      completedMonth: completedMonth?.length || 0, completedYear: completedYear?.length || 0,
       totalCompleted: allCompleted?.length || 0,
-      avgPerDay: allCompleted?.length > 0 ? Math.round((allCompleted.length / Math.max(1, Math.ceil((now - new Date(yearStart)) / (86400000)))) * 10) / 10 : 0
+      avgPerDay: allCompleted?.length > 0 ? Math.round((allCompleted.length / Math.max(1, Math.ceil((now - new Date(yearStart)) / 86400000))) * 10) / 10 : 0
     }
   }
 }
