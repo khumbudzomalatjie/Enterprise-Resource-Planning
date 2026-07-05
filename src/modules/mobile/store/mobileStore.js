@@ -62,7 +62,19 @@ const useMobileStore = create((set, get) => ({
   fetchLeaveRequests: async (eid) => { const { data } = await mobileApi.getLeaveRequests(eid); set({ leaveRequests: data }) },
   fetchLeaveTypes: async () => { const { data } = await mobileApi.getLeaveTypes(); set({ leaveTypes: data }) },
   fetchLeaveBalances: async (eid) => { const { data } = await mobileApi.getLeaveBalances(eid); set({ leaveBalances: data }) },
-  applyLeave: async (data) => await mobileApi.applyLeave(data),
+  
+  // ✅ FIXED: Refresh leave data after applying
+  applyLeave: async (data) => {
+    const result = await mobileApi.applyLeave(data)
+    if (!result.error && result.data) {
+      const eid = data.employee_id
+      await Promise.all([
+        get().fetchLeaveRequests(eid),
+        get().fetchLeaveBalances(eid)
+      ])
+    }
+    return result
+  },
 
   fetchMessages: async (userId) => { const { data } = await mobileApi.getMessages(userId); set({ messages: data }) },
   sendMessage: async (data) => await mobileApi.sendMessage(data),
