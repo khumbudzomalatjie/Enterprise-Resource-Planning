@@ -166,23 +166,33 @@ export const mobileApi = {
   },
 
   async getLeaveTypes() {
-    const { data } = await supabase.from('leave_types').select('*').eq('is_active', true)
+    const { data } = await supabase.from('leave_types').select('*').eq('is_active', true).order('sort_order')
     return { data: data || [] }
   },
 
   async getLeaveBalances(employeeId) {
     const year = new Date().getFullYear()
-    const { data } = await supabase.from('leave_balances').select('*, leave_types(name, days_per_year)').eq('employee_id', employeeId).eq('year', year)
+    const { data } = await supabase.from('leave_balances').select('*, leave_types(name, days_per_year, color)').eq('employee_id', employeeId).eq('year', year)
     return { data: data || [] }
   },
 
   async applyLeave(leaveData) {
-    const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select().single()
-    if (!error) await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave', data?.id, 'leave')
+    // Ensure leave_type_id is a UUID
+    if (leaveData.leave_type_id) {
+      const { data: lt } = await supabase.from('leave_types').select('id').eq('id', leaveData.leave_type_id).single()
+      if (!lt) {
+        const { data: byName } = await supabase.from('leave_types').select('id').eq('name', leaveData.leave_type_id).single()
+        if (byName) leaveData.leave_type_id = byName.id
+      }
+    }
+    
+    const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select('*, leave_types(name)').single()
+    if (!error && data) {
+      await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave: ' + (data.leave_types?.name || ''), data.id, 'leave')
+    }
     return { data, error }
   },
 
-  // ✅ Upload leave attachment (medical certificate, etc.)
   async uploadLeaveAttachment(leaveRequestId, employeeId, file) {
     const ext = file.name.split('.').pop()
     const path = `leave/${employeeId}/${leaveRequestId}-${Date.now()}.${ext}`
