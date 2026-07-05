@@ -12,18 +12,12 @@ import {
   UserPlus, Briefcase, Calculator, X, RefreshCw, ArrowLeft, Paperclip
 } from 'lucide-react'
 
-// ============================================
-// SOUTH AFRICAN PUBLIC HOLIDAYS 2025
-// ============================================
 const SA_PUBLIC_HOLIDAYS_2025 = [
   '2025-01-01', '2025-03-21', '2025-04-18', '2025-04-21',
   '2025-04-27', '2025-05-01', '2025-06-16', '2025-08-09',
   '2025-09-24', '2025-12-16', '2025-12-25', '2025-12-26',
 ]
 
-// ============================================
-// SA LEAVE CONFIGURATION
-// ============================================
 const LEAVE_CONFIG = {
   annual: { name: 'Annual Leave', icon: Umbrella, color: 'text-emerald-600', bg: 'bg-emerald-50', barColor: 'bg-emerald-500', daysPerYear: 21, accruesPerMonth: 1.75 },
   sick: { name: 'Sick Leave', icon: Stethoscope, color: 'text-red-600', bg: 'bg-red-50', barColor: 'bg-red-500', daysPerCycle: 30, cycleMonths: 36, maxPerOccurrence: 2 },
@@ -46,6 +40,7 @@ export default function LeaveManagement() {
   const [validationWarnings, setValidationWarnings] = useState([])
   const [activeTab, setActiveTab] = useState('balances')
   const [refreshing, setRefreshing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (employee?.id) { loadData() }
@@ -53,11 +48,15 @@ export default function LeaveManagement() {
   }, [employee?.id])
 
   const loadData = async () => {
+    if (!employee?.id) return
     await Promise.all([fetchLeaveRequests(employee.id), fetchLeaveBalances(employee.id)])
   }
 
   const handleRefresh = async () => {
-    setRefreshing(true); await loadData(); setRefreshing(false); toast.success('Refreshed!')
+    setRefreshing(true)
+    await loadData()
+    setRefreshing(false)
+    toast.success('Refreshed!')
   }
 
   const handleFileSelect = (e) => {
@@ -67,19 +66,16 @@ export default function LeaveManagement() {
     setSelectedFile(file)
   }
 
-  // ============================================
-  // LEAVE CALCULATOR
-  // ============================================
   const isWeekend = (date) => { const d = new Date(date); return d.getDay() === 0 || d.getDay() === 6 }
   const isPublicHoliday = (date) => SA_PUBLIC_HOLIDAYS_2025.includes(date)
-  const isWorkingDay = (date) => !isWeekend(date) && !isPublicHoliday(date)
 
   const calculateWorkingDays = (startDate, endDate) => {
     if (!startDate || !endDate) return 0
     const start = new Date(startDate), end = new Date(endDate)
     let count = 0
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      if (isWorkingDay(d.toISOString().split('T')[0])) count++
+      const ds = d.toISOString().split('T')[0]
+      if (!isWeekend(ds) && !isPublicHoliday(ds)) count++
     }
     return count
   }
@@ -123,20 +119,26 @@ export default function LeaveManagement() {
   }
 
   const handleDateChange = (field, value) => {
-    const newForm = { ...form, [field]: value }; setForm(newForm)
+    const newForm = { ...form, [field]: value }
+    setForm(newForm)
     if (newForm.start_date && newForm.end_date) {
-      const days = calculateWorkingDays(newForm.start_date, newForm.end_date); setCalculatedDays(days)
+      const days = calculateWorkingDays(newForm.start_date, newForm.end_date)
+      setCalculatedDays(days)
       const { errors, warnings } = validateLeaveRequest(newForm.leave_type_id, newForm.start_date, newForm.end_date)
-      setValidationError(errors[0] || ''); setValidationWarnings(warnings)
+      setValidationError(errors[0] || '')
+      setValidationWarnings(warnings)
     }
   }
 
   const handleTypeChange = (typeId) => {
-    const newForm = { ...form, leave_type_id: typeId }; setForm(newForm)
+    const newForm = { ...form, leave_type_id: typeId }
+    setForm(newForm)
     if (newForm.start_date && newForm.end_date && typeId) {
-      const days = calculateWorkingDays(newForm.start_date, newForm.end_date); setCalculatedDays(days)
+      const days = calculateWorkingDays(newForm.start_date, newForm.end_date)
+      setCalculatedDays(days)
       const { errors, warnings } = validateLeaveRequest(typeId, newForm.start_date, newForm.end_date)
-      setValidationError(errors[0] || ''); setValidationWarnings(warnings)
+      setValidationError(errors[0] || '')
+      setValidationWarnings(warnings)
     }
   }
 
@@ -145,18 +147,33 @@ export default function LeaveManagement() {
     if (errors.length > 0) { setValidationError(errors[0]); return }
     if (days < 1) { setValidationError('No working days in selected period'); return }
     
+    setSubmitting(true)
+    toast.loading('Submitting leave request...')
+    
     const result = await applyLeave({ ...form, employee_id: employee.id, total_days: days, status: 'pending' })
-    if (result.error) { toast.error(result.error.message || 'Failed'); return }
+    
+    toast.dismiss()
+    setSubmitting(false)
+    
+    if (result.error) {
+      toast.error('Failed: ' + (result.error.message || 'Unknown error'))
+      return
+    }
     
     // Upload file if selected
     if (selectedFile && result.data) {
       await mobileApi.uploadLeaveAttachment(result.data.id, employee.id, selectedFile)
     }
     
-    toast.success('Leave applied!')
+    toast.success('Leave applied! Check History tab')
     setShowForm(false)
     setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
-    setCalculatedDays(0); setValidationError(''); setValidationWarnings([]); setSelectedFile(null)
+    setCalculatedDays(0)
+    setValidationError('')
+    setValidationWarnings([])
+    setSelectedFile(null)
+    
+    // Refresh data immediately
     await loadData()
   }
 
@@ -166,9 +183,6 @@ export default function LeaveManagement() {
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   const breakdown = form.start_date && form.end_date ? getLeaveBreakdown(form.start_date, form.end_date) : null
 
-  // ============================================
-  // APPLY LEAVE SCREEN
-  // ============================================
   if (showForm) {
     return (
       <div className="min-h-screen bg-slate-100 font-['Inter']">
@@ -245,7 +259,6 @@ export default function LeaveManagement() {
             <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Brief reason for leave request..." rows={3} className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none" />
           </div>
 
-          {/* ✅ FILE ATTACHMENT */}
           <div>
             <label className="text-sm font-semibold text-slate-700 mb-1 block">Supporting Document (optional)</label>
             <p className="text-xs text-slate-400 mb-2">Upload medical certificate, proof, or other document</p>
@@ -255,9 +268,7 @@ export default function LeaveManagement() {
                 <span className="text-sm text-slate-500 truncate">{selectedFile ? selectedFile.name : 'Tap to attach file'}</span>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" className="hidden" onChange={handleFileSelect} />
               </label>
-              {selectedFile && (
-                <button onClick={() => setSelectedFile(null)} className="p-2 bg-red-50 text-red-500 rounded-xl"><X className="w-5 h-5" /></button>
-              )}
+              {selectedFile && <button onClick={() => setSelectedFile(null)} className="p-2 bg-red-50 text-red-500 rounded-xl"><X className="w-5 h-5" /></button>}
             </div>
             {selectedFile && <p className="text-xs text-emerald-600 mt-1">✅ {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</p>}
           </div>
@@ -278,21 +289,23 @@ export default function LeaveManagement() {
 
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-5 py-4 flex gap-3 z-20">
           <button onClick={() => { setShowForm(false); setValidationError(''); setValidationWarnings([]) }} className="flex-1 py-3.5 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200">Cancel</button>
-          <button onClick={handleApply} disabled={!form.leave_type_id || !form.start_date || !form.end_date || !!validationError} className="flex-1 py-3.5 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 disabled:opacity-50">Submit Request</button>
+          <button onClick={handleApply} disabled={!form.leave_type_id || !form.start_date || !form.end_date || !!validationError || submitting} className="flex-1 py-3.5 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 disabled:opacity-50">
+            {submitting ? 'Submitting...' : 'Submit Request'}
+          </button>
         </div>
       </div>
     )
   }
 
-  // ============================================
-  // MAIN LEAVE PAGE
-  // ============================================
   return (
     <div className="min-h-screen bg-slate-100 font-['Inter'] pb-20">
       <div className="bg-gradient-to-b from-blue-600 to-blue-700 text-white px-5 pt-8 pb-6 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-bold">Leave</h1>
-          <button onClick={handleRefresh} className="p-2 rounded-xl bg-white/20 hover:bg-white/30"><RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} /></button>
+          <button onClick={handleRefresh} className="p-2 rounded-xl bg-white/30 hover:bg-white/40 flex items-center gap-1">
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="text-xs">Refresh</span>
+          </button>
         </div>
         <p className="text-blue-100 text-sm">Apply & track your leave</p>
       </div>
@@ -354,7 +367,6 @@ export default function LeaveManagement() {
                       <p className="text-xs text-slate-500">{formatDate(lr.start_date)} → {formatDate(lr.end_date)}</p>
                       <p className="text-xs text-slate-400">{lr.total_days} working day{lr.total_days > 1 ? 's' : ''}</p>
                       {lr.reason && <p className="text-xs text-slate-400 mt-1 italic">"{lr.reason.slice(0, 80)}"</p>}
-                      {/* ✅ Attachment link */}
                       {lr.attachment_url && (
                         <a href={lr.attachment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 flex items-center gap-1 mt-1 hover:underline">
                           <Paperclip className="w-3 h-3" /> {lr.attachment_name || 'View attachment'}
