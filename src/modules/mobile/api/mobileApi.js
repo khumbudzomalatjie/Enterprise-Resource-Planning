@@ -38,31 +38,14 @@ export const mobileApi = {
     return { data: data || [] }
   },
 
-  // ✅ FIXED: Removed jobs.status = 'in_progress' filter
   async getMyJobs(employeeId) {
-    const { data: assignments } = await supabase
-      .from('field_job_assignments')
-      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
-      .eq('employee_id', employeeId)
-      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
-    
+    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, assignment_status, assigned_at, started_at, completed_at').eq('employee_id', employeeId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     if (!assignments?.length) return { data: [] }
-    
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
-
-    // Get ALL jobs - filter completed/cancelled in JavaScript
-    const { data: jobs } = await supabase
-      .from('jobs')
-      .select('*, clients(company_name, phone, city), job_categories(name, color)')
-      .in('id', jobIds)
-
+    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('id', jobIds)
     const activeJobs = (jobs || []).filter(j => j.status !== 'completed' && j.status !== 'cancelled')
-    
-    return { data: activeJobs.map(j => ({ 
-      ...j, 
-      assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status 
-    })) }
+    return { data: activeJobs.map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
   },
 
   async getCompletedJobs(employeeId) {
@@ -139,18 +122,47 @@ export const mobileApi = {
   },
 
   // ============================================
-  // PHOTOS
+  // PHOTOS - FIXED
   // ============================================
   async uploadPhoto(jobId, employeeId, file, type, caption) {
-    const ext = file.name.split('.').pop()
-    const path = `jobs/${jobId}/${type}-${Date.now()}.${ext}`
-    try { await supabase.storage.createBucket('job-photos', { public: true }) } catch {}
-    const { error: upErr } = await supabase.storage.from('job-photos').upload(path, file, { upsert: true })
-    if (upErr) return { error: upErr.message }
-    const { data: { publicUrl } } = supabase.storage.from('job-photos').getPublicUrl(path)
-    const { data, error } = await supabase.from('job_photos').insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption }]).select().single()
-    if (!error) await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
-    return { data, error }
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const fileName = `${jobId}/${type}-${Date.now()}.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('job-photos')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type || 'image/jpeg'
+        })
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError)
+        return { error: uploadError.message || 'Upload failed' }
+      }
+
+      const { data: urlData } = supabase.storage.from('job-photos').getPublicUrl(fileName)
+      const publicUrl = urlData?.publicUrl
+
+      if (!publicUrl) return { error: 'Failed to get public URL' }
+
+      const { data, error: dbError } = await supabase
+        .from('job_photos')
+        .insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption: caption || '' }])
+        .select().single()
+
+      if (dbError) {
+        console.error('DB insert error:', dbError)
+        return { error: dbError.message }
+      }
+
+      if (!error) await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
+      return { data, error: null }
+    } catch (err) {
+      console.error('Photo upload exception:', err)
+      return { error: err.message || 'Upload failed' }
+    }
   },
 
   // ============================================
@@ -204,9 +216,7 @@ export const mobileApi = {
       }
     }
     const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select('*, leave_types(name)').single()
-    if (!error && data) {
-      await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave: ' + (data.leave_types?.name || ''), data.id, 'leave')
-    }
+    if (!error && data) await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave: ' + (data.leave_types?.name || ''), data.id, 'leave')
     return { data, error }
   },
 
@@ -268,21 +278,15 @@ export const mobileApi = {
     const now = new Date()
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
     const weekEnd = new Date(now); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23, 59, 59, 999)
-
-    const [
-      { data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance },
-      { data: completedToday }, { data: notifications }
-    ] = await Promise.all([
+    const [{ data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance }, { data: completedToday }, { data: notifications }] = await Promise.all([
       mobileApi.getMyJobs(employeeId), mobileApi.getTodayAttendance(employeeId), mobileApi.getWeeklyAttendance(employeeId),
       supabase.from('field_job_assignments').select('id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`).lte('completed_at', `${today}T23:59:59`),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false)
     ])
-
     const totalWeekMs = (weeklyAttendance || []).reduce((sum, a) => {
       if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time))
       return sum
     }, 0)
-
     return {
       myJobsCount: myJobs?.length || 0, weeklyHours: Math.round((totalWeekMs / 3600000) * 10) / 10,
       completedToday: completedToday?.length || 0, isClockedIn: !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time,
@@ -297,7 +301,6 @@ export const mobileApi = {
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
     const yearStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
-
     const [{ data: completedToday }, { data: completedWeek }, { data: completedMonth }, { data: completedYear }, { data: allCompleted }] = await Promise.all([
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', weekStart.toISOString()),
@@ -305,7 +308,6 @@ export const mobileApi = {
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${yearStart}T00:00:00`),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed')
     ])
-
     return {
       completedToday: completedToday?.length || 0, completedWeek: completedWeek?.length || 0,
       completedMonth: completedMonth?.length || 0, completedYear: completedYear?.length || 0,
