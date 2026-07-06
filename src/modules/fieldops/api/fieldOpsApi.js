@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabaseClient'
 export const fieldOpsApi = {
   async getLiveJobs() {
     const { data: jobs, error: jobsError } = await supabase
-      .from('jobs').select('*').order('scheduled_date', { ascending: true }).order('scheduled_start_time', { ascending: true }).limit(100)
+      .from('jobs').select('*, job_photos(*)').order('scheduled_date', { ascending: true }).order('scheduled_start_time', { ascending: true }).limit(100)
     if (jobsError || !jobs || jobs.length === 0) return { data: jobs || [], error: jobsError }
     const jobIds = jobs.map(j => j.id)
     const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))]
@@ -30,15 +30,12 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ✅ FIXED: Now also updates job status to in_progress
   async assignEmployeeToJob(jobId, employeeId, teamId = null) {
     const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('field_job_assignments')
       .upsert([{ job_id: jobId, employee_id: employeeId, team_id: teamId, assigned_by: userData.user?.id, assignment_status: 'assigned', assigned_at: new Date().toISOString() }], { onConflict: 'job_id,employee_id' })
       .select('*, employees(first_name, last_name, user_id)').maybeSingle()
-    
-    // ✅ ALSO update job status to in_progress so it appears on mobile
     if (!error) {
       await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
     }
