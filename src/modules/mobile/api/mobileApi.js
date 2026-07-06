@@ -38,12 +38,31 @@ export const mobileApi = {
     return { data: data || [] }
   },
 
+  // ✅ FIXED: Removed jobs.status = 'in_progress' filter
   async getMyJobs(employeeId) {
-    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, assignment_status, assigned_at, started_at, completed_at').eq('employee_id', employeeId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    const { data: assignments } = await supabase
+      .from('field_job_assignments')
+      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
+      .eq('employee_id', employeeId)
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    
     if (!assignments?.length) return { data: [] }
-    const jobIds = assignments.map(a => a.job_id)
-    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('id', jobIds).eq('status', 'in_progress')
-    return { data: (jobs || []).map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
+    
+    const jobIds = assignments.map(a => a.job_id).filter(Boolean)
+    if (jobIds.length === 0) return { data: [] }
+
+    // Get ALL jobs - filter completed/cancelled in JavaScript
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('*, clients(company_name, phone, city), job_categories(name, color)')
+      .in('id', jobIds)
+
+    const activeJobs = (jobs || []).filter(j => j.status !== 'completed' && j.status !== 'cancelled')
+    
+    return { data: activeJobs.map(j => ({ 
+      ...j, 
+      assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status 
+    })) }
   },
 
   async getCompletedJobs(employeeId) {
@@ -177,7 +196,6 @@ export const mobileApi = {
   },
 
   async applyLeave(leaveData) {
-    // Ensure leave_type_id is a UUID
     if (leaveData.leave_type_id) {
       const { data: lt } = await supabase.from('leave_types').select('id').eq('id', leaveData.leave_type_id).single()
       if (!lt) {
@@ -185,7 +203,6 @@ export const mobileApi = {
         if (byName) leaveData.leave_type_id = byName.id
       }
     }
-    
     const { data, error } = await supabase.from('leave_requests').insert([leaveData]).select('*, leave_types(name)').single()
     if (!error && data) {
       await mobileApi.logAction(leaveData.employee_id, 'leave_applied', 'Applied for leave: ' + (data.leave_types?.name || ''), data.id, 'leave')
