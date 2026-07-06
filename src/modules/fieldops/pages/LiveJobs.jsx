@@ -11,7 +11,7 @@ import {
   Radio, Search, Users, UserPlus, UserX, MapPin, 
   Clock, Play, CheckCircle2, XCircle, ChevronRight,
   Sun, Moon, Sparkles, Building2, Calendar, Eye, 
-  Wifi, WifiOff, RefreshCw, Briefcase
+  Wifi, WifiOff, RefreshCw, Briefcase, Camera, Image
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -413,7 +413,7 @@ export default function LiveJobs() {
                     )}
                   </div>
 
-                  {/* Expanded Details */}
+                  {/* ✅ EXPANDED DETAILS WITH PHOTOS */}
                   <AnimatePresence>
                     {showJobDetail === job.id && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -425,6 +425,24 @@ export default function LiveJobs() {
                           {job.access_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Access</p><p className="text-sm">{job.access_instructions}</p></div>}
                           {job.special_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Instructions</p><p className="text-sm">{job.special_instructions}</p></div>}
                         </div>
+
+                        {/* ✅ JOB PHOTOS SECTION */}
+                        {job.job_photos && job.job_photos.length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                              <Camera className="w-3 h-3" /> Job Photos ({job.job_photos.length})
+                            </p>
+                            <div className="grid grid-cols-3 gap-2">
+                              {job.job_photos.map(photo => (
+                                <a key={photo.id} href={photo.photo_url} target="_blank" rel="noopener noreferrer" className="block">
+                                  <img src={photo.photo_url} alt={photo.photo_type || 'Job photo'} className="w-full h-24 object-cover rounded-lg hover:opacity-80 transition-opacity border border-slate-200" />
+                                  <span className="text-[10px] text-slate-500 capitalize mt-1 block text-center">{photo.photo_type || 'photo'}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         <button onClick={() => navigate(`/fieldops/job-tracker`)} className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1">
                           <Search className="w-3 h-3" /> Track Job Audit
                         </button>
@@ -446,7 +464,6 @@ export default function LiveJobs() {
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Assign Staff</h3>
               <p className="text-sm text-slate-500 mb-4">Job: <span className="font-medium">{selectedJob.job_number}</span> - {selectedJob.title}</p>
               
-              {/* Currently Assigned */}
               {(selectedJob.field_job_assignments || []).filter(a => a.assignment_status !== 'released').length > 0 && (
                 <div className="mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
                   <p className="text-xs font-semibold text-slate-500 mb-2">Currently Assigned:</p>
