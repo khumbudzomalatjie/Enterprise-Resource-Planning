@@ -30,39 +30,94 @@ export default function IncidentTracker() {
     setSearching(true)
     setTrackerData(null)
 
-    const search = searchInput.trim().toUpperCase()
-    
-    // Search by incident number
-    let { data: incident } = await supabase
+    const search = searchInput.trim()
+    let incident = null
+
+    // 1. Exact match (original case)
+    let { data: exact } = await supabase
       .from('incidents')
       .select('*')
       .eq('incident_number', search)
-      .single()
+      .maybeSingle()
+    if (exact) incident = exact
 
-    // Search by partial match
+    // 2. Uppercase match
     if (!incident) {
-      const { data: partial } = await supabase
+      let { data: upper } = await supabase
+        .from('incidents')
+        .select('*')
+        .eq('incident_number', search.toUpperCase())
+        .maybeSingle()
+      if (upper) incident = upper
+    }
+
+    // 3. Lowercase match
+    if (!incident) {
+      let { data: lower } = await supabase
+        .from('incidents')
+        .select('*')
+        .eq('incident_number', search.toLowerCase())
+        .maybeSingle()
+      if (lower) incident = lower
+    }
+
+    // 4. Case-insensitive match
+    if (!incident) {
+      let { data: ilike } = await supabase
+        .from('incidents')
+        .select('*')
+        .ilike('incident_number', search)
+        .maybeSingle()
+      if (ilike) incident = ilike
+    }
+
+    // 5. Partial match
+    if (!incident) {
+      let { data: partial } = await supabase
         .from('incidents')
         .select('*')
         .ilike('incident_number', `%${search}%`)
         .limit(1)
-        .single()
-      incident = partial
+        .maybeSingle()
+      if (partial) incident = partial
     }
 
-    // Search by title
+    // 6. Search by title
     if (!incident) {
-      const { data: titleMatch } = await supabase
+      let { data: title } = await supabase
         .from('incidents')
         .select('*')
-        .ilike('title', `%${searchInput.trim()}%`)
+        .ilike('title', `%${search}%`)
         .limit(1)
-        .single()
-      incident = titleMatch
+        .maybeSingle()
+      if (title) incident = title
+    }
+
+    // 7. Search by description
+    if (!incident) {
+      let { data: desc } = await supabase
+        .from('incidents')
+        .select('*')
+        .ilike('description', `%${search}%`)
+        .limit(1)
+        .maybeSingle()
+      if (desc) incident = desc
     }
 
     if (!incident) {
-      toast.error(`No incident found for "${searchInput}"`)
+      // Show available incidents to help the user
+      const { data: recent } = await supabase
+        .from('incidents')
+        .select('incident_number, title')
+        .order('created_at', { ascending: false })
+        .limit(5)
+      
+      if (recent && recent.length > 0) {
+        const list = recent.map(i => i.incident_number).join(', ')
+        toast.error(`Not found. Available: ${list}`, { duration: 6000 })
+      } else {
+        toast.error(`No incidents found in the database. Report an incident first.`)
+      }
       setSearching(false)
       return
     }
@@ -95,6 +150,7 @@ export default function IncidentTracker() {
     })
 
     setSearching(false)
+    toast.success(`Found: ${incident.incident_number}`)
   }
 
   const formatDateTime = (date) => {
@@ -173,7 +229,7 @@ export default function IncidentTracker() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Enter Incident Number (e.g., INC-2026-000001)"
-                className="w-full pl-14 pr-4 py-5 text-lg neu-inset rounded-2xl text-slate-700 dark:text-slate-300 uppercase placeholder:text-sm"
+                className="w-full pl-14 pr-4 py-5 text-lg neu-inset rounded-2xl text-slate-700 dark:text-slate-300 placeholder:text-sm"
               />
             </div>
             <button type="submit" disabled={searching}
