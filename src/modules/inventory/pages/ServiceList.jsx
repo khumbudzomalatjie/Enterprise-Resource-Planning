@@ -7,33 +7,47 @@ import toast from 'react-hot-toast'
 import { 
   Search, Plus, Edit, ChevronRight, 
   Sun, Moon, Sparkles, Home, Building2,
-  DollarSign, Tag
+  DollarSign, Tag, Truck
 } from 'lucide-react'
 
 // ═══════════════════════════════════════════════
 // YOUR ACTUAL SERVICES FROM QUOTATIONS
 // ═══════════════════════════════════════════════
 const SERVICES = [
+  // Once-Off Cleaning
   { code: 'CLN-001', category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
   { code: 'CLN-002', category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
   { code: 'CLN-003', category: 'Once-Off Cleaning', name: '3 Bedroom - Once-Off', unit_price: 2347.83, unit: 'per_service' },
   { code: 'CLN-004', category: 'Once-Off Cleaning', name: '4 Bedroom - Once-Off', unit_price: 3043.48, unit: 'per_service' },
   { code: 'CLN-005', category: 'Once-Off Cleaning', name: '5 Bedroom - Once-Off', unit_price: 3478.26, unit: 'per_service' },
+  
+  // Monthly (1x Week)
   { code: 'CLN-101', category: 'Monthly (1x Week)', name: '1 Bedroom - 1x Week', unit_price: 869.57, unit: 'per_month' },
   { code: 'CLN-102', category: 'Monthly (1x Week)', name: '2 Bedroom - 1x Week', unit_price: 1043.48, unit: 'per_month' },
   { code: 'CLN-103', category: 'Monthly (1x Week)', name: '3 Bedroom - 1x Week', unit_price: 1391.30, unit: 'per_month' },
   { code: 'CLN-104', category: 'Monthly (1x Week)', name: '4 Bedroom - 1x Week', unit_price: 1739.13, unit: 'per_month' },
   { code: 'CLN-105', category: 'Monthly (1x Week)', name: '5 Bedroom - 1x Week', unit_price: 2173.91, unit: 'per_month' },
+  
+  // Monthly (2x Week)
   { code: 'CLN-201', category: 'Monthly (2x Week)', name: '1 Bedroom - 2x Week', unit_price: 1565.22, unit: 'per_month' },
   { code: 'CLN-202', category: 'Monthly (2x Week)', name: '2 Bedroom - 2x Week', unit_price: 1913.04, unit: 'per_month' },
   { code: 'CLN-203', category: 'Monthly (2x Week)', name: '3 Bedroom - 2x Week', unit_price: 2434.78, unit: 'per_month' },
   { code: 'CLN-204', category: 'Monthly (2x Week)', name: '4 Bedroom - 2x Week', unit_price: 3130.43, unit: 'per_month' },
   { code: 'CLN-205', category: 'Monthly (2x Week)', name: '5 Bedroom - 2x Week', unit_price: 3913.04, unit: 'per_month' },
+  
+  // Monthly (3x Week)
   { code: 'CLN-301', category: 'Monthly (3x Week)', name: '1 Bedroom - 3x Week', unit_price: 2173.91, unit: 'per_month' },
   { code: 'CLN-302', category: 'Monthly (3x Week)', name: '2 Bedroom - 3x Week', unit_price: 2608.70, unit: 'per_month' },
   { code: 'CLN-303', category: 'Monthly (3x Week)', name: '3 Bedroom - 3x Week', unit_price: 3043.48, unit: 'per_month' },
   { code: 'CLN-304', category: 'Monthly (3x Week)', name: '4 Bedroom - 3x Week', unit_price: 3913.04, unit: 'per_month' },
   { code: 'CLN-305', category: 'Monthly (3x Week)', name: '5 Bedroom - 3x Week', unit_price: 4782.61, unit: 'per_month' },
+
+  // Moving In/Out Cleaning
+  { code: 'CLN-401', category: 'Moving In/Out Cleaning', name: '1 Bedroom - Moving', unit_price: 434.78, unit: 'per_service' },
+  { code: 'CLN-402', category: 'Moving In/Out Cleaning', name: '2 Bedroom - Moving', unit_price: 782.61, unit: 'per_service' },
+  { code: 'CLN-403', category: 'Moving In/Out Cleaning', name: '3 Bedroom - Moving', unit_price: 1043.48, unit: 'per_service' },
+  { code: 'CLN-404', category: 'Moving In/Out Cleaning', name: '4 Bedroom - Moving', unit_price: 1304.35, unit: 'per_service' },
+  { code: 'CLN-405', category: 'Moving In/Out Cleaning', name: '5+ Bedroom - Moving', unit_price: 1739.13, unit: 'per_service' },
 ]
 
 export default function ServiceList() {
@@ -85,6 +99,7 @@ export default function ServiceList() {
     if (!cat) return <Tag className="w-4 h-4" />
     if (cat.includes('Once-Off')) return <Home className="w-4 h-4 text-blue-500" />
     if (cat.includes('Monthly')) return <Building2 className="w-4 h-4 text-purple-500" />
+    if (cat.includes('Moving')) return <Truck className="w-4 h-4 text-orange-500" />
     return <Tag className="w-4 h-4 text-emerald-500" />
   }
 
@@ -113,7 +128,7 @@ export default function ServiceList() {
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
               <DollarSign className="w-8 h-8 text-emerald-600" />Services & Pricing
             </h1>
-            <p className="text-slate-500 mt-1">{SERVICES.length} services • Used in jobs & quotations</p>
+            <p className="text-slate-500 mt-1">{SERVICES.length} services across {categories.length} categories • Used in jobs & quotations</p>
           </div>
         </motion.div>
 
@@ -195,6 +210,9 @@ export default function ServiceList() {
           <div className="text-center py-12 neu-raised rounded-3xl">
             <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 text-lg">No services match your search</p>
+            <button onClick={() => { setSearch(''); setCategoryFilter('all') }} className="mt-4 neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">
+              Reset Filters
+            </button>
           </div>
         )}
       </main>
