@@ -6,8 +6,8 @@ import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  Search, Plus, Edit, Trash2, ChevronRight, 
-  Sun, Moon, Sparkles, Package, AlertTriangle, ArrowLeft
+  Search, Edit, ChevronRight, 
+  Sun, Moon, Sparkles, Package, AlertTriangle, Wrench
 } from 'lucide-react'
 
 export default function ProductList() {
@@ -31,7 +31,6 @@ export default function ProductList() {
       setProducts(data || [])
     } catch (err) {
       console.error('Error loading products:', err)
-      toast.error('Failed to load products')
     }
     setLoading(false)
   }
@@ -76,10 +75,13 @@ export default function ProductList() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-              <Package className="w-8 h-8 text-emerald-600" />Consumable Products
+              <Wrench className="w-8 h-8 text-emerald-600" />Consumable Products
             </h1>
-            <p className="text-slate-500 mt-1">{products.length} products • Used internally on jobs</p>
+            <p className="text-slate-500 mt-1">{products.length} products • Chemicals, PPE & equipment used on jobs</p>
           </div>
+          <button onClick={() => navigate('/inventory/products')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white flex items-center gap-2 text-sm">
+            <Package className="w-5 h-5" /><span>View Stock Items</span>
+          </button>
         </motion.div>
 
         <div className="neu-raised rounded-2xl p-4 mb-6">
@@ -91,6 +93,12 @@ export default function ProductList() {
 
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-12 neu-raised rounded-3xl">
+            <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500 text-lg">No products found</p>
+            <p className="text-slate-400 text-sm mt-1">Products will appear here when added to inventory</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProducts.map((product, i) => {
@@ -113,14 +121,12 @@ export default function ProductList() {
                   </div>
                   {product.current_stock <= product.reorder_point && (
                     <div className="mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 flex items-center gap-2 text-xs text-amber-700">
-                      <AlertTriangle className="w-3 h-3" /> Below reorder level - Restock needed
+                      <AlertTriangle className="w-3 h-3" /> Below reorder level
                     </div>
                   )}
-                  <div className="flex gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-                    <button onClick={() => navigate(`/inventory/items/${product.id}`)} className="flex-1 py-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm font-medium flex items-center justify-center gap-1">
-                      <Edit className="w-4 h-4" /> View/Edit
-                    </button>
-                  </div>
+                  <button onClick={() => navigate(`/inventory/items/${product.id}`)} className="w-full py-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm font-medium flex items-center justify-center gap-1">
+                    <Edit className="w-4 h-4" /> View / Edit
+                  </button>
                 </motion.div>
               )
             })}
