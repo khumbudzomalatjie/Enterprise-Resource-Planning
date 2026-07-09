@@ -8,7 +8,8 @@ import {
   Package, AlertTriangle, ShoppingCart, 
   TrendingDown, DollarSign, BarChart3, Plus,
   ArrowDown, ArrowUp, Truck, Clock,
-  Sparkles, Sun, Moon, ChevronRight, ArrowLeft
+  Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
+  Wrench, Briefcase, Tag
 } from 'lucide-react'
 
 export default function InventoryDashboard() {
@@ -65,9 +66,9 @@ export default function InventoryDashboard() {
               <Package className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Inventory Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Stock control, warehouses, suppliers, and purchase orders</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Stock control, services pricing, products, and suppliers</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <button onClick={() => navigate('/inventory/stock-in')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
               <ArrowDown className="w-5 h-5" /><span>Stock In</span>
             </button>
@@ -80,9 +81,70 @@ export default function InventoryDashboard() {
           </div>
         </motion.div>
 
+        {/* ═══════════════════════════════════════════ */}
+        {/* SERVICES & PRODUCTS QUICK ACCESS CARDS    */}
+        {/* ═══════════════════════════════════════════ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Services Card */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            onClick={() => navigate('/inventory/services')}
+            className="neu-raised rounded-3xl p-8 cursor-pointer hover:scale-[1.02] transition-transform text-center border-l-4 border-emerald-500">
+            <div className="w-20 h-20 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4">
+              <Briefcase className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Services & Pricing</h2>
+            <p className="text-slate-500 mb-4">Manage cleaning services, prices & quotations</p>
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700">22 Services</span>
+              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">View & Edit</span>
+            </div>
+            <div className="mt-4 flex gap-2 justify-center">
+              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/services') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm">View All</button>
+              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/services/new') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm">Add New</button>
+            </div>
+          </motion.div>
+
+          {/* Products Card */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+            onClick={() => navigate('/inventory/products')}
+            className="neu-raised rounded-3xl p-8 cursor-pointer hover:scale-[1.02] transition-transform text-center border-l-4 border-blue-500">
+            <div className="w-20 h-20 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4">
+              <Wrench className="w-10 h-10 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Consumable Products</h2>
+            <p className="text-slate-500 mb-4">Chemicals, PPE & equipment used on jobs</p>
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700">{stats.totalItems || 0} Items</span>
+              <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700">Track Stock</span>
+            </div>
+            <div className="mt-4 flex gap-2 justify-center">
+              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/products') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm">View All</button>
+              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/items') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white text-sm">Stock List</button>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Quick Links Row */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {[
+            { label: 'All Services', icon: Briefcase, path: '/inventory/services' },
+            { label: 'Add Service', icon: Plus, path: '/inventory/services/new' },
+            { label: 'Products', icon: Package, path: '/inventory/products' },
+            { label: 'Stock Items', icon: Tag, path: '/inventory/items' },
+          ].map(action => (
+            <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform">
+              <action.icon className="w-6 h-6 text-emerald-600" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
+            </button>
+          ))}
+        </motion.div>
+
+        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {statCards.map((stat, i) => (
-            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }} className="neu-raised rounded-2xl p-4 stat-card">
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.05 }} className="neu-raised rounded-2xl p-4 stat-card">
               <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}><stat.icon className={`w-5 h-5 ${stat.color}`} /></div>
               <p className="text-lg font-bold text-slate-800 dark:text-white">{stat.value}</p>
               <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
@@ -90,13 +152,14 @@ export default function InventoryDashboard() {
           ))}
         </div>
 
+        {/* Low Stock & Movements */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />Low Stock Alert
               </h2>
-              <Link to="/inventory/items" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+              <Link to="/inventory/products" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
             <div className="space-y-3">
               {lowStockItems.map(item => (
@@ -115,7 +178,7 @@ export default function InventoryDashboard() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="neu-raised rounded-3xl p-6">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <Clock className="w-5 h-5 text-emerald-600" />Recent Movements
