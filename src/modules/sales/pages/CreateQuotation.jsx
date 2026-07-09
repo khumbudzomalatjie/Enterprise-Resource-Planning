@@ -13,7 +13,10 @@ import {
   Save, Send
 } from 'lucide-react'
 
-const SERVICES = [
+// ═══════════════════════════════════════════════
+// FALLBACK SERVICES (used if database is empty)
+// ═══════════════════════════════════════════════
+const FALLBACK_SERVICES = [
   { code: 'CLN-001', category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
   { code: 'CLN-002', category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
   { code: 'CLN-003', category: 'Once-Off Cleaning', name: '3 Bedroom - Once-Off', unit_price: 2347.83, unit: 'per_service' },
@@ -34,6 +37,11 @@ const SERVICES = [
   { code: 'CLN-303', category: 'Monthly (3x Week)', name: '3 Bedroom - 3x Week', unit_price: 3043.48, unit: 'per_month' },
   { code: 'CLN-304', category: 'Monthly (3x Week)', name: '4 Bedroom - 3x Week', unit_price: 3913.04, unit: 'per_month' },
   { code: 'CLN-305', category: 'Monthly (3x Week)', name: '5 Bedroom - 3x Week', unit_price: 4782.61, unit: 'per_month' },
+  { code: 'CLN-401', category: 'Moving In/Out Cleaning', name: '1 Bedroom - Moving', unit_price: 434.78, unit: 'per_service' },
+  { code: 'CLN-402', category: 'Moving In/Out Cleaning', name: '2 Bedroom - Moving', unit_price: 782.61, unit: 'per_service' },
+  { code: 'CLN-403', category: 'Moving In/Out Cleaning', name: '3 Bedroom - Moving', unit_price: 1043.48, unit: 'per_service' },
+  { code: 'CLN-404', category: 'Moving In/Out Cleaning', name: '4 Bedroom - Moving', unit_price: 1304.35, unit: 'per_service' },
+  { code: 'CLN-405', category: 'Moving In/Out Cleaning', name: '5+ Bedroom - Moving', unit_price: 1739.13, unit: 'per_service' },
 ]
 
 const COMPANY = {
@@ -77,9 +85,8 @@ The company is available for short- and long-term tenders and can provide servic
 
 const A4_WIDTH_PX = 794
 
-// ═══════════════════════════════════════════════
-// BUILD QUOTATION HTML
-// ═══════════════════════════════════════════════
+// ... buildQuotationHTML function stays the same ...
+
 function buildQuotationHTML(quotation, items) {
   const fmt = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', minimumFractionDigits: 2 }).format(amount || 0)
   const fmtDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -181,6 +188,9 @@ export default function CreateQuotation() {
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
+  // ✅ Services now loaded from database
+  const [servicesList, setServicesList] = useState(FALLBACK_SERVICES)
+
   const fetchQuotation = useSalesStore((state) => state.fetchQuotation)
   const clients = useCRMStore((state) => state.clients)
   const fetchClients = useCRMStore((state) => state.fetchClients)
@@ -201,6 +211,37 @@ export default function CreateQuotation() {
   ])
   const [loadingQuote, setLoadingQuote] = useState(false)
 
+  // ✅ Load services from database
+  const loadServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('is_active', true)
+        .order('category', { ascending: true })
+        .order('name', { ascending: true })
+      
+      if (!error && data && data.length > 0) {
+        // Map database fields to expected format
+        const mapped = data.map(s => ({
+          code: s.item_code || s.code || '',
+          category: s.category || 'Other',
+          name: s.name,
+          unit_price: s.unit_price || 0,
+          unit: s.unit || 'per_service'
+        }))
+        console.log('📦 Loaded', mapped.length, 'services from database')
+        setServicesList(mapped)
+      } else {
+        console.log('📦 Using fallback services (', FALLBACK_SERVICES.length, 'services)')
+        setServicesList(FALLBACK_SERVICES)
+      }
+    } catch (err) {
+      console.log('📦 Error loading services, using fallback:', err)
+      setServicesList(FALLBACK_SERVICES)
+    }
+  }
+
   const updatePreviewScale = useCallback(() => {
     if (previewRef.current) {
       setPreviewScale(Math.min((previewRef.current.clientWidth - 8) / A4_WIDTH_PX, 0.7))
@@ -209,6 +250,7 @@ export default function CreateQuotation() {
 
   useEffect(() => {
     fetchClients({ status: 'active' })
+    loadServices() // ✅ Load services from DB
     setCurrentUserName()
     updatePreviewScale()
     window.addEventListener('resize', updatePreviewScale)
@@ -253,8 +295,9 @@ export default function CreateQuotation() {
     if (c) setQuotationData(prev => ({ ...prev, client_id: c.id, client_name: c.company_name || '', client_email: c.email || '', client_phone: c.phone || '', client_address: `${c.address_line1 || ''}, ${c.city || ''}` }))
   }
 
+  // ✅ Uses servicesList (from DB or fallback)
   const handleServiceSelect = (idx, name) => {
-    const s = SERVICES.find(x => x.name === name)
+    const s = servicesList.find(x => x.name === name)
     if (s) { const ni = [...items]; ni[idx] = { ...ni[idx], code: s.code, description: s.name, unit: s.unit, unit_price: s.unit_price }; setItems(ni) }
   }
 
@@ -262,9 +305,7 @@ export default function CreateQuotation() {
   const removeItem = (i) => { if (items.length > 1) setItems(items.filter((_, x) => x !== i)) }
   const updateItem = (i, f, v) => { const ni = [...items]; ni[i] = { ...ni[i], [f]: v }; setItems(ni) }
 
-  // ═══════════════════════════════════════════════
-  // SAVE
-  // ═══════════════════════════════════════════════
+  // SAVE function (unchanged)
   const handleSave = async (status = 'draft') => {
     if (!quotationData.client_name) { toast.error('Select a client'); return }
     if (!items.some(i => i.description && i.unit_price > 0)) { toast.error('Add at least one service'); return }
@@ -309,53 +350,28 @@ export default function CreateQuotation() {
     finally { setSaving(false) }
   }
 
-  // ═══════════════════════════════════════════════
-  // PDF DOWNLOAD - WORKING VERSION
-  // ═══════════════════════════════════════════════
+  // PDF DOWNLOAD (unchanged)
   const downloadPDF = async () => {
     if (downloading) return
     setDownloading(true)
     toast.loading('Generating PDF...')
-    
     try {
       const html = buildQuotationHTML(quotationData, items.filter(i => i.description))
-      
-      // Create a FULLY VISIBLE container off-screen
       const container = document.createElement('div')
       container.innerHTML = html
-      container.style.cssText = `
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: ${A4_WIDTH_PX}px;
-        background: white;
-        z-index: 99999;
-      `
+      container.style.cssText = `position: absolute; left: 0; top: 0; width: ${A4_WIDTH_PX}px; background: white; z-index: 99999;`
       document.body.appendChild(container)
-      
-      // Wait for render
       await new Promise(r => setTimeout(r, 1000))
-      
       const html2pdf = (await import('html2pdf.js')).default
-      
       const opt = {
         margin: [0, 0, 0, 0],
         filename: `Quotation_${(quotationData.client_name || 'draft').replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { 
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          width: A4_WIDTH_PX,
-          windowWidth: A4_WIDTH_PX
-        },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', width: A4_WIDTH_PX, windowWidth: A4_WIDTH_PX },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all'] }
       }
-      
       await html2pdf().set(opt).from(container).save()
-      
       document.body.removeChild(container)
       toast.dismiss()
       toast.success('PDF downloaded!')
@@ -363,13 +379,12 @@ export default function CreateQuotation() {
       console.error('PDF error:', e)
       toast.dismiss()
       toast.error('PDF failed: ' + (e.message || 'Unknown'))
-    } finally {
-      setDownloading(false)
-    }
+    } finally { setDownloading(false) }
   }
 
   const fmt = (a) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(a || 0)
-  const cats = [...new Set(SERVICES.map(s => s.category))]
+  // ✅ Uses servicesList
+  const cats = [...new Set(servicesList.map(s => s.category))]
   const cl = (i) => (i.quantity || 0) * (i.unit_price || 0)
 
   if (loadingQuote) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
@@ -408,7 +423,8 @@ export default function CreateQuotation() {
               {items.map((item, i) => (
                 <div key={i} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 mb-3">
                   <div className="flex justify-between mb-2"><span className="text-sm">Item {i+1}</span><button onClick={() => removeItem(i)} className="text-red-500"><Trash2 className="w-4 h-4" /></button></div>
-                  <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{SERVICES.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
+                  {/* ✅ Uses servicesList (from DB or fallback) */}
+                  <select value={item.description} onChange={(e) => handleServiceSelect(i, e.target.value)} className="w-full p-2 neu-inset rounded-lg text-sm mb-2"><option value="">Select</option>{cats.map(cat => (<optgroup key={cat} label={cat}>{servicesList.filter(s=>s.category===cat).map(s=>(<option key={s.name} value={s.name}>{s.code} - {s.name}</option>))}</optgroup>))}</select>
                   <div className="grid grid-cols-4 gap-2"><input type="number" value={item.quantity} onChange={(e) => updateItem(i,'quantity',parseInt(e.target.value)||1)} placeholder="Qty" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.unit_price} onChange={(e) => updateItem(i,'unit_price',parseFloat(e.target.value)||0)} placeholder="Price" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.discount_percent} onChange={(e) => updateItem(i,'discount_percent',parseFloat(e.target.value)||0)} placeholder="Disc%" className="p-2 neu-inset rounded-lg text-sm" /><input type="number" value={item.tax_percent} onChange={(e) => updateItem(i,'tax_percent',parseFloat(e.target.value)||15)} placeholder="VAT%" className="p-2 neu-inset rounded-lg text-sm" /></div>
                   <p className="text-right text-sm font-bold mt-1">{fmt(cl(item))}</p>
                 </div>
