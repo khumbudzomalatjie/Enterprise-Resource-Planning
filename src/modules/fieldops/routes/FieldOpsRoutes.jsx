@@ -12,6 +12,9 @@ import IncidentList from '../incidents/pages/IncidentList'
 import IncidentDetail from '../incidents/pages/IncidentDetail'
 import IncidentTracker from '../incidents/pages/IncidentTracker'
 
+// Field Ops Messaging System
+import Messages from '../messages/pages/Messages'
+
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function FieldOpsRoutes() {
@@ -22,23 +25,92 @@ export default function FieldOpsRoutes() {
 
   return (
     <Routes>
-      {/* Main Dashboard */}
-      <Route path="/" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><FieldOpsDashboard /></RoleBasedRoute></ProtectedRoute>} />
+      {/* ============================================ */}
+      {/* MAIN DASHBOARD                                */}
+      {/* ============================================ */}
+      <Route path="/" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <FieldOpsDashboard />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
       
-      {/* Live Jobs */}
-      <Route path="/live-jobs" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><LiveJobs /></RoleBasedRoute></ProtectedRoute>} />
+      {/* ============================================ */}
+      {/* LIVE JOBS - Active job monitoring            */}
+      {/* ============================================ */}
+      <Route path="/live-jobs" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <LiveJobs />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
       
-      {/* Job Tracker */}
-      <Route path="/job-tracker" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><JobTracker /></RoleBasedRoute></ProtectedRoute>} />
+      {/* ============================================ */}
+      {/* JOB TRACKER - Complete job audit trail       */}
+      {/* ============================================ */}
+      <Route path="/job-tracker" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <JobTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
 
       {/* ============================================ */}
-      {/* ENTERPRISE INCIDENT MANAGEMENT */}
+      {/* FIELD OPS MESSAGING SYSTEM                    */}
       {/* ============================================ */}
-      <Route path="/incidents" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><IncidentDashboard /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/incidents/report" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><ReportIncident /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/incidents/list" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><IncidentList /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/incidents/tracker" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><IncidentTracker /></RoleBasedRoute></ProtectedRoute>} />
-      <Route path="/incidents/:id" element={<ProtectedRoute><RoleBasedRoute requiredRoles={allRoles}><IncidentDetail /></RoleBasedRoute></ProtectedRoute>} />
+      <Route path="/messages" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <Messages />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ============================================ */}
+      {/* ENTERPRISE INCIDENT MANAGEMENT               */}
+      {/* ============================================ */}
+      <Route path="/incidents" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <IncidentDashboard />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/incidents/report" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <ReportIncident />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/incidents/list" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <IncidentList />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/incidents/tracker" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <IncidentTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/incidents/:id" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <IncidentDetail />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
     </Routes>
   )
 }
