@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../../components/Navbar'
 import useMessageStore from '../store/messageStore'
@@ -14,7 +13,6 @@ import {
 export default function Messages() {
   const { conversations, messages, activeConversation, sendMessage, fetchConversations, fetchMessages, fetchUnreadCount } = useMessageStore()
   const { user } = useAuthStore()
-  const navigate = useNavigate()
   const messagesEndRef = useRef(null)
   
   const [view, setView] = useState('inbox')
@@ -59,7 +57,7 @@ export default function Messages() {
       setNewMessage('')
       fetchConversations()
     } else {
-      toast.error('Failed to send message')
+      toast.error('Failed to send')
     }
     setSending(false)
   }
@@ -84,29 +82,34 @@ export default function Messages() {
 
   const handleCreateChat = async () => {
     if (selectedUsers.length === 0) {
-      toast.error('Please select at least one recipient')
+      toast.error('Select at least one person')
       return
     }
     setCreating(true)
+    
     const title = newChatTitle || (selectedUsers.length > 1 ? 'Group Chat' : 'Direct Message')
     const result = await useMessageStore.getState().createConversation(
-      { title },
+      { title, type: selectedUsers.length > 1 ? 'group' : 'direct' },
       selectedUsers
     )
+    
     if (result.success) {
-      toast.success('Chat created!')
+      if (result.data?.is_existing) {
+        toast.success('Chat already exists - opening it!')
+      } else {
+        toast.success('Chat created!')
+      }
       setShowNewChat(false)
       setNewChatTitle('')
       setSelectedUsers([])
-      // Open the new chat
+      await fetchConversations()
       if (result.data) {
         handleOpenChat(result.data)
       } else {
         setView('inbox')
-        fetchConversations()
       }
     } else {
-      toast.error(result.error || 'Failed to create chat')
+      toast.error('Failed to create chat')
     }
     setCreating(false)
   }
@@ -128,8 +131,22 @@ export default function Messages() {
 
   const filteredConversations = (conversations || []).filter(c => {
     if (!searchTerm) return true
-    return (c.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const s = searchTerm.toLowerCase()
+    return (c.display_name || c.title || '').toLowerCase().includes(s) ||
+           (c.last_message || '').toLowerCase().includes(s)
   })
+
+  // Get chat header info
+  const getChatHeaderInfo = () => {
+    if (!activeConversation) return { name: 'Chat', subtitle: '', isGroup: false }
+    return {
+      name: activeConversation.display_name || activeConversation.title || 'Chat',
+      subtitle: activeConversation.is_group ? `${activeConversation.recipient_count || 'Multiple'} participants` : 'Direct message',
+      isGroup: activeConversation.is_group || activeConversation.type === 'group'
+    }
+  }
+
+  const chatInfo = getChatHeaderInfo()
 
   // ============================================
   // INBOX VIEW
@@ -170,15 +187,25 @@ export default function Messages() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
                       <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                        {conv.type === 'group' ? <Users className="w-5 h-5 text-white" /> : <User className="w-5 h-5 text-white" />}
+                        {conv.is_group ? (
+                          <Users className="w-5 h-5 text-white" />
+                        ) : (
+                          <span className="text-white font-bold text-lg">
+                            {(conv.display_name || '?')[0].toUpperCase()}
+                          </span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-white text-sm truncate">{conv.title || 'Chat'}</h3>
+                          <h3 className="font-semibold text-white text-sm truncate">
+                            {conv.display_name || conv.title || 'Chat'}
+                          </h3>
                           <span className="text-xs text-white/60 flex-shrink-0 ml-2">{formatTime(conv.last_message_time)}</span>
                         </div>
                         <div className="flex items-center justify-between mt-0.5">
-                          <p className="text-xs text-white/70 truncate max-w-[180px]">{conv.last_message || 'No messages'}</p>
+                          <p className="text-xs text-white/70 truncate max-w-[200px]">
+                            {conv.last_sender && conv.last_sender !== 'User' ? `${conv.last_sender}: ` : ''}{conv.last_message || 'No messages'}
+                          </p>
                           {conv.unread_count > 0 && (
                             <span className="bg-emerald-400 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 ml-2">
                               {conv.unread_count}
@@ -240,7 +267,7 @@ export default function Messages() {
                 </div>
                 <button onClick={handleCreateChat} disabled={creating || selectedUsers.length === 0}
                   className="w-full py-3.5 bg-emerald-500 text-white rounded-2xl text-base font-bold active:scale-95 transition-transform shadow-lg disabled:opacity-50">
-                  {creating ? 'Creating...' : 'Create Chat'}
+                  {creating ? 'Creating...' : selectedUsers.length > 1 ? 'Create Group Chat' : 'Start Chat'}
                 </button>
               </motion.div>
             </motion.div>
@@ -257,19 +284,27 @@ export default function Messages() {
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] flex flex-col">
       <Navbar />
       
+      {/* Chat Header - Shows who you're talking to */}
       <div className="px-4 pt-4 pb-3 text-white flex items-center gap-3 border-b border-white/10">
         <button onClick={handleBackToInbox} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center active:scale-90">
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>
         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-          {activeConversation?.type === 'group' ? <Users className="w-5 h-5 text-white" /> : <User className="w-5 h-5 text-white" />}
+          {chatInfo.isGroup ? (
+            <Users className="w-5 h-5 text-white" />
+          ) : (
+            <span className="text-white font-bold text-lg">
+              {chatInfo.name[0]?.toUpperCase() || '?'}
+            </span>
+          )}
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-white">{activeConversation?.title || 'Chat'}</h3>
-          <p className="text-xs text-white/60 capitalize">{activeConversation?.type}</p>
+          <h3 className="font-semibold text-white">{chatInfo.name}</h3>
+          <p className="text-xs text-white/60">{chatInfo.subtitle}</p>
         </div>
       </div>
 
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-12">
@@ -300,13 +335,14 @@ export default function Messages() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Input */}
       <div className="px-4 py-3 border-t border-white/10 bg-white/5">
         <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex items-center gap-2">
           <button type="button" className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
             <Paperclip className="w-4 h-4 text-white/70" />
           </button>
           <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)}
-            placeholder="Type a message..." 
+            placeholder={`Message ${chatInfo.name}...`}
             className="flex-1 px-4 py-2.5 rounded-full bg-white/15 text-white placeholder-white/40 text-sm border border-white/10 focus:outline-none" />
           <button type="submit" disabled={sending || !newMessage.trim()}
             className="w-10 h-10 rounded-full bg-emerald-400 flex items-center justify-center flex-shrink-0 active:scale-90 disabled:opacity-40">
