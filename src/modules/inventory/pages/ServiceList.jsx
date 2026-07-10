@@ -165,7 +165,7 @@ export default function ServiceList() {
     return <Tag className="w-4 h-4 text-emerald-500" />
   }
 
-  const categoryOptions = ['Once-Off Cleaning', 'Monthly (1x Week)', 'Monthly (2x Week)', 'Monthly (3x Week)', 'Moving In/Out Cleaning', 'Cleaning', 'Maintenance', 'Other']
+  const categoryOptions = [...new Set(services.map(s => s.category).filter(Boolean))].sort()
   const unitOptions = ['per_service', 'per_month', 'per_hour', 'per_sqm', 'per_day', 'fixed', 'each']
 
   return (
