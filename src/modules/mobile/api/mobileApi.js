@@ -122,47 +122,22 @@ export const mobileApi = {
   },
 
   // ============================================
-  // PHOTOS - FIXED
+  // PHOTOS
   // ============================================
   async uploadPhoto(jobId, employeeId, file, type, caption) {
     try {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
       const fileName = `${jobId}/${type}-${Date.now()}.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('job-photos')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type || 'image/jpeg'
-        })
-
-      if (uploadError) {
-        console.error('Storage upload error:', uploadError)
-        return { error: uploadError.message || 'Upload failed' }
-      }
-
+      const { error: uploadError } = await supabase.storage.from('job-photos').upload(fileName, file, { cacheControl: '3600', upsert: true, contentType: file.type || 'image/jpeg' })
+      if (uploadError) return { error: uploadError.message || 'Upload failed' }
       const { data: urlData } = supabase.storage.from('job-photos').getPublicUrl(fileName)
       const publicUrl = urlData?.publicUrl
-
       if (!publicUrl) return { error: 'Failed to get public URL' }
-
-      const { data, error: dbError } = await supabase
-        .from('job_photos')
-        .insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption: caption || '' }])
-        .select().single()
-
-      if (dbError) {
-        console.error('DB insert error:', dbError)
-        return { error: dbError.message }
-      }
-
+      const { data, error: dbError } = await supabase.from('job_photos').insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption: caption || '' }]).select().single()
+      if (dbError) return { error: dbError.message }
       if (!error) await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
       return { data, error: null }
-    } catch (err) {
-      console.error('Photo upload exception:', err)
-      return { error: err.message || 'Upload failed' }
-    }
+    } catch (err) { return { error: err.message || 'Upload failed' } }
   },
 
   // ============================================
@@ -227,26 +202,105 @@ export const mobileApi = {
     const { error: upErr } = await supabase.storage.from('leave-attachments').upload(path, file, { upsert: true, contentType: file.type })
     if (upErr) return { error: upErr.message }
     const { data: { publicUrl } } = supabase.storage.from('leave-attachments').getPublicUrl(path)
-    const { data, error } = await supabase.from('leave_requests').update({
-      attachment_url: publicUrl, attachment_name: file.name, attachment_type: file.type, attachment_size: file.size
-    }).eq('id', leaveRequestId).select().single()
+    const { data, error } = await supabase.from('leave_requests').update({ attachment_url: publicUrl, attachment_name: file.name, attachment_type: file.type, attachment_size: file.size }).eq('id', leaveRequestId).select().single()
     return { data, error }
   },
 
   // ============================================
-  // MESSAGES
+  // MESSAGES - FIXED for desktop ERP sync
   // ============================================
   async getMessages(userId) {
-    const { data } = await supabase.from('messages').select('*').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(50)
-    const userIds = [...new Set((data || []).flatMap(m => [m.sender_id, m.receiver_id]))]
+    // Get messages from BOTH direct (sender/receiver) AND conversations
+    const { data: directMessages } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    // Also get conversation messages
+    const { data: myConversations } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', userId)
+
+    const convIds = (myConversations || []).map(p => p.conversation_id)
+    let conversationMessages = []
+    if (convIds.length > 0) {
+      const { data: convMsgs } = await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', convIds)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      conversationMessages = convMsgs || []
+    }
+
+    // Merge and deduplicate
+    const allMessages = [...(directMessages || []), ...conversationMessages]
+    const uniqueMessages = allMessages.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
+
+    // Get user names
+    const userIds = [...new Set(uniqueMessages.flatMap(m => [m.sender_id, m.receiver_id].filter(Boolean)))]
     const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
-    const nameMap = {}; (profiles || []).forEach(p => { nameMap[p.id] = p.full_name })
-    return { data: (data || []).map(m => ({ ...m, sender_name: nameMap[m.sender_id] || 'Unknown', receiver_name: nameMap[m.receiver_id] || 'Unknown' })) }
+    const nameMap = {}; (profiles || []).forEach(p => { nameMap[p.id] = p.full_name || 'Unknown' })
+
+    return { data: uniqueMessages.map(m => ({ ...m, sender_name: nameMap[m.sender_id] || m.sender_name || 'Unknown', receiver_name: nameMap[m.receiver_id] || 'Unknown' })) }
   },
 
   async sendMessage(messageData) {
-    const { data, error } = await supabase.from('messages').insert([messageData]).select().single()
+    // Support both conversation-based and direct messaging
+    const payload = {
+      sender_id: messageData.sender_id,
+      sender_name: messageData.sender_name || 'User',
+      content: messageData.content || messageData.message || '',
+      message: messageData.content || messageData.message || '',
+      message_type: messageData.message_type || 'text'
+    }
+
+    if (messageData.conversation_id) {
+      payload.conversation_id = messageData.conversation_id
+    }
+    if (messageData.receiver_id) {
+      payload.receiver_id = messageData.receiver_id
+    }
+
+    const { data, error } = await supabase.from('messages').insert([payload]).select().single()
     return { data, error }
+  },
+
+  async getConversations(userId) {
+    const { data: participations } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', userId)
+
+    const convIds = (participations || []).map(p => p.conversation_id)
+    if (convIds.length === 0) {
+      // Fallback: get unique people user has messaged
+      const { data: messages } = await supabase
+        .from('messages')
+        .select('sender_id, receiver_id')
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+        .limit(100)
+
+      const otherUserIds = [...new Set((messages || []).flatMap(m => [m.sender_id, m.receiver_id]).filter(id => id !== userId))]
+      if (otherUserIds.length === 0) return { data: [] }
+
+      const { data: profiles } = await supabase.from('profiles').select('id, full_name, role').in('id', otherUserIds)
+      return { data: (profiles || []).map(p => ({ id: p.id, display_name: p.full_name, role: p.role, is_direct: true })) }
+    }
+
+    const { data: conversations } = await supabase.from('conversations').select('*').in('id', convIds)
+    const enriched = await Promise.all((conversations || []).map(async (conv) => {
+      const { data: participants } = await supabase.from('conversation_participants').select('user_id').eq('conversation_id', conv.id).neq('user_id', userId)
+      const ids = (participants || []).map(p => p.user_id)
+      const { data: profiles } = await supabase.from('profiles').select('full_name').in('id', ids)
+      const names = (profiles || []).map(p => p.full_name).join(', ')
+      const { data: lastMsg } = await supabase.from('messages').select('content, created_at').eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      return { ...conv, display_name: names || conv.title, last_message: lastMsg?.content?.substring(0, 60), last_time: lastMsg?.created_at }
+    }))
+    return { data: enriched }
   },
 
   // ============================================
