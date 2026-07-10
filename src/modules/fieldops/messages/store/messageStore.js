@@ -6,13 +6,12 @@ const useMessageStore = create((set, get) => ({
   activeConversation: null,
   messages: [],
   availableUsers: [],
-  employees: [],
   unreadCount: 0,
   loading: false,
   error: null,
 
   fetchConversations: async () => {
-    set({ loading: true })
+    set({ loading: true, error: null })
     const { data, error } = await messageApi.getConversations()
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
     set({ conversations: data || [], loading: false })
@@ -35,21 +34,20 @@ const useMessageStore = create((set, get) => ({
   },
 
   createConversation: async (convData, participantIds) => {
+    set({ loading: true, error: null })
     const result = await messageApi.createConversation(convData, participantIds)
-    if (result.error) return { success: false, error: result.error.message }
+    if (result.error) {
+      set({ error: result.error.message, loading: false })
+      return { success: false, error: result.error.message }
+    }
     await get().fetchConversations()
+    set({ loading: false })
     return { success: true, data: result.data }
   },
 
   fetchAvailableUsers: async () => {
     const { data } = await messageApi.getAvailableUsers()
     set({ availableUsers: data || [] })
-    return data
-  },
-
-  fetchEmployees: async () => {
-    const { data } = await messageApi.getEmployees()
-    set({ employees: data || [] })
     return data
   },
 
