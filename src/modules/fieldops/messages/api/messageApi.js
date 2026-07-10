@@ -32,8 +32,32 @@ export const messageApi = {
       .in('id', allConvIds)
       .order('updated_at', { ascending: false })
 
-    // Get last message for each conversation
+    // Get participants and last message for each conversation
     const enriched = await Promise.all((conversations || []).map(async (conv) => {
+      // Get other participants (not current user)
+      const { data: participants } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conv.id)
+        .neq('user_id', userId)
+
+      // Get profile names for other participants
+      const otherUserIds = (participants || []).map(p => p.user_id)
+      let recipientNames = []
+      if (otherUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .in('id', otherUserIds)
+        recipientNames = (profiles || []).map(p => p.full_name || 'Unknown')
+      }
+
+      // If no other participants, check if it's a group or show creator
+      if (recipientNames.length === 0) {
+        recipientNames = [conv.title || 'Chat']
+      }
+
+      // Get last message
       const { data: lastMsg } = await supabase
         .from('messages')
         .select('content, created_at, sender_name')
@@ -44,8 +68,12 @@ export const messageApi = {
 
       return {
         ...conv,
+        display_name: recipientNames.join(', '),
+        recipient_count: recipientNames.length,
+        is_group: conv.type === 'group' || recipientNames.length > 1,
         last_message: lastMsg?.content?.substring(0, 60) || 'No messages yet',
         last_message_time: lastMsg?.created_at || conv.created_at,
+        last_sender: lastMsg?.sender_name || '',
         unread_count: 0
       }
     }))
@@ -109,6 +137,48 @@ export const messageApi = {
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user?.id) return { error: { message: 'Not authenticated' } }
 
+    // ✅ CHECK FOR EXISTING DIRECT CHAT with same participants
+    if (participantIds.length === 1 && convData.type !== 'group') {
+      const otherUserId = participantIds[0]
+      
+      // Find conversations where BOTH users are participants
+      const { data: myConvs } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', userData.user?.id)
+
+      const myConvIds = (myConvs || []).map(p => p.conversation_id)
+      
+      if (myConvIds.length > 0) {
+        // Check if other user is in any of these conversations
+        const { data: existing } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id')
+          .eq('user_id', otherUserId)
+          .in('conversation_id', myConvIds)
+
+        if (existing && existing.length > 0) {
+          // Check if it's a direct chat (only 2 participants)
+          for (const conv of existing) {
+            const { count } = await supabase
+              .from('conversation_participants')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conv.conversation_id)
+
+            if (count === 2) {
+              // Return existing conversation instead of creating new one
+              const { data: existingConv } = await supabase
+                .from('conversations')
+                .select('*')
+                .eq('id', conv.conversation_id)
+                .single()
+              return { data: existingConv, is_existing: true }
+            }
+          }
+        }
+      }
+    }
+
     // Get user name safely
     let userName = 'User'
     try {
@@ -167,7 +237,7 @@ export const messageApi = {
       content: `Chat started by ${userName}`
     }])
 
-    return { data: conv }
+    return { data: conv, is_existing: false }
   },
 
   async getAvailableUsers() {
