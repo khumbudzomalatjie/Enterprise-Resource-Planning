@@ -165,9 +165,6 @@ export default function ServiceList() {
     return <Tag className="w-4 h-4 text-emerald-500" />
   }
 
-  const categoryOptions = [...new Set(services.map(s => s.category).filter(Boolean))].sort()
-  const unitOptions = ['per_service', 'per_month', 'per_hour', 'per_sqm', 'per_day', 'fixed', 'each']
-
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -292,12 +289,13 @@ export default function ServiceList() {
               <div className="space-y-4">
                 <input type="text" value={newService.name} onChange={(e) => setNewService({...newService, name: e.target.value})} placeholder="Service Name *" className="w-full p-3 neu-inset rounded-xl" />
                 <select value={newService.category} onChange={(e) => setNewService({...newService, category: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
-                  {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <div className="grid grid-cols-2 gap-3">
                   <input type="number" value={newService.unit_price} onChange={(e) => setNewService({...newService, unit_price: parseFloat(e.target.value) || 0})} placeholder="Price *" className="p-3 neu-inset rounded-xl" step="0.01" />
                   <select value={newService.unit} onChange={(e) => setNewService({...newService, unit: e.target.value})} className="p-3 neu-inset rounded-xl">
-                    {unitOptions.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
+                    <option value="per_service">per service</option>
+                    <option value="per_month">per month</option>
                   </select>
                 </div>
                 <textarea value={newService.description} onChange={(e) => setNewService({...newService, description: e.target.value})} placeholder="Description (optional)" rows={2} className="w-full p-3 neu-inset rounded-xl" />
