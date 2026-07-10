@@ -1,65 +1,67 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
+import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  Search, Plus, Edit, ChevronRight, 
+  Search, Plus, Edit, Trash2, ChevronRight, 
   Sun, Moon, Sparkles, Home, Building2,
-  DollarSign, Tag, Truck
+  DollarSign, Tag, Truck, RefreshCw
 } from 'lucide-react'
-
-// ═══════════════════════════════════════════════
-// YOUR ACTUAL SERVICES FROM QUOTATIONS
-// ═══════════════════════════════════════════════
-const SERVICES = [
-  // Once-Off Cleaning
-  { code: 'CLN-001', category: 'Once-Off Cleaning', name: '1 Bedroom - Once-Off', unit_price: 1304.35, unit: 'per_service' },
-  { code: 'CLN-002', category: 'Once-Off Cleaning', name: '2 Bedroom - Once-Off', unit_price: 1739.13, unit: 'per_service' },
-  { code: 'CLN-003', category: 'Once-Off Cleaning', name: '3 Bedroom - Once-Off', unit_price: 2347.83, unit: 'per_service' },
-  { code: 'CLN-004', category: 'Once-Off Cleaning', name: '4 Bedroom - Once-Off', unit_price: 3043.48, unit: 'per_service' },
-  { code: 'CLN-005', category: 'Once-Off Cleaning', name: '5 Bedroom - Once-Off', unit_price: 3478.26, unit: 'per_service' },
-  
-  // Monthly (1x Week)
-  { code: 'CLN-101', category: 'Monthly (1x Week)', name: '1 Bedroom - 1x Week', unit_price: 869.57, unit: 'per_month' },
-  { code: 'CLN-102', category: 'Monthly (1x Week)', name: '2 Bedroom - 1x Week', unit_price: 1043.48, unit: 'per_month' },
-  { code: 'CLN-103', category: 'Monthly (1x Week)', name: '3 Bedroom - 1x Week', unit_price: 1391.30, unit: 'per_month' },
-  { code: 'CLN-104', category: 'Monthly (1x Week)', name: '4 Bedroom - 1x Week', unit_price: 1739.13, unit: 'per_month' },
-  { code: 'CLN-105', category: 'Monthly (1x Week)', name: '5 Bedroom - 1x Week', unit_price: 2173.91, unit: 'per_month' },
-  
-  // Monthly (2x Week)
-  { code: 'CLN-201', category: 'Monthly (2x Week)', name: '1 Bedroom - 2x Week', unit_price: 1565.22, unit: 'per_month' },
-  { code: 'CLN-202', category: 'Monthly (2x Week)', name: '2 Bedroom - 2x Week', unit_price: 1913.04, unit: 'per_month' },
-  { code: 'CLN-203', category: 'Monthly (2x Week)', name: '3 Bedroom - 2x Week', unit_price: 2434.78, unit: 'per_month' },
-  { code: 'CLN-204', category: 'Monthly (2x Week)', name: '4 Bedroom - 2x Week', unit_price: 3130.43, unit: 'per_month' },
-  { code: 'CLN-205', category: 'Monthly (2x Week)', name: '5 Bedroom - 2x Week', unit_price: 3913.04, unit: 'per_month' },
-  
-  // Monthly (3x Week)
-  { code: 'CLN-301', category: 'Monthly (3x Week)', name: '1 Bedroom - 3x Week', unit_price: 2173.91, unit: 'per_month' },
-  { code: 'CLN-302', category: 'Monthly (3x Week)', name: '2 Bedroom - 3x Week', unit_price: 2608.70, unit: 'per_month' },
-  { code: 'CLN-303', category: 'Monthly (3x Week)', name: '3 Bedroom - 3x Week', unit_price: 3043.48, unit: 'per_month' },
-  { code: 'CLN-304', category: 'Monthly (3x Week)', name: '4 Bedroom - 3x Week', unit_price: 3913.04, unit: 'per_month' },
-  { code: 'CLN-305', category: 'Monthly (3x Week)', name: '5 Bedroom - 3x Week', unit_price: 4782.61, unit: 'per_month' },
-
-  // Moving In/Out Cleaning
-  { code: 'CLN-401', category: 'Moving In/Out Cleaning', name: '1 Bedroom - Moving', unit_price: 434.78, unit: 'per_service' },
-  { code: 'CLN-402', category: 'Moving In/Out Cleaning', name: '2 Bedroom - Moving', unit_price: 782.61, unit: 'per_service' },
-  { code: 'CLN-403', category: 'Moving In/Out Cleaning', name: '3 Bedroom - Moving', unit_price: 1043.48, unit: 'per_service' },
-  { code: 'CLN-404', category: 'Moving In/Out Cleaning', name: '4 Bedroom - Moving', unit_price: 1304.35, unit: 'per_service' },
-  { code: 'CLN-405', category: 'Moving In/Out Cleaning', name: '5+ Bedroom - Moving', unit_price: 1739.13, unit: 'per_service' },
-]
 
 export default function ServiceList() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
-  const [services, setServices] = useState(SERVICES)
+  const [services, setServices] = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editPrice, setEditPrice] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newService, setNewService] = useState({
+    name: '', category: 'Once-Off Cleaning', unit_price: 0, unit: 'per_service', description: ''
+  })
+  const [saving, setSaving] = useState(false)
 
-  const categories = [...new Set(SERVICES.map(s => s.category))]
+  useEffect(() => {
+    loadServices()
+  }, [])
+
+  const loadServices = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('is_active', true)
+        .order('category', { ascending: true })
+        .order('name', { ascending: true })
+
+      if (error) throw error
+
+      const mapped = (data || []).map(s => ({
+        id: s.id,
+        code: s.id?.toString().substring(0, 8).toUpperCase() || '',
+        category: s.category || 'Other',
+        name: s.name,
+        unit_price: s.unit_price || 0,
+        unit: s.unit || 'per_service',
+        description: s.description || ''
+      }))
+
+      setServices(mapped)
+      const cats = [...new Set(mapped.map(s => s.category).filter(Boolean))]
+      setCategories(cats.sort())
+    } catch (err) {
+      console.error('Error loading services:', err)
+      toast.error('Failed to load services')
+    }
+    setLoading(false)
+  }
 
   const filteredServices = services.filter(s => {
     if (categoryFilter !== 'all' && s.category !== categoryFilter) return false
@@ -75,24 +77,84 @@ export default function ServiceList() {
   }
 
   const startEdit = (service) => {
-    setEditingId(service.code)
+    setEditingId(service.id)
     setEditPrice(service.unit_price.toString())
   }
 
-  const savePrice = (code) => {
+  const savePrice = async (serviceId) => {
     const newPrice = parseFloat(editPrice)
     if (isNaN(newPrice) || newPrice <= 0) {
       toast.error('Please enter a valid price')
       return
     }
-    setServices(prev => prev.map(s => s.code === code ? { ...s, unit_price: newPrice } : s))
-    setEditingId(null)
-    toast.success(`Price updated to ${formatCurrency(newPrice)}`)
+    try {
+      const { error } = await supabase
+        .from('products_services')
+        .update({ unit_price: newPrice })
+        .eq('id', serviceId)
+
+      if (error) throw error
+
+      setServices(prev => prev.map(s => s.id === serviceId ? { ...s, unit_price: newPrice } : s))
+      setEditingId(null)
+      toast.success(`Price updated to ${formatCurrency(newPrice)}`)
+    } catch (err) {
+      toast.error('Failed to update price')
+    }
   }
 
   const cancelEdit = () => {
     setEditingId(null)
     setEditPrice('')
+  }
+
+  const handleDelete = async (serviceId, serviceName) => {
+    if (!window.confirm(`Delete "${serviceName}"? This cannot be undone.`)) return
+    try {
+      const { error } = await supabase
+        .from('products_services')
+        .update({ is_active: false })
+        .eq('id', serviceId)
+
+      if (error) throw error
+
+      setServices(prev => prev.filter(s => s.id !== serviceId))
+      toast.success(`"${serviceName}" deleted`)
+    } catch (err) {
+      toast.error('Failed to delete service')
+    }
+  }
+
+  const handleAddService = async () => {
+    if (!newService.name || newService.unit_price <= 0) {
+      toast.error('Name and price are required')
+      return
+    }
+    setSaving(true)
+    try {
+      const { data, error } = await supabase
+        .from('products_services')
+        .insert([{
+          name: newService.name,
+          category: newService.category,
+          unit_price: newService.unit_price,
+          unit: newService.unit,
+          description: newService.description,
+          is_active: true
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      toast.success('Service added!')
+      setShowAddModal(false)
+      setNewService({ name: '', category: 'Once-Off Cleaning', unit_price: 0, unit: 'per_service', description: '' })
+      loadServices()
+    } catch (err) {
+      toast.error('Failed to add service: ' + err.message)
+    }
+    setSaving(false)
   }
 
   const getCategoryIcon = (cat) => {
@@ -102,6 +164,9 @@ export default function ServiceList() {
     if (cat.includes('Moving')) return <Truck className="w-4 h-4 text-orange-500" />
     return <Tag className="w-4 h-4 text-emerald-500" />
   }
+
+  const categoryOptions = ['Once-Off Cleaning', 'Monthly (1x Week)', 'Monthly (2x Week)', 'Monthly (3x Week)', 'Moving In/Out Cleaning', 'Cleaning', 'Maintenance', 'Other']
+  const unitOptions = ['per_service', 'per_month', 'per_hour', 'per_sqm', 'per_day', 'fixed', 'each']
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -128,7 +193,15 @@ export default function ServiceList() {
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
               <DollarSign className="w-8 h-8 text-emerald-600" />Services & Pricing
             </h1>
-            <p className="text-slate-500 mt-1">{SERVICES.length} services across {categories.length} categories • Used in jobs & quotations</p>
+            <p className="text-slate-500 mt-1">{services.length} services across {categories.length} categories</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={loadServices} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white flex items-center gap-2 text-sm">
+              <RefreshCw className="w-5 h-5" /><span>Refresh</span>
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white flex items-center gap-2 text-sm">
+              <Plus className="w-5 h-5" /><span>Add Service</span>
+            </button>
           </div>
         </motion.div>
 
@@ -136,7 +209,7 @@ export default function ServiceList() {
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, code, or category..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or category..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
           </div>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
             <option value="all">All Categories</option>
@@ -144,75 +217,98 @@ export default function ServiceList() {
           </select>
         </div>
 
-        {/* Services by Category */}
-        {(categoryFilter === 'all' ? categories : [categoryFilter]).map(cat => {
-          const catServices = filteredServices.filter(s => s.category === cat)
-          if (catServices.length === 0) return null
-          return (
-            <div key={cat} className="mb-8">
-              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                {getCategoryIcon(cat)}
-                {cat}
-                <span className="text-sm font-normal text-slate-500">({catServices.length} services)</span>
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {catServices.map(service => (
-                  <motion.div key={service.code} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                    className="neu-raised rounded-2xl p-5 transition-all hover:scale-[1.02]">
-                    <p className="text-xs text-slate-400 mb-1">{service.code}</p>
-                    <h3 className="font-semibold text-slate-800 dark:text-white text-sm mb-2">{service.name}</h3>
-                    
-                    {/* Price - Edit Mode or Display */}
-                    {editingId === service.code ? (
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm text-slate-500">R</span>
-                        <input 
-                          type="number" 
-                          value={editPrice} 
-                          onChange={(e) => setEditPrice(e.target.value)}
-                          className="w-28 p-2 neu-inset rounded-lg text-lg font-bold text-emerald-600"
-                          step="0.01"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') savePrice(service.code)
-                            if (e.key === 'Escape') cancelEdit()
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-2xl font-bold text-emerald-600 mb-1">{formatCurrency(service.unit_price)}</p>
-                    )}
-                    <p className="text-xs text-slate-500 mb-3">per {service.unit?.replace('_', ' ')}</p>
+        {/* Loading */}
+        {loading ? (
+          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
+        ) : (
+          <>
+            {/* Services by Category */}
+            {(categoryFilter === 'all' ? categories : [categoryFilter]).map(cat => {
+              const catServices = filteredServices.filter(s => s.category === cat)
+              if (catServices.length === 0) return null
+              return (
+                <div key={cat} className="mb-8">
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    {getCategoryIcon(cat)}
+                    {cat}
+                    <span className="text-sm font-normal text-slate-500">({catServices.length})</span>
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {catServices.map(service => (
+                      <motion.div key={service.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                        className="neu-raised rounded-2xl p-5 transition-all hover:scale-[1.02]">
+                        <p className="text-xs text-slate-400 mb-1">{service.code}</p>
+                        <h3 className="font-semibold text-slate-800 dark:text-white text-sm mb-2">{service.name}</h3>
+                        
+                        {editingId === service.id ? (
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm text-slate-500">R</span>
+                            <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
+                              className="w-28 p-2 neu-inset rounded-lg text-lg font-bold text-emerald-600" step="0.01" autoFocus
+                              onKeyDown={(e) => { if (e.key === 'Enter') savePrice(service.id); if (e.key === 'Escape') cancelEdit() }} />
+                          </div>
+                        ) : (
+                          <p className="text-2xl font-bold text-emerald-600 mb-1">{formatCurrency(service.unit_price)}</p>
+                        )}
+                        <p className="text-xs text-slate-500 mb-3">per {service.unit?.replace('_', ' ')}</p>
 
-                    {/* Actions */}
-                    {editingId === service.code ? (
-                      <div className="flex gap-2">
-                        <button onClick={() => savePrice(service.code)} className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
-                          Save
-                        </button>
-                        <button onClick={cancelEdit} className="flex-1 py-2 rounded-xl bg-slate-400 text-white text-sm font-medium hover:bg-slate-500">
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={() => startEdit(service)} className="w-full py-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm font-medium flex items-center justify-center gap-1">
-                        <Edit className="w-4 h-4" /> Change Price
-                      </button>
-                    )}
-                  </motion.div>
-                ))}
+                        {editingId === service.id ? (
+                          <div className="flex gap-2">
+                            <button onClick={() => savePrice(service.id)} className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Save</button>
+                            <button onClick={cancelEdit} className="flex-1 py-2 rounded-xl bg-slate-400 text-white text-sm font-medium">Cancel</button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button onClick={() => startEdit(service)} className="flex-1 py-2 rounded-xl bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm font-medium flex items-center justify-center gap-1">
+                              <Edit className="w-4 h-4" /> Price
+                            </button>
+                            <button onClick={() => handleDelete(service.id, service.name)} className="p-2 rounded-xl bg-red-100 text-red-600 hover:bg-red-200" title="Delete">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {filteredServices.length === 0 && (
+              <div className="text-center py-12 neu-raised rounded-3xl">
+                <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg">No services found</p>
+                <button onClick={() => { setSearch(''); setCategoryFilter('all') }} className="mt-4 neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">Reset Filters</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Add Service Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
+            <div className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Add New Service</h3>
+              <div className="space-y-4">
+                <input type="text" value={newService.name} onChange={(e) => setNewService({...newService, name: e.target.value})} placeholder="Service Name *" className="w-full p-3 neu-inset rounded-xl" />
+                <select value={newService.category} onChange={(e) => setNewService({...newService, category: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
+                  {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="number" value={newService.unit_price} onChange={(e) => setNewService({...newService, unit_price: parseFloat(e.target.value) || 0})} placeholder="Price *" className="p-3 neu-inset rounded-xl" step="0.01" />
+                  <select value={newService.unit} onChange={(e) => setNewService({...newService, unit: e.target.value})} className="p-3 neu-inset rounded-xl">
+                    {unitOptions.map(u => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                <textarea value={newService.description} onChange={(e) => setNewService({...newService, description: e.target.value})} placeholder="Description (optional)" rows={2} className="w-full p-3 neu-inset rounded-xl" />
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setShowAddModal(false)} className="flex-1 neu-raised neu-btn py-3 rounded-xl bg-slate-600 text-white">Cancel</button>
+                <button onClick={handleAddService} disabled={saving} className="flex-1 neu-raised neu-btn py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50">
+                  {saving ? 'Adding...' : 'Add Service'}
+                </button>
               </div>
             </div>
-          )
-        })}
-
-        {filteredServices.length === 0 && (
-          <div className="text-center py-12 neu-raised rounded-3xl">
-            <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 text-lg">No services match your search</p>
-            <button onClick={() => { setSearch(''); setCategoryFilter('all') }} className="mt-4 neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">
-              Reset Filters
-            </button>
           </div>
         )}
       </main>
