@@ -96,9 +96,9 @@ export default function ConsumableProducts() {
   }
 
   const getStockStatus = (product) => {
-    if (product.current_stock <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500', excelColor: 'FF0000' }
-    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500', excelColor: 'FFA500' }
-    return { label: 'In Stock', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500', excelColor: '10B981' }
+    if (product.current_stock <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500' }
+    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500' }
+    return { label: 'In Stock', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500' }
   }
 
   const toggleSelectAll = () => {
@@ -111,7 +111,23 @@ export default function ConsumableProducts() {
     else setSelectedRows([...selectedRows, id])
   }
 
-  const exportToExcel = () => {
+  // Get base64 logo for Excel
+  const getLogoBase64 = () => {
+    // Try to get the logo from the page
+    const logoImg = document.querySelector('img[src="/logo.png"]')
+    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+      const canvas = document.createElement('canvas')
+      canvas.width = logoImg.naturalWidth
+      canvas.height = logoImg.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(logoImg, 0, 0)
+      return canvas.toDataURL('image/png')
+    }
+    // Fallback: create a text-based logo
+    return null
+  }
+
+  const exportToExcel = async () => {
     const dataToExport = selectedRows.length > 0 
       ? sortedProducts.filter(p => selectedRows.includes(p.id))
       : sortedProducts
@@ -121,9 +137,14 @@ export default function ConsumableProducts() {
       return
     }
 
-    // Build professional Excel HTML
     const today = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })
     const categoryLabel = categoryTab === 'all' ? 'All Products' : categoryTab.charAt(0).toUpperCase() + categoryTab.slice(1)
+    const logoBase64 = getLogoBase64()
+    
+    // Company info
+    const companyName = 'NDANDULENI GROUP'
+    const companyTagline = 'Professional Cleaning & Hygiene Services'
+    const companyInfo = '123 Main Street, Johannesburg, 2000 | Tel: +27 11 234 5678 | info@ndanduleni.co.za'
     
     let html = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -133,57 +154,153 @@ export default function ConsumableProducts() {
         <x:Name>Consumable Products</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
         </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
         <style>
-          @page { margin: 0.5cm; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; }
-          .header { background: #059669; color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; margin-bottom: 0; }
-          .header h1 { margin: 0; font-size: 20px; }
-          .header p { margin: 5px 0 0 0; font-size: 12px; opacity: 0.9; }
-          .subheader { background: #f0fdf4; padding: 10px 20px; border-left: 4px solid #059669; margin-bottom: 15px; }
-          .subheader span { font-size: 12px; color: #374151; }
-          table { border-collapse: collapse; width: 100%; font-size: 12px; }
-          th { background: #059669; color: white; padding: 12px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #047857; }
-          td { padding: 10px; border-bottom: 1px solid #e5e7eb; border-left: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; }
+          @page { margin: 0.3cm; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; }
+          
+          /* Header with Logo */
+          .report-header { 
+            background: linear-gradient(135deg, #059669, #047857);
+            color: white; 
+            padding: 20px 25px; 
+            border-radius: 10px 10px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+          }
+          .report-header img { width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3); object-fit: contain; background: white; padding: 5px; }
+          .report-header .logo-placeholder {
+            width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;
+            font-size: 28px; font-weight: bold; color: white;
+          }
+          .report-header h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
+          .report-header p { margin: 3px 0 0 0; font-size: 11px; opacity: 0.9; }
+          
+          /* Sub Header */
+          .subheader { 
+            background: #f0fdf4; 
+            padding: 12px 25px; 
+            border-left: 4px solid #059669; 
+            border-right: 4px solid #059669;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: #374151;
+          }
+          .subheader .badge {
+            background: #059669; color: white; padding: 3px 10px; border-radius: 12px;
+            font-size: 10px; font-weight: 600;
+          }
+          
+          /* Table */
+          table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            font-size: 11px;
+            border-left: 4px solid #059669;
+            border-right: 4px solid #059669;
+          }
+          th { 
+            background: #047857; 
+            color: white; 
+            padding: 11px 8px; 
+            text-align: left; 
+            font-weight: 600; 
+            font-size: 10px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+          }
+          td { 
+            padding: 9px 8px; 
+            border-bottom: 1px solid #e5e7eb; 
+          }
           tr:nth-child(even) { background: #f9fafb; }
           tr:hover { background: #ecfdf5; }
+          
+          /* Status Styles */
           .stock-in { color: #059669; font-weight: bold; }
           .stock-low { color: #d97706; font-weight: bold; }
           .stock-out { color: #dc2626; font-weight: bold; }
-          .category-badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; display: inline-block; }
+          
+          /* Category Badges */
+          .category-badge { 
+            padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 600; 
+            display: inline-block; white-space: nowrap;
+          }
           .cat-chemicals { background: #dbeafe; color: #1d4ed8; }
           .cat-ppe { background: #fee2e2; color: #dc2626; }
           .cat-equipment { background: #fef3c7; color: #d97706; }
+          
           .item-name { font-weight: 600; color: #1f2937; }
-          .item-code { font-size: 10px; color: #9ca3af; }
-          .footer { background: #f9fafb; padding: 10px 20px; border-top: 2px solid #059669; margin-top: 15px; font-size: 10px; color: #6b7280; text-align: center; }
+          .item-code { font-size: 10px; color: #9ca3af; font-family: 'Consolas', monospace; }
+          
+          /* Status Dots */
           .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
           .dot-green { background: #10b981; }
           .dot-amber { background: #f59e0b; }
           .dot-red { background: #ef4444; }
+          
+          /* Footer */
+          .footer { 
+            background: #f9fafb; 
+            padding: 12px 25px; 
+            border: 4px solid #059669;
+            border-top: 3px solid #059669;
+            border-radius: 0 0 10px 10px;
+            font-size: 10px; 
+            color: #6b7280; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .footer .stats { display: flex; gap: 15px; }
+          .footer .stat-item { display: flex; align-items: center; gap: 5px; }
+          .footer .stat-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+          
+          .price-col { text-align: right; font-family: 'Consolas', monospace; }
+          .qty-col { text-align: center; }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>📦 NDANDULENI GROUP - Consumable Products</h1>
-          <p>Exported: ${today} | Category: ${categoryLabel} | ${dataToExport.length} Products</p>
+        <!-- HEADER WITH LOGO -->
+        <div class="report-header">
+          ${logoBase64 
+            ? `<img src="${logoBase64}" alt="Logo" />`
+            : `<div class="logo-placeholder">NG</div>`
+          }
+          <div>
+            <h1>${companyName}</h1>
+            <p>${companyTagline}</p>
+            <p style="font-size:10px;opacity:0.7">${companyInfo}</p>
+          </div>
         </div>
+        
+        <!-- SUB HEADER -->
         <div class="subheader">
-          <span>🔍 Filters Applied: Category: <strong>${categoryLabel}</strong> | Search: <strong>${search || 'None'}</strong> | Sort: <strong>${sortField} (${sortDir})</strong></span>
+          <span>📋 <strong>Consumable Products Report</strong> — ${categoryLabel}</span>
+          <span class="badge">${dataToExport.length} Products</span>
         </div>
+        <div class="subheader" style="border-top:none;padding-top:5px;">
+          <span>📅 Generated: <strong>${today}</strong></span>
+          <span>🔍 Filters: <strong>${search || 'None'}</strong> | Sort: <strong>${sortField} (${sortDir})</strong></span>
+        </div>
+        
+        <!-- TABLE -->
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Item Code</th>
-              <th>Item Name</th>
-              <th>Category</th>
-              <th>Quantity</th>
-              <th>Unit</th>
-              <th>Min Stock</th>
-              <th>Supplier</th>
-              <th>Purchase Price</th>
-              <th>Selling Price</th>
-              <th>Status</th>
-              <th>Last Updated</th>
+              <th width="5%">#</th>
+              <th width="12%">Item Code</th>
+              <th width="22%">Item Name</th>
+              <th width="14%">Category</th>
+              <th width="8%" style="text-align:center">Qty</th>
+              <th width="6%">Unit</th>
+              <th width="7%" style="text-align:center">Min Stock</th>
+              <th width="14%">Supplier</th>
+              <th width="10%" style="text-align:right">Purchase Price</th>
+              <th width="10%" style="text-align:right">Selling Price</th>
+              <th width="10%">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -196,37 +313,50 @@ export default function ConsumableProducts() {
                        p.item_categories?.name === 'Cleaning Equipment' ? 'cat-equipment' : ''
       const stockClass = p.current_stock <= 0 ? 'stock-out' : p.current_stock <= p.reorder_point ? 'stock-low' : 'stock-in'
       const dotClass = p.current_stock <= 0 ? 'dot-red' : p.current_stock <= p.reorder_point ? 'dot-amber' : 'dot-green'
-      const updatedDate = p.updated_at ? new Date(p.updated_at).toLocaleDateString('en-ZA') : 'N/A'
-      const purchasePrice = p.unit_cost ? `R ${p.unit_cost.toFixed(2)}` : 'N/A'
-      const sellingPrice = p.selling_price ? `R ${p.selling_price.toFixed(2)}` : 'N/A'
+      const purchasePrice = p.unit_cost ? `R ${p.unit_cost.toFixed(2)}` : '—'
+      const sellingPrice = p.selling_price ? `R ${p.selling_price.toFixed(2)}` : '—'
       
       html += `
         <tr>
           <td>${i + 1}</td>
-          <td><span style="font-family:monospace;font-size:11px">${p.item_code || 'N/A'}</span></td>
+          <td><span style="font-family:Consolas,monospace;font-size:10px;color:#6b7280">${p.item_code || 'N/A'}</span></td>
           <td>
-            <div class="item-name">${p.name || 'Unnamed'}</div>
-            ${p.description ? `<div style="font-size:10px;color:#9ca3af">${p.description.substring(0, 50)}</div>` : ''}
+            <div class="item-name">${p.name || 'Unnamed Product'}</div>
+            ${p.description ? `<div style="font-size:9px;color:#9ca3af;margin-top:1px">${p.description.substring(0, 60)}</div>` : ''}
           </td>
-          <td><span class="category-badge ${catClass}">${p.item_categories?.name || 'N/A'}</span></td>
-          <td class="${stockClass}">${p.current_stock || 0}</td>
+          <td><span class="category-badge ${catClass}">${p.item_categories?.name || 'Uncategorized'}</span></td>
+          <td class="${stockClass} qty-col">${p.current_stock || 0}</td>
           <td>${p.unit || 'unit'}</td>
-          <td>${p.minimum_stock || 0}</td>
-          <td>${p.suppliers?.company_name || 'No supplier'}</td>
-          <td style="text-align:right">${purchasePrice}</td>
-          <td style="text-align:right">${sellingPrice}</td>
+          <td class="qty-col">${p.minimum_stock || 0}</td>
+          <td>${p.suppliers?.company_name || '<span style="color:#9ca3af">No supplier</span>'}</td>
+          <td class="price-col">${purchasePrice}</td>
+          <td class="price-col">${sellingPrice}</td>
           <td><span class="status-dot ${dotClass}"></span>${status.label}</td>
-          <td style="font-size:10px">${updatedDate}</td>
         </tr>
       `
     })
 
+    // Summary calculations
+    const inStock = dataToExport.filter(p => p.current_stock > (p.reorder_point || 10)).length
+    const lowStock = dataToExport.filter(p => p.current_stock <= (p.reorder_point || 10) && p.current_stock > 0).length
+    const outOfStock = dataToExport.filter(p => p.current_stock <= 0).length
+    const totalValue = dataToExport.reduce((sum, p) => sum + ((p.current_stock || 0) * (p.unit_cost || 0)), 0)
+
     html += `
           </tbody>
         </table>
+        
+        <!-- FOOTER -->
         <div class="footer">
-          <p>NDANDULENI GROUP ERP | Consumable Products Report | Generated on ${today} | ${dataToExport.length} products</p>
-          <p>In Stock: ${dataToExport.filter(p => p.current_stock > (p.reorder_point || 10)).length} | Low Stock: ${dataToExport.filter(p => p.current_stock <= (p.reorder_point || 10) && p.current_stock > 0).length} | Out of Stock: ${dataToExport.filter(p => p.current_stock <= 0).length}</p>
+          <div class="stats">
+            <span class="stat-item"><span class="stat-dot" style="background:#10b981"></span> In Stock: <strong>${inStock}</strong></span>
+            <span class="stat-item"><span class="stat-dot" style="background:#f59e0b"></span> Low Stock: <strong>${lowStock}</strong></span>
+            <span class="stat-item"><span class="stat-dot" style="background:#ef4444"></span> Out of Stock: <strong>${outOfStock}</strong></span>
+          </div>
+          <div style="text-align:right">
+            <strong>Total Inventory Value: R ${totalValue.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</strong>
+            <br/><span style="font-size:9px">NDANDULENI GROUP ERP | ${today}</span>
+          </div>
         </div>
       </body>
       </html>
@@ -259,8 +389,8 @@ export default function ConsumableProducts() {
       'Unit': p.unit || '',
       'Min Stock': p.minimum_stock || 0,
       'Supplier': p.suppliers?.company_name || '',
-      'Purchase Price': p.unit_cost || 0,
-      'Selling Price': p.selling_price || '',
+      'Purchase Price (ZAR)': p.unit_cost || 0,
+      'Selling Price (ZAR)': p.selling_price || '',
       'Status': getStockStatus(p).label,
       'Last Updated': p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''
     }))
@@ -288,8 +418,6 @@ export default function ConsumableProducts() {
     equipment: products.filter(p => p.item_categories?.name === 'Cleaning Equipment').length,
     total: products.length
   }
-
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -341,7 +469,7 @@ export default function ConsumableProducts() {
                       <FileSpreadsheet className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
                       <div>
                         <p className="font-medium text-slate-800 dark:text-white">Excel (.xls)</p>
-                        <p className="text-xs text-slate-500">Formatted with styling</p>
+                        <p className="text-xs text-slate-500">Formatted with logo</p>
                       </div>
                     </button>
                     <button onClick={exportToCSV} className="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm flex items-center gap-3 group">
