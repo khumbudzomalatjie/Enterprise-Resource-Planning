@@ -81,9 +81,7 @@ export default function InventoryDashboard() {
           </div>
         </motion.div>
 
-        {/* ═══════════════════════════════════════════ */}
-        {/* SERVICES & PRODUCTS QUICK ACCESS CARDS    */}
-        {/* ═══════════════════════════════════════════ */}
+        {/* SERVICES & CONSUMABLES QUICK ACCESS CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Services Card */}
           <motion.div 
@@ -105,10 +103,10 @@ export default function InventoryDashboard() {
             </div>
           </motion.div>
 
-          {/* Products Card */}
+          {/* Consumable Products Card */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-            onClick={() => navigate('/inventory/products')}
+            onClick={() => navigate('/inventory/consumables')}
             className="neu-raised rounded-3xl p-8 cursor-pointer hover:scale-[1.02] transition-transform text-center border-l-4 border-blue-500">
             <div className="w-20 h-20 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto mb-4">
               <Wrench className="w-10 h-10 text-blue-600" />
@@ -120,7 +118,7 @@ export default function InventoryDashboard() {
               <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700">Track Stock</span>
             </div>
             <div className="mt-4 flex gap-2 justify-center">
-              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/products') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm">View All</button>
+              <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/consumables') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm">View All</button>
               <button onClick={(e) => { e.stopPropagation(); navigate('/inventory/items') }} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white text-sm">Stock List</button>
             </div>
           </motion.div>
@@ -131,7 +129,7 @@ export default function InventoryDashboard() {
           {[
             { label: 'All Services', icon: Briefcase, path: '/inventory/services' },
             { label: 'Add Service', icon: Plus, path: '/inventory/services/new' },
-            { label: 'Products', icon: Package, path: '/inventory/products' },
+            { label: 'Consumables', icon: Package, path: '/inventory/consumables' },
             { label: 'Stock Items', icon: Tag, path: '/inventory/items' },
           ].map(action => (
             <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform">
@@ -154,12 +152,13 @@ export default function InventoryDashboard() {
 
         {/* Low Stock & Movements */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Low Stock Alert */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />Low Stock Alert
               </h2>
-              <Link to="/inventory/products" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+              <Link to="/inventory/consumables" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
             </div>
             <div className="space-y-3">
               {lowStockItems.map(item => (
@@ -178,6 +177,7 @@ export default function InventoryDashboard() {
             </div>
           </motion.div>
 
+          {/* Recent Movements */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
