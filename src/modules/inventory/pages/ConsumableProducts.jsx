@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   Package, Search, Download, ChevronDown, ChevronUp,
-  ChevronRight, Sun, Moon, Sparkles, Edit, Trash2,
+  ChevronRight, Sun, Moon, Sparkles, Edit,
   AlertTriangle, CheckCircle2, Plus, RefreshCw,
-  FileSpreadsheet, Beaker, Shield, HardHat, ShoppingCart
+  FileSpreadsheet, FileText, Beaker, Shield, HardHat, ShoppingCart
 } from 'lucide-react'
 
 export default function ConsumableProducts() {
@@ -19,10 +19,11 @@ export default function ConsumableProducts() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [categoryTab, setCategoryTab] = useState('all') // 'all' | 'chemicals' | 'ppe' | 'equipment'
+  const [categoryTab, setCategoryTab] = useState('all')
   const [sortField, setSortField] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [selectedRows, setSelectedRows] = useState([])
+  const [showExportMenu, setShowExportMenu] = useState(false)
 
   useEffect(() => {
     loadProducts()
@@ -37,7 +38,6 @@ export default function ConsumableProducts() {
       .eq('is_consumable', true)
       .order('name')
 
-    // Filter by category
     if (categoryTab === 'chemicals') {
       query = query.eq('category_id', await getCategoryId('Cleaning Chemicals'))
     } else if (categoryTab === 'ppe') {
@@ -63,7 +63,6 @@ export default function ConsumableProducts() {
     return data?.id || null
   }
 
-  // Search filter
   const filteredProducts = products.filter(p => {
     if (!search) return true
     const s = search.toLowerCase()
@@ -73,7 +72,6 @@ export default function ConsumableProducts() {
            (p.suppliers?.company_name || '').toLowerCase().includes(s)
   })
 
-  // Sort
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     let valA, valB
     switch (sortField) {
@@ -98,9 +96,9 @@ export default function ConsumableProducts() {
   }
 
   const getStockStatus = (product) => {
-    if (product.current_stock <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500' }
-    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500' }
-    return { label: 'In Stock', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500' }
+    if (product.current_stock <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500', excelColor: 'FF0000' }
+    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500', excelColor: 'FFA500' }
+    return { label: 'In Stock', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500', excelColor: '10B981' }
   }
 
   const toggleSelectAll = () => {
@@ -118,31 +116,170 @@ export default function ConsumableProducts() {
       ? sortedProducts.filter(p => selectedRows.includes(p.id))
       : sortedProducts
 
-    const rows = dataToExport.map(p => ({
-      'Item Name': p.name || '',
-      'Category': p.item_categories?.name || 'N/A',
-      'Quantity': p.current_stock || 0,
-      'Supplier': p.suppliers?.company_name || 'N/A',
-      'Unit': p.unit || '',
-      'Min Stock': p.minimum_stock || 0,
-      'Purchase Price': p.unit_cost || 0,
-      'Status': getStockStatus(p).label,
-      'Item Code': p.item_code || ''
-    }))
+    if (dataToExport.length === 0) {
+      toast.error('No data to export')
+      return
+    }
 
-    const csv = [
-      Object.keys(rows[0] || {}).join('\t'),
-      ...rows.map(r => Object.values(r).join('\t'))
-    ].join('\n')
+    // Build professional Excel HTML
+    const today = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })
+    const categoryLabel = categoryTab === 'all' ? 'All Products' : categoryTab.charAt(0).toUpperCase() + categoryTab.slice(1)
+    
+    let html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8">
+        <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+        <x:Name>Consumable Products</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+        <style>
+          @page { margin: 0.5cm; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; }
+          .header { background: #059669; color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; margin-bottom: 0; }
+          .header h1 { margin: 0; font-size: 20px; }
+          .header p { margin: 5px 0 0 0; font-size: 12px; opacity: 0.9; }
+          .subheader { background: #f0fdf4; padding: 10px 20px; border-left: 4px solid #059669; margin-bottom: 15px; }
+          .subheader span { font-size: 12px; color: #374151; }
+          table { border-collapse: collapse; width: 100%; font-size: 12px; }
+          th { background: #059669; color: white; padding: 12px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #047857; }
+          td { padding: 10px; border-bottom: 1px solid #e5e7eb; border-left: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; }
+          tr:nth-child(even) { background: #f9fafb; }
+          tr:hover { background: #ecfdf5; }
+          .stock-in { color: #059669; font-weight: bold; }
+          .stock-low { color: #d97706; font-weight: bold; }
+          .stock-out { color: #dc2626; font-weight: bold; }
+          .category-badge { padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; display: inline-block; }
+          .cat-chemicals { background: #dbeafe; color: #1d4ed8; }
+          .cat-ppe { background: #fee2e2; color: #dc2626; }
+          .cat-equipment { background: #fef3c7; color: #d97706; }
+          .item-name { font-weight: 600; color: #1f2937; }
+          .item-code { font-size: 10px; color: #9ca3af; }
+          .footer { background: #f9fafb; padding: 10px 20px; border-top: 2px solid #059669; margin-top: 15px; font-size: 10px; color: #6b7280; text-align: center; }
+          .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+          .dot-green { background: #10b981; }
+          .dot-amber { background: #f59e0b; }
+          .dot-red { background: #ef4444; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📦 NDANDULENI GROUP - Consumable Products</h1>
+          <p>Exported: ${today} | Category: ${categoryLabel} | ${dataToExport.length} Products</p>
+        </div>
+        <div class="subheader">
+          <span>🔍 Filters Applied: Category: <strong>${categoryLabel}</strong> | Search: <strong>${search || 'None'}</strong> | Sort: <strong>${sortField} (${sortDir})</strong></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Item Code</th>
+              <th>Item Name</th>
+              <th>Category</th>
+              <th>Quantity</th>
+              <th>Unit</th>
+              <th>Min Stock</th>
+              <th>Supplier</th>
+              <th>Purchase Price</th>
+              <th>Selling Price</th>
+              <th>Status</th>
+              <th>Last Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+    `
 
-    const blob = new Blob(['\uFEFF' + csv], { type: 'application/vnd.ms-excel;charset=utf-8' })
+    dataToExport.forEach((p, i) => {
+      const status = getStockStatus(p)
+      const catClass = p.item_categories?.name === 'Cleaning Chemicals' ? 'cat-chemicals' : 
+                       p.item_categories?.name === 'PPE & Safety' ? 'cat-ppe' : 
+                       p.item_categories?.name === 'Cleaning Equipment' ? 'cat-equipment' : ''
+      const stockClass = p.current_stock <= 0 ? 'stock-out' : p.current_stock <= p.reorder_point ? 'stock-low' : 'stock-in'
+      const dotClass = p.current_stock <= 0 ? 'dot-red' : p.current_stock <= p.reorder_point ? 'dot-amber' : 'dot-green'
+      const updatedDate = p.updated_at ? new Date(p.updated_at).toLocaleDateString('en-ZA') : 'N/A'
+      const purchasePrice = p.unit_cost ? `R ${p.unit_cost.toFixed(2)}` : 'N/A'
+      const sellingPrice = p.selling_price ? `R ${p.selling_price.toFixed(2)}` : 'N/A'
+      
+      html += `
+        <tr>
+          <td>${i + 1}</td>
+          <td><span style="font-family:monospace;font-size:11px">${p.item_code || 'N/A'}</span></td>
+          <td>
+            <div class="item-name">${p.name || 'Unnamed'}</div>
+            ${p.description ? `<div style="font-size:10px;color:#9ca3af">${p.description.substring(0, 50)}</div>` : ''}
+          </td>
+          <td><span class="category-badge ${catClass}">${p.item_categories?.name || 'N/A'}</span></td>
+          <td class="${stockClass}">${p.current_stock || 0}</td>
+          <td>${p.unit || 'unit'}</td>
+          <td>${p.minimum_stock || 0}</td>
+          <td>${p.suppliers?.company_name || 'No supplier'}</td>
+          <td style="text-align:right">${purchasePrice}</td>
+          <td style="text-align:right">${sellingPrice}</td>
+          <td><span class="status-dot ${dotClass}"></span>${status.label}</td>
+          <td style="font-size:10px">${updatedDate}</td>
+        </tr>
+      `
+    })
+
+    html += `
+          </tbody>
+        </table>
+        <div class="footer">
+          <p>NDANDULENI GROUP ERP | Consumable Products Report | Generated on ${today} | ${dataToExport.length} products</p>
+          <p>In Stock: ${dataToExport.filter(p => p.current_stock > (p.reorder_point || 10)).length} | Low Stock: ${dataToExport.filter(p => p.current_stock <= (p.reorder_point || 10) && p.current_stock > 0).length} | Out of Stock: ${dataToExport.filter(p => p.current_stock <= 0).length}</p>
+        </div>
+      </body>
+      </html>
+    `
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Consumable_Products_${new Date().toISOString().split('T')[0]}.xls`
+    a.download = `NDANDULENI_Consumable_Products_${new Date().toISOString().split('T')[0]}.xls`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    
+    setShowExportMenu(false)
+    toast.success(`📥 Exported ${dataToExport.length} products to Excel`)
+  }
+
+  const exportToCSV = () => {
+    const dataToExport = selectedRows.length > 0 
+      ? sortedProducts.filter(p => selectedRows.includes(p.id))
+      : sortedProducts
+
+    const rows = dataToExport.map(p => ({
+      'Item Code': p.item_code || '',
+      'Item Name': p.name || '',
+      'Category': p.item_categories?.name || '',
+      'Quantity': p.current_stock || 0,
+      'Unit': p.unit || '',
+      'Min Stock': p.minimum_stock || 0,
+      'Supplier': p.suppliers?.company_name || '',
+      'Purchase Price': p.unit_cost || 0,
+      'Selling Price': p.selling_price || '',
+      'Status': getStockStatus(p).label,
+      'Last Updated': p.updated_at ? new Date(p.updated_at).toLocaleDateString() : ''
+    }))
+
+    const csv = [
+      Object.keys(rows[0]).join(','),
+      ...rows.map(r => Object.values(r).map(v => `"${v}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `NDANDULENI_Consumable_Products_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success(`Exported ${rows.length} products to Excel`)
+    
+    setShowExportMenu(false)
+    toast.success(`📥 Exported ${dataToExport.length} products to CSV`)
   }
 
   const stats = {
@@ -151,6 +288,8 @@ export default function ConsumableProducts() {
     equipment: products.filter(p => p.item_categories?.name === 'Cleaning Equipment').length,
     total: products.length
   }
+
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -187,9 +326,36 @@ export default function ConsumableProducts() {
             <button onClick={loadProducts} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
-            <button onClick={exportToExcel} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
-              <FileSpreadsheet className="w-4 h-4" /> Export to Excel
-            </button>
+            
+            {/* Export Dropdown */}
+            <div className="relative">
+              <button onClick={() => setShowExportMenu(!showExportMenu)} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
+                <Download className="w-4 h-4" /> Export
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              <AnimatePresence>
+                {showExportMenu && (
+                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
+                    className="absolute right-0 mt-2 w-56 neu-raised rounded-xl p-2 bg-white dark:bg-slate-800 z-40 shadow-xl border border-slate-200 dark:border-slate-700">
+                    <button onClick={exportToExcel} className="w-full text-left px-4 py-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-sm flex items-center gap-3 group">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                      <div>
+                        <p className="font-medium text-slate-800 dark:text-white">Excel (.xls)</p>
+                        <p className="text-xs text-slate-500">Formatted with styling</p>
+                      </div>
+                    </button>
+                    <button onClick={exportToCSV} className="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm flex items-center gap-3 group">
+                      <FileText className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+                      <div>
+                        <p className="font-medium text-slate-800 dark:text-white">CSV</p>
+                        <p className="text-xs text-slate-500">Plain data format</p>
+                      </div>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button onClick={() => navigate('/inventory/items/new')} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-sm">
               <Plus className="w-4 h-4" /> Add Product
             </button>
@@ -197,15 +363,15 @@ export default function ConsumableProducts() {
         </motion.div>
 
         {/* Category Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
-            { id: 'all', label: 'All Products', icon: Package, count: stats.total, color: 'bg-slate-500' },
-            { id: 'chemicals', label: 'Chemicals', icon: Beaker, count: stats.chemicals, color: 'bg-blue-500' },
-            { id: 'ppe', label: 'PPE & Safety', icon: Shield, count: stats.ppe, color: 'bg-red-500' },
-            { id: 'equipment', label: 'Equipment', icon: HardHat, count: stats.equipment, color: 'bg-amber-500' },
+            { id: 'all', label: 'All Products', icon: Package, count: stats.total },
+            { id: 'chemicals', label: 'Chemicals', icon: Beaker, count: stats.chemicals },
+            { id: 'ppe', label: 'PPE & Safety', icon: Shield, count: stats.ppe },
+            { id: 'equipment', label: 'Equipment', icon: HardHat, count: stats.equipment },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setCategoryTab(tab.id); setSelectedRows([]) }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 categoryTab === tab.id 
                   ? 'bg-emerald-600 text-white shadow-lg' 
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
@@ -347,9 +513,9 @@ export default function ConsumableProducts() {
                   {selectedRows.length > 0 && <span className="text-emerald-600 font-medium"> {selectedRows.length} selected</span>}
                 </p>
                 <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <span>🟢 In Stock</span>
-                  <span>🟡 Low Stock</span>
-                  <span>🔴 Out of Stock</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> In Stock</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Low Stock</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Out of Stock</span>
                 </div>
               </div>
             </>
