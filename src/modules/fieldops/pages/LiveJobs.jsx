@@ -11,7 +11,7 @@ import {
   Radio, Search, Users, UserPlus, UserX, MapPin, 
   Clock, Play, CheckCircle2, XCircle, ChevronRight,
   Sun, Moon, Sparkles, Building2, Calendar, Eye, 
-  Wifi, WifiOff, RefreshCw, Briefcase, Camera, Image
+  Wifi, WifiOff, RefreshCw, Briefcase, Camera
 } from 'lucide-react'
 
 export default function LiveJobs() {
@@ -35,7 +35,6 @@ export default function LiveJobs() {
   const [lastSync, setLastSync] = useState(new Date())
   const [dataLoaded, setDataLoaded] = useState(false)
 
-  // Online/Offline detection
   useEffect(() => {
     const handleOnline = () => { setIsOnline(true); loadAllData() }
     const handleOffline = () => setIsOnline(false)
@@ -47,7 +46,6 @@ export default function LiveJobs() {
     }
   }, [])
 
-  // Initial load + realtime
   useEffect(() => {
     loadAllData()
     fetchAvailableEmployees()
@@ -92,7 +90,6 @@ export default function LiveJobs() {
     }
   }
 
-  // Merge jobs with my assignments
   const jobs = useCallback(() => {
     const allJobs = [...(liveJobs || [])]
     const myJobIds = new Set((myAssignedJobs || []).map(a => a.job_id || a.jobs?.id))
@@ -103,7 +100,6 @@ export default function LiveJobs() {
     }))
   }, [liveJobs, myAssignedJobs])()
 
-  // Filter
   const filteredJobs = jobs.filter(job => {
     if (search) {
       const s = search.toLowerCase()
@@ -120,7 +116,6 @@ export default function LiveJobs() {
     }
   })
 
-  // Sort
   const sortedJobs = [...filteredJobs].sort((a, b) => {
     const priorityOrder = { emergency: 0, urgent: 1, high: 2, medium: 3, low: 4 }
     const statusOrder = { in_progress: 0, scheduled: 1, pending: 2 }
@@ -132,8 +127,6 @@ export default function LiveJobs() {
       default: return 0
     }
   })
-
-  // === HANDLERS ===
 
   const handleAssign = async () => {
     if (!selectedJob || !selectedEmployee) {
@@ -153,8 +146,7 @@ export default function LiveJobs() {
   }
 
   const handleRelease = async (assignmentId, employeeName, jobNumber) => {
-    if (!window.confirm(`Are you sure you want to release ${employeeName} from ${jobNumber}?`)) return
-    
+    if (!window.confirm(`Release ${employeeName} from ${jobNumber}?`)) return
     const result = await releaseEmployee(assignmentId, 'Manually released from Live Jobs')
     if (result.success) {
       toast.success(`${employeeName} released from ${jobNumber}`)
@@ -166,19 +158,13 @@ export default function LiveJobs() {
 
   const handleStartJob = async (jobId) => {
     const result = await updateJobStatus(jobId, 'in_progress')
-    if (result.success) {
-      toast.success('Job started!')
-      await loadAllData()
-    }
+    if (result.success) { toast.success('Job started!'); await loadAllData() }
   }
 
   const handleCompleteJob = async (jobId) => {
-    if (!window.confirm('Mark this job as completed? It will be removed from the live list.')) return
+    if (!window.confirm('Mark as completed?')) return
     const result = await updateJobStatus(jobId, 'completed')
-    if (result.success) {
-      toast.success('Job completed!')
-      await loadAllData()
-    }
+    if (result.success) { toast.success('Job completed!'); await loadAllData() }
   }
 
   const handleManualRefresh = () => {
@@ -187,23 +173,31 @@ export default function LiveJobs() {
     toast.success('Refreshed!')
   }
 
-  // === STYLING HELPERS ===
-
   const getStatusColor = (status) => {
     const c = {
       pending: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
       scheduled: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      assigned: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
       in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 animate-pulse',
+      completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+      cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    }
+    return c[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+  }
+
+  const getAssignmentStatusColor = (status) => {
+    const c = {
+      assigned: 'bg-blue-100 text-blue-700',
+      accepted: 'bg-purple-100 text-purple-700',
+      in_progress: 'bg-amber-100 text-amber-700 ring-2 ring-amber-500',
+      completed: 'bg-emerald-100 text-emerald-700',
+      released: 'bg-red-100 text-red-700',
     }
     return c[status] || 'bg-slate-100 text-slate-700'
   }
 
   const getPriorityColor = (priority) => {
-    const c = {
-      low: 'bg-slate-100 text-slate-600', medium: 'bg-blue-100 text-blue-600',
-      high: 'bg-amber-100 text-amber-600', urgent: 'bg-red-100 text-red-700',
-      emergency: 'bg-red-200 text-red-800 animate-pulse',
-    }
+    const c = { low: 'bg-slate-100 text-slate-600', medium: 'bg-blue-100 text-blue-600', high: 'bg-amber-100 text-amber-600', urgent: 'bg-red-100 text-red-700', emergency: 'bg-red-200 text-red-800 animate-pulse' }
     return c[priority] || ''
   }
 
@@ -211,8 +205,6 @@ export default function LiveJobs() {
     const i = { emergency: '🔴', urgent: '🟠', high: '🟡', medium: '🔵', low: '⚪' }
     return i[priority] || '⚪'
   }
-
-  // === STATS ===
 
   const myJobCount = jobs.filter(j => j.isMyJob).length
   const inProgressCount = jobs.filter(j => j.status === 'in_progress').length
@@ -223,13 +215,10 @@ export default function LiveJobs() {
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
       
-      {/* Top Bar */}
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-3 py-2 rounded-full flex items-center gap-2 text-xs">
           {isOnline ? <Wifi className="w-3 h-3 text-emerald-500" /> : <WifiOff className="w-3 h-3 text-red-500" />}
-          <span className="text-slate-500 hidden sm:inline">
-            {isOnline ? 'Live' : 'Offline'} • {lastSync.toLocaleTimeString()}
-          </span>
+          <span className="text-slate-500 hidden sm:inline">{isOnline ? 'Live' : 'Offline'} • {lastSync.toLocaleTimeString()}</span>
         </div>
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -241,30 +230,20 @@ export default function LiveJobs() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/fieldops" className="text-slate-500 hover:text-emerald-600">Field Ops</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
           <span className="text-slate-800 dark:text-white font-medium">Live Jobs</span>
         </div>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-              <Radio className="w-8 h-8 text-emerald-600" />Live Jobs
-            </h1>
-            <p className="text-slate-500 mt-1">
-              {jobs.length} total • {myJobCount} my jobs • {inProgressCount} in progress
-              {!dataLoaded && <span className="ml-2 text-amber-500">(Loading...)</span>}
-            </p>
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><Radio className="w-8 h-8 text-emerald-600" />Live Jobs</h1>
+            <p className="text-slate-500 mt-1">{jobs.length} total • {myJobCount} my jobs • {inProgressCount} in progress{!dataLoaded && <span className="ml-2 text-amber-500">(Loading...)</span>}</p>
           </div>
-          <button onClick={handleManualRefresh} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2">
-            <RefreshCw className="w-5 h-5" /><span>Refresh</span>
-          </button>
+          <button onClick={handleManualRefresh} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2"><RefreshCw className="w-5 h-5" /><span>Refresh</span></button>
         </motion.div>
 
-        {/* Stats Bar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
           {[
             { label: 'All Open', value: jobs.length, active: filterView === 'all', onClick: () => setFilterView('all'), color: 'bg-blue-500' },
@@ -273,8 +252,7 @@ export default function LiveJobs() {
             { label: 'In Progress', value: inProgressCount, active: filterView === 'in_progress', onClick: () => setFilterView('in_progress'), color: 'bg-purple-500' },
             { label: 'High Priority', value: highPriorityCount, onClick: () => setSortBy('priority'), color: 'bg-red-500' },
           ].map(stat => (
-            <button key={stat.label} onClick={stat.onClick}
-              className={`neu-raised rounded-xl p-3 text-center transition-all hover:scale-105 ${stat.active ? 'ring-2 ring-emerald-500' : ''}`}>
+            <button key={stat.label} onClick={stat.onClick} className={`neu-raised rounded-xl p-3 text-center transition-all hover:scale-105 ${stat.active ? 'ring-2 ring-emerald-500' : ''}`}>
               <div className={`w-3 h-3 rounded-full ${stat.color} mx-auto mb-1`}></div>
               <p className="text-2xl font-bold text-slate-800 dark:text-white">{stat.value}</p>
               <p className="text-xs text-slate-500">{stat.label}</p>
@@ -282,52 +260,26 @@ export default function LiveJobs() {
           ))}
         </motion.div>
 
-        {/* Search & Sort */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-2xl p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by job #, title, client, or city..."
-                className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
-            </div>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
-              <option value="priority">Sort by Priority</option>
-              <option value="date">Sort by Date</option>
-              <option value="client">Sort by Client</option>
-              <option value="status">Sort by Status</option>
-            </select>
+            <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" /><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by job #, title, client, or city..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" /></div>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"><option value="priority">Sort by Priority</option><option value="date">Sort by Date</option><option value="client">Sort by Client</option><option value="status">Sort by Status</option></select>
           </div>
         </motion.div>
 
-        {/* Jobs List */}
         {!dataLoaded ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-500">Loading live jobs...</p>
-          </div>
+          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading live jobs...</p></div>
         ) : sortedJobs.length === 0 ? (
-          <div className="text-center py-12 neu-raised rounded-3xl">
-            <Radio className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 text-lg">No live jobs found</p>
-            <p className="text-slate-400 text-sm">Create jobs in <Link to="/operations" className="text-emerald-600 hover:underline">Operations</Link> or adjust filters</p>
-            <button onClick={() => { setFilterView('all'); setSearch('') }} className="mt-4 neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm">
-              Reset Filters
-            </button>
-          </div>
+          <div className="text-center py-12 neu-raised rounded-3xl"><Radio className="w-16 h-16 text-slate-300 mx-auto mb-4" /><p className="text-slate-500 text-lg">No live jobs found</p><p className="text-slate-400 text-sm">Create jobs in <Link to="/operations" className="text-emerald-600 hover:underline">Operations</Link> or adjust filters</p><button onClick={() => { setFilterView('all'); setSearch('') }} className="mt-4 neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm">Reset Filters</button></div>
         ) : (
           <div className="space-y-4">
             {sortedJobs.map((job) => {
-              const activeAssignments = (job.field_job_assignments || []).filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
+              const allAssignments = (job.field_job_assignments || [])
               
               return (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} layout
-                  className={`neu-raised rounded-2xl p-5 transition-all ${
-                    job.isMyJob ? 'border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/5' : ''
-                  } ${job.status === 'in_progress' ? 'border-r-4 border-amber-500' : ''}`}>
+                  className={`neu-raised rounded-2xl p-5 transition-all ${job.isMyJob ? 'border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/5' : ''} ${job.status === 'in_progress' ? 'border-r-4 border-amber-500' : ''}`}>
                   
-                  {/* Job Header Row */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3 flex-1">
                       <span className="text-xl mt-1" title={job.priority}>{getPriorityIcon(job.priority)}</span>
@@ -349,71 +301,42 @@ export default function LiveJobs() {
                       </div>
                     </div>
                     
-                    {/* ACTION BUTTONS */}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {job.status === 'scheduled' || job.status === 'pending' ? (
-                        <button onClick={() => handleStartJob(job.id)} className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200" title="Start Job">
-                          <Play className="w-4 h-4" />
-                        </button>
-                      ) : null}
-                      {job.status === 'in_progress' ? (
-                        <button onClick={() => handleCompleteJob(job.id)} className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200" title="Complete Job">
-                          <CheckCircle2 className="w-4 h-4" />
-                        </button>
-                      ) : null}
-                      
-                      {/* ASSIGN BUTTON */}
-                      <button 
-                        onClick={() => { setSelectedJob(job); setShowAssignModal(true) }} 
-                        className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors" 
-                        title="Assign Staff">
-                        <UserPlus className="w-4 h-4" />
-                      </button>
-                      
-                      <button onClick={() => setShowJobDetail(showJobDetail === job.id ? null : job.id)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400" title="Details">
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      {(job.status === 'scheduled' || job.status === 'pending') && <button onClick={() => handleStartJob(job.id)} className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200" title="Start"><Play className="w-4 h-4" /></button>}
+                      {job.status === 'in_progress' && <button onClick={() => handleCompleteJob(job.id)} className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200" title="Complete"><CheckCircle2 className="w-4 h-4" /></button>}
+                      <button onClick={() => { setSelectedJob(job); setShowAssignModal(true) }} className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600" title="Assign"><UserPlus className="w-4 h-4" /></button>
+                      <button onClick={() => setShowJobDetail(showJobDetail === job.id ? null : job.id)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400" title="Details"><Eye className="w-4 h-4" /></button>
                     </div>
                   </div>
 
-                  {/* Assigned Staff Section */}
+                  {/* ✅ SHOW ALL ASSIGNMENTS WITH COLOR CODING */}
                   <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Staff ({activeAssignments.length}/{job.cleaners_required || 1})
-                      </h4>
-                      {activeAssignments.length >= (job.cleaners_required || 1) && (
-                        <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Fully Staffed</span>
-                      )}
+                      <h4 className="text-sm font-semibold text-slate-500 flex items-center gap-2"><Users className="w-4 h-4" />Staff ({allAssignments.length}/{job.cleaners_required || 1})</h4>
                     </div>
                     
-                    {activeAssignments.length > 0 ? (
+                    {allAssignments.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {activeAssignments.map(a => (
-                          <div key={a.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${a.employees?.user_id === user?.id ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
-                            <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-xs font-bold">
-                              {a.employees?.first_name?.[0] || '?'}{a.employees?.last_name?.[0] || '?'}
+                        {allAssignments.map(a => {
+                          const sc = getAssignmentStatusColor(a.assignment_status)
+                          const isActive = ['assigned', 'accepted', 'in_progress'].includes(a.assignment_status)
+                          return (
+                            <div key={a.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${sc}`}>
+                              <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-xs font-bold">{a.employees?.first_name?.[0] || '?'}{a.employees?.last_name?.[0] || '?'}</div>
+                              <span className="font-medium">{a.employees?.first_name || '?'} {a.employees?.last_name || ''}</span>
+                              <span className="text-xs opacity-75">({a.assignment_status})</span>
+                              {isActive && (
+                                <button onClick={() => handleRelease(a.id, `${a.employees?.first_name || '?'} ${a.employees?.last_name || ''}`, job.job_number)} className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200" title="Release"><XCircle className="w-4 h-4" /></button>
+                              )}
                             </div>
-                            <span className="font-medium">{a.employees?.first_name || 'Unknown'} {a.employees?.last_name || ''}</span>
-                            <span className="text-xs opacity-75">({a.assignment_status})</span>
-                            
-                            {/* RELEASE BUTTON */}
-                            <button 
-                              onClick={() => handleRelease(a.id, `${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''}`, job.job_number)}
-                              className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 hover:text-red-700 transition-colors"
-                              title="Release Employee">
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     ) : (
-                      <p className="text-sm text-slate-400 italic">No staff assigned - Click the blue <UserPlus className="w-3 h-3 inline" /> button above to assign</p>
+                      <p className="text-sm text-slate-400 italic">No staff assigned</p>
                     )}
                   </div>
 
-                  {/* ✅ EXPANDED DETAILS WITH PHOTOS */}
                   <AnimatePresence>
                     {showJobDetail === job.id && (
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -422,30 +345,8 @@ export default function LiveJobs() {
                           <div><p className="text-xs text-slate-500">Duration</p><p className="font-medium">{job.estimated_duration_minutes || 'N/A'} min</p></div>
                           <div><p className="text-xs text-slate-500">Amount</p><p className="font-medium text-emerald-600">{new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(job.quoted_amount || 0)}</p></div>
                           <div><p className="text-xs text-slate-500">Contact</p><p className="font-medium">{job.site_contact_name || 'N/A'}</p></div>
-                          {job.access_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Access</p><p className="text-sm">{job.access_instructions}</p></div>}
-                          {job.special_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Instructions</p><p className="text-sm">{job.special_instructions}</p></div>}
                         </div>
-
-                        {/* ✅ JOB PHOTOS SECTION */}
-                        {job.job_photos && job.job_photos.length > 0 && (
-                          <div className="mt-3">
-                            <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
-                              <Camera className="w-3 h-3" /> Job Photos ({job.job_photos.length})
-                            </p>
-                            <div className="grid grid-cols-3 gap-2">
-                              {job.job_photos.map(photo => (
-                                <a key={photo.id} href={photo.photo_url} target="_blank" rel="noopener noreferrer" className="block">
-                                  <img src={photo.photo_url} alt={photo.photo_type || 'Job photo'} className="w-full h-24 object-cover rounded-lg hover:opacity-80 transition-opacity border border-slate-200" />
-                                  <span className="text-[10px] text-slate-500 capitalize mt-1 block text-center">{photo.photo_type || 'photo'}</span>
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <button onClick={() => navigate(`/fieldops/job-tracker`)} className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1">
-                          <Search className="w-3 h-3" /> Track Job Audit
-                        </button>
+                        <button onClick={() => navigate(`/fieldops/job-tracker`)} className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"><Search className="w-3 h-3" /> Track Job Audit</button>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -456,36 +357,17 @@ export default function LiveJobs() {
         )}
       </main>
 
-      {/* Assign Employee Modal */}
       <AnimatePresence>
         {showAssignModal && selectedJob && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowAssignModal(false); setSelectedEmployee('') }}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Assign Staff</h3>
               <p className="text-sm text-slate-500 mb-4">Job: <span className="font-medium">{selectedJob.job_number}</span> - {selectedJob.title}</p>
-              
-              {(selectedJob.field_job_assignments || []).filter(a => a.assignment_status !== 'released').length > 0 && (
-                <div className="mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-                  <p className="text-xs font-semibold text-slate-500 mb-2">Currently Assigned:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedJob.field_job_assignments.filter(a => a.assignment_status !== 'released').map(a => (
-                      <span key={a.id} className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">{a.employees?.first_name} {a.employees?.last_name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-slate-700 dark:text-slate-300">
-                <option value="">Select Employee to Assign</option>
-                {availableEmployees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code}) - {emp.department || 'N/A'}</option>
-                ))}
+                <option value="">Select Employee</option>
+                {availableEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code})</option>))}
               </select>
-
-              <div className="flex gap-2">
-                <button onClick={() => { setShowAssignModal(false); setSelectedEmployee('') }} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-slate-600 text-white">Cancel</button>
-                <button onClick={handleAssign} disabled={!selectedEmployee} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50">Assign</button>
-              </div>
+              <div className="flex gap-2"><button onClick={() => { setShowAssignModal(false); setSelectedEmployee('') }} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-slate-600 text-white">Cancel</button><button onClick={handleAssign} disabled={!selectedEmployee} className="flex-1 neu-raised neu-btn px-4 py-3 rounded-xl bg-emerald-600 text-white disabled:opacity-50">Assign</button></div>
             </motion.div>
           </motion.div>
         )}
