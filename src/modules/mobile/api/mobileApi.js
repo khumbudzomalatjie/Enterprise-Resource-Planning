@@ -77,11 +77,154 @@ export const mobileApi = {
     return { success: true }
   },
 
+  // ═══════════════════════════════════════════════
+  // FIXED: COMPLETE JOB - Marks job done + creates invoice
+  // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
-    await supabase.from('field_job_assignments').update({ assignment_status: 'completed', completed_at: new Date().toISOString() }).eq('job_id', jobId).eq('employee_id', employeeId)
-    await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobId)
-    await mobileApi.logAction(employeeId, 'job_completed', 'Completed job', jobId, 'job', lat, lng)
-    return { success: true }
+    // 1. Update assignment to completed
+    const { error: assignError } = await supabase
+      .from('field_job_assignments')
+      .update({
+        assignment_status: 'completed',
+        completed_at: new Date().toISOString(),
+        check_out_time: new Date().toISOString(),
+        check_out_latitude: lat,
+        check_out_longitude: lng
+      })
+      .eq('job_id', jobId)
+      .eq('employee_id', employeeId)
+
+    if (assignError) {
+      console.error('Assignment update error:', assignError)
+      return { success: false, error: assignError.message }
+    }
+
+    // 2. Update job status to completed
+    const { data: job, error: jobError } = await supabase
+      .from('jobs')
+      .update({
+        status: 'completed',
+        actual_end_time: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        completion_notes: `Completed by mobile worker on ${new Date().toLocaleString()}`
+      })
+      .eq('id', jobId)
+      .select('*, clients(company_name, client_code), job_categories(name)')
+      .single()
+
+    if (jobError) {
+      console.error('Job update error:', jobError)
+      return { success: false, error: jobError.message }
+    }
+
+    // 3. Auto-generate invoice if job has quoted amount
+    if (job && job.quoted_amount && job.quoted_amount > 0) {
+      await mobileApi.generateInvoiceFromJob(job)
+    }
+
+    // 4. Log completion
+    await mobileApi.logAction(employeeId, 'job_completed', `Completed job ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
+
+    // 5. Create audit record
+    try {
+      await supabase.from('job_full_audit').insert([{
+        job_id: jobId,
+        action_type: 'job_completed',
+        action_description: `Job completed by mobile worker. Amount: R${job?.quoted_amount || 0}`,
+        performed_by_name: 'Mobile Worker',
+        performed_by_role: 'cleaner',
+        employee_id: employeeId,
+        created_at: new Date().toISOString()
+      }])
+    } catch (auditErr) {
+      console.error('Audit log error:', auditErr)
+    }
+
+    return { success: true, job }
+  },
+
+  // ═══════════════════════════════════════════════
+  // NEW: Auto-generate invoice from completed job
+  // ═══════════════════════════════════════════════
+  async generateInvoiceFromJob(job) {
+    // Check if invoice already exists for this job
+    const { data: existingInvoice } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('id', job.id)
+      .maybeSingle()
+
+    if (existingInvoice) {
+      console.log('Invoice already exists for job:', job.job_number)
+      return { success: true, invoiceId: existingInvoice.id, message: 'Already invoiced' }
+    }
+
+    // Generate invoice number
+    const yr = new Date().getFullYear().toString().slice(-2)
+    const num = String(Math.floor(Math.random() * 99999)).padStart(5, '0')
+    const invoiceNumber = `INV-${yr}${num}`
+
+    const amount = job.quoted_amount || 0
+    const taxRate = 15
+    const taxAmount = amount * (taxRate / 100)
+    const totalAmount = amount + taxAmount
+
+    // Create the invoice
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .insert([{
+        invoice_number: invoiceNumber,
+        client_id: job.client_id,
+        client_name: job.clients?.company_name || 'Client',
+        client_email: job.clients?.email || '',
+        client_address: job.site_address || '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal: amount,
+        tax_rate: taxRate,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        status: 'sent',
+        notes: `Auto-generated from completed job ${job.job_number} - ${job.title || job.job_categories?.name || 'Cleaning Service'}`
+      }])
+      .select()
+      .single()
+
+    if (invoiceError) {
+      console.error('Invoice creation error:', invoiceError)
+      return { success: false, error: invoiceError.message }
+    }
+
+    if (invoice) {
+      // Create invoice line item
+      await supabase.from('invoice_items').insert([{
+        invoice_id: invoice.id,
+        item_number: 1,
+        description: `${job.job_categories?.name || 'Cleaning Service'}: ${job.title || 'Job ' + job.job_number}`,
+        quantity: 1,
+        unit: 'service',
+        unit_price: amount,
+        tax_percent: taxRate
+      }])
+
+      // Check if quotation exists and link it
+      if (job.quotation_id) {
+        await supabase
+          .from('quotations')
+          .update({
+            status: 'converted',
+            converted_to_invoice: true,
+            invoice_id: invoice.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', job.quotation_id)
+      }
+
+      console.log('✅ Invoice generated:', invoiceNumber, 'for job:', job.job_number, 'Amount: R', totalAmount)
+      return { success: true, invoice }
+    }
+
+    return { success: false, error: 'Failed to create invoice' }
   },
 
   // ============================================
@@ -207,90 +350,43 @@ export const mobileApi = {
   },
 
   // ============================================
-  // MESSAGES - FIXED for desktop ERP sync
+  // MESSAGES
   // ============================================
   async getMessages(userId) {
-    // Get messages from BOTH direct (sender/receiver) AND conversations
-    const { data: directMessages } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    // Also get conversation messages
-    const { data: myConversations } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', userId)
-
+    const { data: directMessages } = await supabase.from('messages').select('*').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: false }).limit(50)
+    const { data: myConversations } = await supabase.from('conversation_participants').select('conversation_id').eq('user_id', userId)
     const convIds = (myConversations || []).map(p => p.conversation_id)
     let conversationMessages = []
     if (convIds.length > 0) {
-      const { data: convMsgs } = await supabase
-        .from('messages')
-        .select('*')
-        .in('conversation_id', convIds)
-        .order('created_at', { ascending: false })
-        .limit(50)
+      const { data: convMsgs } = await supabase.from('messages').select('*').in('conversation_id', convIds).order('created_at', { ascending: false }).limit(50)
       conversationMessages = convMsgs || []
     }
-
-    // Merge and deduplicate
     const allMessages = [...(directMessages || []), ...conversationMessages]
     const uniqueMessages = allMessages.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i)
-
-    // Get user names
     const userIds = [...new Set(uniqueMessages.flatMap(m => [m.sender_id, m.receiver_id].filter(Boolean)))]
     const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
     const nameMap = {}; (profiles || []).forEach(p => { nameMap[p.id] = p.full_name || 'Unknown' })
-
     return { data: uniqueMessages.map(m => ({ ...m, sender_name: nameMap[m.sender_id] || m.sender_name || 'Unknown', receiver_name: nameMap[m.receiver_id] || 'Unknown' })) }
   },
 
   async sendMessage(messageData) {
-    // Support both conversation-based and direct messaging
-    const payload = {
-      sender_id: messageData.sender_id,
-      sender_name: messageData.sender_name || 'User',
-      content: messageData.content || messageData.message || '',
-      message: messageData.content || messageData.message || '',
-      message_type: messageData.message_type || 'text'
-    }
-
-    if (messageData.conversation_id) {
-      payload.conversation_id = messageData.conversation_id
-    }
-    if (messageData.receiver_id) {
-      payload.receiver_id = messageData.receiver_id
-    }
-
+    const payload = { sender_id: messageData.sender_id, sender_name: messageData.sender_name || 'User', content: messageData.content || messageData.message || '', message: messageData.content || messageData.message || '', message_type: messageData.message_type || 'text' }
+    if (messageData.conversation_id) payload.conversation_id = messageData.conversation_id
+    if (messageData.receiver_id) payload.receiver_id = messageData.receiver_id
     const { data, error } = await supabase.from('messages').insert([payload]).select().single()
     return { data, error }
   },
 
   async getConversations(userId) {
-    const { data: participations } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', userId)
-
+    const { data: participations } = await supabase.from('conversation_participants').select('conversation_id').eq('user_id', userId)
     const convIds = (participations || []).map(p => p.conversation_id)
     if (convIds.length === 0) {
-      // Fallback: get unique people user has messaged
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('sender_id, receiver_id')
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .limit(100)
-
+      const { data: messages } = await supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).limit(100)
       const otherUserIds = [...new Set((messages || []).flatMap(m => [m.sender_id, m.receiver_id]).filter(id => id !== userId))]
       if (otherUserIds.length === 0) return { data: [] }
-
       const { data: profiles } = await supabase.from('profiles').select('id, full_name, role').in('id', otherUserIds)
       return { data: (profiles || []).map(p => ({ id: p.id, display_name: p.full_name, role: p.role, is_direct: true })) }
     }
-
     const { data: conversations } = await supabase.from('conversations').select('*').in('id', convIds)
     const enriched = await Promise.all((conversations || []).map(async (conv) => {
       const { data: participants } = await supabase.from('conversation_participants').select('user_id').eq('conversation_id', conv.id).neq('user_id', userId)
