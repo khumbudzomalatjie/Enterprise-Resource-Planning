@@ -78,9 +78,11 @@ export const mobileApi = {
   },
 
   // ═══════════════════════════════════════════════
-  // FIXED: COMPLETE JOB - Marks job done + creates invoice
+  // COMPLETE JOB - Marks done + creates invoice for finance
   // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
+    console.log('🔄 Completing job:', jobId, 'Employee:', employeeId)
+    
     // 1. Update assignment to completed
     const { error: assignError } = await supabase
       .from('field_job_assignments')
@@ -95,119 +97,118 @@ export const mobileApi = {
       .eq('employee_id', employeeId)
 
     if (assignError) {
-      console.error('Assignment update error:', assignError)
+      console.error('❌ Assignment error:', assignError)
       return { success: false, error: assignError.message }
     }
+    console.log('✅ Assignment updated')
 
-    // 2. Update job status to completed
-    const { data: job, error: jobError } = await supabase
+    // 2. Get job details
+    const { data: job, error: fetchError } = await supabase
+      .from('jobs')
+      .select('*, clients(company_name, client_code, email), job_categories(name)')
+      .eq('id', jobId)
+      .single()
+
+    if (fetchError) {
+      console.error('❌ Fetch job error:', fetchError)
+      return { success: false, error: fetchError.message }
+    }
+
+    console.log('📋 Job:', job?.job_number, 'Amount:', job?.quoted_amount)
+
+    // 3. Update job status to completed
+    const { error: jobError } = await supabase
       .from('jobs')
       .update({
         status: 'completed',
         actual_end_time: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        completion_notes: `Completed by mobile worker on ${new Date().toLocaleString()}`
+        completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
       })
       .eq('id', jobId)
-      .select('*, clients(company_name, client_code), job_categories(name)')
-      .single()
 
     if (jobError) {
-      console.error('Job update error:', jobError)
+      console.error('❌ Job update error:', jobError)
       return { success: false, error: jobError.message }
     }
+    console.log('✅ Job marked as completed')
 
-    // 3. Auto-generate invoice if job has quoted amount
+    // 4. Create invoice for finance if job has value
     if (job && job.quoted_amount && job.quoted_amount > 0) {
-      await mobileApi.generateInvoiceFromJob(job)
+      const invoiceResult = await mobileApi.createInvoiceForJob(job)
+      console.log('📄 Invoice result:', invoiceResult.success ? 'Created: ' + invoiceResult.invoice?.invoice_number : 'Failed: ' + invoiceResult.error)
+    } else {
+      console.log('ℹ️ No invoice needed - zero amount')
     }
 
-    // 4. Log completion
-    await mobileApi.logAction(employeeId, 'job_completed', `Completed job ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
-
-    // 5. Create audit record
-    try {
-      await supabase.from('job_full_audit').insert([{
-        job_id: jobId,
-        action_type: 'job_completed',
-        action_description: `Job completed by mobile worker. Amount: R${job?.quoted_amount || 0}`,
-        performed_by_name: 'Mobile Worker',
-        performed_by_role: 'cleaner',
-        employee_id: employeeId,
-        created_at: new Date().toISOString()
-      }])
-    } catch (auditErr) {
-      console.error('Audit log error:', auditErr)
-    }
+    // 5. Log action
+    await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
 
     return { success: true, job }
   },
 
   // ═══════════════════════════════════════════════
-  // NEW: Auto-generate invoice from completed job
+  // CREATE INVOICE FOR FINANCE
   // ═══════════════════════════════════════════════
-  async generateInvoiceFromJob(job) {
-    // Check if invoice already exists for this job
-    const { data: existingInvoice } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('id', job.id)
-      .maybeSingle()
+  async createInvoiceForJob(job) {
+    console.log('📄 Creating invoice for:', job?.job_number)
+    
+    try {
+      const yr = new Date().getFullYear().toString().slice(-2)
+      const num = String(Math.floor(Math.random() * 99999)).padStart(5, '0')
+      const invoiceNumber = `INV-${yr}${num}`
 
-    if (existingInvoice) {
-      console.log('Invoice already exists for job:', job.job_number)
-      return { success: true, invoiceId: existingInvoice.id, message: 'Already invoiced' }
-    }
+      const amount = parseFloat((job.quoted_amount || 0).toFixed(2))
+      const taxRate = 15
+      const taxAmount = parseFloat((amount * (taxRate / 100)).toFixed(2))
+      const totalAmount = parseFloat((amount + taxAmount).toFixed(2))
 
-    // Generate invoice number
-    const yr = new Date().getFullYear().toString().slice(-2)
-    const num = String(Math.floor(Math.random() * 99999)).padStart(5, '0')
-    const invoiceNumber = `INV-${yr}${num}`
+      // Create invoice record
+      const { data: invoice, error } = await supabase
+        .from('invoices')
+        .insert([{
+          invoice_number: invoiceNumber,
+          client_id: job.client_id,
+          client_name: job.clients?.company_name || 'Client',
+          client_email: job.clients?.email || '',
+          client_address: job.site_address || '',
+          invoice_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          subtotal: amount,
+          tax_rate: taxRate,
+          tax_amount: taxAmount,
+          total_amount: totalAmount,
+          status: 'sent',
+          notes: `Job: ${job.job_number} - ${job.title || 'Cleaning Service'}`
+        }])
+        .select()
+        .single()
 
-    const amount = job.quoted_amount || 0
-    const taxRate = 15
-    const taxAmount = amount * (taxRate / 100)
-    const totalAmount = amount + taxAmount
+      if (error) {
+        console.error('❌ Invoice insert error:', error.message)
+        return { success: false, error: error.message }
+      }
 
-    // Create the invoice
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .insert([{
-        invoice_number: invoiceNumber,
-        client_id: job.client_id,
-        client_name: job.clients?.company_name || 'Client',
-        client_email: job.clients?.email || '',
-        client_address: job.site_address || '',
-        invoice_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        subtotal: amount,
-        tax_rate: taxRate,
-        tax_amount: taxAmount,
-        total_amount: totalAmount,
-        status: 'sent',
-        notes: `Auto-generated from completed job ${job.job_number} - ${job.title || job.job_categories?.name || 'Cleaning Service'}`
-      }])
-      .select()
-      .single()
+      console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
 
-    if (invoiceError) {
-      console.error('Invoice creation error:', invoiceError)
-      return { success: false, error: invoiceError.message }
-    }
-
-    if (invoice) {
       // Create invoice line item
-      await supabase.from('invoice_items').insert([{
-        invoice_id: invoice.id,
-        item_number: 1,
-        description: `${job.job_categories?.name || 'Cleaning Service'}: ${job.title || 'Job ' + job.job_number}`,
-        quantity: 1,
-        unit: 'service',
-        unit_price: amount,
-        tax_percent: taxRate
-      }])
+      const { error: itemError } = await supabase
+        .from('invoice_items')
+        .insert([{
+          invoice_id: invoice.id,
+          item_number: 1,
+          description: `${job.job_categories?.name || 'Cleaning Service'}: ${job.title || job.job_number}`,
+          quantity: 1,
+          unit: 'service',
+          unit_price: amount,
+          tax_percent: taxRate
+        }])
 
-      // Check if quotation exists and link it
+      if (itemError) {
+        console.error('❌ Invoice item error:', itemError.message)
+      }
+
+      // Update quotation if exists
       if (job.quotation_id) {
         await supabase
           .from('quotations')
@@ -220,11 +221,11 @@ export const mobileApi = {
           .eq('id', job.quotation_id)
       }
 
-      console.log('✅ Invoice generated:', invoiceNumber, 'for job:', job.job_number, 'Amount: R', totalAmount)
       return { success: true, invoice }
+    } catch (err) {
+      console.error('❌ Invoice exception:', err)
+      return { success: false, error: err.message }
     }
-
-    return { success: false, error: 'Failed to create invoice' }
   },
 
   // ============================================
