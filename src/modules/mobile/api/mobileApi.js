@@ -33,17 +33,50 @@ export const mobileApi = {
   // ============================================
   // JOBS
   // ============================================
+  // ✅ FIXED: Only returns jobs that are NOT already selected by anyone
   async getOpenJobs() {
-    const { data } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('status', ['pending', 'scheduled']).order('scheduled_date').limit(50)
-    return { data: data || [] }
+    // Get all jobs that are available (pending or scheduled)
+    const { data: availableJobs } = await supabase
+      .from('jobs')
+      .select('*, clients(company_name, phone, city), job_categories(name, color)')
+      .in('status', ['pending', 'scheduled'])
+      .order('scheduled_date')
+      .limit(50)
+
+    if (!availableJobs?.length) return { data: [] }
+
+    // Get all ACTIVE assignments (not released/completed)
+    const jobIds = availableJobs.map(j => j.id)
+    const { data: activeAssignments } = await supabase
+      .from('field_job_assignments')
+      .select('job_id, employee_id, assignment_status')
+      .in('job_id', jobIds)
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+
+    // Filter out jobs that already have active assignments
+    const assignedJobIds = new Set((activeAssignments || []).map(a => a.job_id))
+    const trulyOpenJobs = availableJobs.filter(j => !assignedJobIds.has(j.id))
+
+    return { data: trulyOpenJobs }
   },
 
   async getMyJobs(employeeId) {
-    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, assignment_status, assigned_at, started_at, completed_at').eq('employee_id', employeeId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    const { data: assignments } = await supabase
+      .from('field_job_assignments')
+      .select('job_id, assignment_status, assigned_at, started_at, completed_at')
+      .eq('employee_id', employeeId)
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    
     if (!assignments?.length) return { data: [] }
+    
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
-    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name, phone, city), job_categories(name, color)').in('id', jobIds)
+    
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('*, clients(company_name, phone, city), job_categories(name, color)')
+      .in('id', jobIds)
+    
     const activeJobs = (jobs || []).filter(j => j.status !== 'completed' && j.status !== 'cancelled')
     return { data: activeJobs.map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
   },
@@ -61,10 +94,44 @@ export const mobileApi = {
     return { data }
   },
 
+  // ✅ FIXED: Prevents duplicate selection, job disappears from Open Pool
   async selectJob(jobId, employeeId) {
-    const { error: aErr } = await supabase.from('field_job_assignments').upsert({ job_id: jobId, employee_id: employeeId, assignment_status: 'assigned', assigned_at: new Date().toISOString() }, { onConflict: 'job_id,employee_id' })
+    // Check if this job already has an active assignment
+    const { data: existingAssignments } = await supabase
+      .from('field_job_assignments')
+      .select('id, employee_id')
+      .eq('job_id', jobId)
+      .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+
+    if (existingAssignments && existingAssignments.length > 0) {
+      if (existingAssignments.some(a => a.employee_id === employeeId)) {
+        return { success: false, error: 'You already have this job' }
+      }
+      return { success: false, error: 'This job is already taken by another cleaner' }
+    }
+
+    // Assign the job to this cleaner
+    const { error: aErr } = await supabase
+      .from('field_job_assignments')
+      .upsert({ 
+        job_id: jobId, 
+        employee_id: employeeId, 
+        assignment_status: 'assigned', 
+        assigned_at: new Date().toISOString() 
+      }, { onConflict: 'job_id,employee_id' })
+    
     if (aErr) return { success: false, error: aErr.message }
-    await supabase.from('jobs').update({ status: 'in_progress' }).eq('id', jobId)
+
+    // ✅ Change job status to in_progress so it disappears from Open Pool
+    const { error: jobErr } = await supabase
+      .from('jobs')
+      .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+      .eq('id', jobId)
+    
+    if (jobErr) {
+      console.error('Job status update error:', jobErr)
+    }
+
     await mobileApi.logAction(employeeId, 'job_selected', 'Selected job', jobId, 'job')
     return { success: true }
   },
@@ -163,7 +230,6 @@ export const mobileApi = {
       const taxAmount = parseFloat((amount * (taxRate / 100)).toFixed(2))
       const totalAmount = parseFloat((amount + taxAmount).toFixed(2))
 
-      // Create invoice record
       const { data: invoice, error } = await supabase
         .from('invoices')
         .insert([{
@@ -191,7 +257,6 @@ export const mobileApi = {
 
       console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
 
-      // Create invoice line item
       const { error: itemError } = await supabase
         .from('invoice_items')
         .insert([{
@@ -204,21 +269,12 @@ export const mobileApi = {
           tax_percent: taxRate
         }])
 
-      if (itemError) {
-        console.error('❌ Invoice item error:', itemError.message)
-      }
+      if (itemError) console.error('❌ Invoice item error:', itemError.message)
 
-      // Update quotation if exists
       if (job.quotation_id) {
-        await supabase
-          .from('quotations')
-          .update({
-            status: 'converted',
-            converted_to_invoice: true,
-            invoice_id: invoice.id,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', job.quotation_id)
+        await supabase.from('quotations').update({
+          status: 'converted', converted_to_invoice: true, invoice_id: invoice.id, updated_at: new Date().toISOString()
+        }).eq('id', job.quotation_id)
       }
 
       return { success: true, invoice }
