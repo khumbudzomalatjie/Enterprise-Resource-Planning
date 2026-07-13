@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { fieldOpsApi } from '../api/fieldOpsApi'
-import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 
 const useFieldOpsStore = create((set, get) => ({
@@ -24,36 +23,18 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // Fetch current user's assigned jobs
   fetchMyAssignedJobs: async (userId) => {
-    if (!userId) {
-      set({ myAssignedJobs: [] })
-      return { success: false, data: [] }
-    }
+    if (!userId) return { success: false, data: [] }
     try {
-      // Find employee record linked to this user
-      const { data: employee } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, user_id')
-        .eq('user_id', userId)
-        .single()
-      
-      if (!employee) {
-        set({ myAssignedJobs: [] })
-        return { success: false, data: [] }
-      }
-      
+      const { supabase } = await import('../../../lib/supabaseClient')
+      const { data: employee } = await supabase.from('employees').select('id').eq('user_id', userId).single()
+      if (!employee) return { success: false, data: [] }
       const { data, error } = await fieldOpsApi.getLiveJobsByEmployee(employee.id)
-      if (error) {
-        set({ myAssignedJobs: [] })
-        return { success: false }
-      }
-      
+      if (error) return { success: false }
       set({ myAssignedJobs: data || [] })
       return { success: true, data }
     } catch (err) {
-      console.error('Failed to fetch my jobs:', err)
-      set({ myAssignedJobs: [] })
+      console.error('fetchMyAssignedJobs error:', err)
       return { success: false }
     }
   },
@@ -90,20 +71,25 @@ const useFieldOpsStore = create((set, get) => ({
     return { success: true, data }
   },
 
+  // ✅ FIXED: Works without employeeId
   updateJobStatus: async (jobId, status, employeeId = null) => {
+    set({ error: null })
     const { data, error } = await fieldOpsApi.updateJobStatus(jobId, status, employeeId)
-    if (error) return { success: false, error: error.message }
+    if (error) {
+      console.error('Update job status error:', error)
+      set({ error: error.message })
+      return { success: false, error: error.message }
+    }
     await get().fetchLiveJobs()
+    if (status === 'completed') toast.success('Job completed!')
+    if (status === 'in_progress') toast.success('Job started!')
     return { success: true, data }
   },
 
   syncJobFromMobile: async (jobId, syncData) => {
     set({ loading: true, error: null })
     const result = await fieldOpsApi.syncJobWithMobile(jobId, syncData)
-    if (result.error) {
-      set({ error: result.error, loading: false })
-      return { success: false, error: result.error }
-    }
+    if (result.error) { set({ error: result.error, loading: false }); return { success: false, error: result.error } }
     await get().fetchLiveJobs()
     set({ loading: false })
     return { success: true, data: result.job }
@@ -141,13 +127,6 @@ const useFieldOpsStore = create((set, get) => ({
 
   updateIncident: async (id, updates) => {
     const { data, error } = await fieldOpsApi.updateIncident(id, updates)
-    if (error) return { success: false, error: error.message }
-    set(state => ({ incidents: state.incidents.map(i => i.id === id ? data : i) }))
-    return { success: true, data }
-  },
-
-  resolveIncident: async (id, resolution) => {
-    const { data, error } = await fieldOpsApi.resolveIncident(id, resolution)
     if (error) return { success: false, error: error.message }
     set(state => ({ incidents: state.incidents.map(i => i.id === id ? data : i) }))
     return { success: true, data }
