@@ -38,6 +38,7 @@ export const fieldOpsApi = {
 
     const { data: inspections } = await supabase.from('quality_inspections').select('id, overall_rating, inspection_date, job_id').in('job_id', jobIds)
     const { data: checklists } = await supabase.from('job_checklist_items').select('id, description, is_completed, job_id').in('job_id', jobIds)
+    const { data: photos } = await supabase.from('job_photos').select('*').in('job_id', jobIds).order('created_at', { ascending: false })
 
     const merged = jobs
       .filter(job => job.status !== 'cancelled')
@@ -50,7 +51,8 @@ export const fieldOpsApi = {
           .filter(a => a.job_id === job.id)
           .map(a => ({ ...a, employees: (employees || []).find(e => e.id === a.employee_id) || null })),
         quality_inspections: (inspections || []).filter(i => i.job_id === job.id),
-        job_checklist_items: (checklists || []).filter(c => c.job_id === job.id)
+        job_checklist_items: (checklists || []).filter(c => c.job_id === job.id),
+        job_photos: (photos || []).filter(p => p.job_id === job.id)
       }))
 
     return { data: merged, error: null }
@@ -104,7 +106,6 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ✅ FIXED: Works without employeeId, updates all active assignments on complete
   async updateJobStatus(jobId, status, employeeId = null) {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
@@ -126,7 +127,6 @@ export const fieldOpsApi = {
       }).eq('job_id', jobId).eq('employee_id', employeeId)
     }
     
-    // If no employeeId but job is being completed, update ALL active assignments
     if (!error && status === 'completed' && !employeeId) {
       await supabase.from('field_job_assignments').update({ 
         assignment_status: 'completed',
@@ -169,7 +169,6 @@ export const fieldOpsApi = {
     return { allLiveJobs: jobsResult.data || [], myAssignedJobs: assignedResult.data || [], timestamp: new Date().toISOString() }
   },
 
-  // Incidents
   async getIncidents(filters = {}) {
     const { data, error } = await supabase.from('incidents').select('*').order('created_at', { ascending: false }).limit(100)
     if (error || !data) return { data: data || [], error }
