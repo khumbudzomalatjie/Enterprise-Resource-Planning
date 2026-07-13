@@ -5,7 +5,6 @@ export const fieldOpsApi = {
   // LIVE JOBS - Read from field_job_assignments
   // ============================================
   async getLiveJobs() {
-    // 1. Get ALL jobs (no status filter initially)
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
@@ -19,42 +18,27 @@ export const fieldOpsApi = {
 
     const jobIds = jobs.map(j => j.id)
 
-    // 2. Get clients
     const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))]
     const { data: clients } = await supabase.from('clients').select('id, company_name, client_code, phone, city, address_line1').in('id', clientIds)
 
-    // 3. Get categories
     const catIds = [...new Set(jobs.map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
-    // 4. Get teams
     const teamIds = [...new Set(jobs.map(j => j.team_id).filter(Boolean))]
     const { data: teams } = await supabase.from('teams').select('id, team_name').in('id', teamIds)
 
-    // 5. ✅ GET ALL ASSIGNMENTS - NO STATUS FILTER
-    const { data: allAssignments } = await supabase
-      .from('field_job_assignments')
-      .select('*')
-      .in('job_id', jobIds)
+    const { data: allAssignments } = await supabase.from('field_job_assignments').select('*').in('job_id', jobIds)
 
-    console.log(`📊 field_job_assignments: ${allAssignments?.length || 0} rows`)
-
-    // 6. Get employees for all assignments
     const empIds = [...new Set((allAssignments || []).map(a => a.employee_id).filter(Boolean))]
     let employees = []
     if (empIds.length > 0) {
-      const { data } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, employee_code, phone, department, position, user_id')
-        .in('id', empIds)
+      const { data } = await supabase.from('employees').select('id, first_name, last_name, employee_code, phone, department, position, user_id').in('id', empIds)
       employees = data || []
     }
 
-    // 7. Get inspections & checklists
     const { data: inspections } = await supabase.from('quality_inspections').select('id, overall_rating, inspection_date, job_id').in('job_id', jobIds)
     const { data: checklists } = await supabase.from('job_checklist_items').select('id, description, is_completed, job_id').in('job_id', jobIds)
 
-    // 8. Merge - SHOW ALL JOBS including completed (so you can see what cleaners did)
     const merged = jobs
       .filter(job => job.status !== 'cancelled')
       .map(job => ({
@@ -68,16 +52,6 @@ export const fieldOpsApi = {
         quality_inspections: (inspections || []).filter(i => i.job_id === job.id),
         job_checklist_items: (checklists || []).filter(c => c.job_id === job.id)
       }))
-
-    // Log what we found
-    const jobsWithAssignments = merged.filter(j => j.field_job_assignments?.length > 0)
-    console.log(`📊 ${merged.length} jobs, ${jobsWithAssignments.length} with assignments`)
-    jobsWithAssignments.forEach(job => {
-      console.log(`📋 ${job.job_number} | Status: ${job.status} | Assignments: ${job.field_job_assignments.length}`)
-      job.field_job_assignments.forEach(a => {
-        console.log(`   👤 ${a.employees?.first_name || '?'} ${a.employees?.last_name || ''} | Status: ${a.assignment_status}`)
-      })
-    })
 
     return { data: merged, error: null }
   },
@@ -130,11 +104,19 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ FIXED: Works without employeeId, updates all active assignments on complete
   async updateJobStatus(jobId, status, employeeId = null) {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
     if (status === 'completed') updates.actual_end_time = new Date().toISOString()
-    const { data, error } = await supabase.from('jobs').update(updates).eq('id', jobId).select().single()
+    
+    const { data, error } = await supabase
+      .from('jobs')
+      .update(updates)
+      .eq('id', jobId)
+      .select()
+      .single()
+
     if (!error && employeeId) {
       const as = status === 'in_progress' ? 'in_progress' : status === 'completed' ? 'completed' : 'assigned'
       await supabase.from('field_job_assignments').update({ 
@@ -143,6 +125,15 @@ export const fieldOpsApi = {
         ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {})
       }).eq('job_id', jobId).eq('employee_id', employeeId)
     }
+    
+    // If no employeeId but job is being completed, update ALL active assignments
+    if (!error && status === 'completed' && !employeeId) {
+      await supabase.from('field_job_assignments').update({ 
+        assignment_status: 'completed',
+        completed_at: new Date().toISOString()
+      }).eq('job_id', jobId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
+    }
+    
     return { data, error }
   },
 
