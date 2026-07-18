@@ -19,57 +19,25 @@ const useAIStore = create((set, get) => ({
     set({ sessionId, messages: [], loading: true })
 
     try {
-      // Load quick prompts
-      const { data: prompts } = await supabase
-        .from('ai_quick_prompts')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order')
+      const { data: prompts } = await supabase.from('ai_quick_prompts').select('*').eq('is_active', true).order('sort_order')
       set({ quickPrompts: prompts || [] })
 
-      // Load insights
-      const { data: insights } = await supabase
-        .from('ai_insights')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10)
+      const { data: insights } = await supabase.from('ai_insights').select('*').order('created_at', { ascending: false }).limit(10)
       const unreadCount = (insights || []).filter(i => !i.is_read).length
       set({ insights: insights || [], unreadInsights: unreadCount })
 
-      // Load chat history
-      const { data: history } = await supabase
-        .from('ai_chat_history')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(50)
+      const { data: history } = await supabase.from('ai_chat_history').select('*').eq('user_id', userId).order('created_at', { ascending: true }).limit(50)
 
       if (history && history.length > 0) {
-        set({
-          messages: history.map(m => ({
-            id: m.id,
-            role: m.role,
-            message: m.message,
-            created_at: m.created_at
-          }))
-        })
+        set({ messages: history.map(m => ({ id: m.id, role: m.role, message: m.message, created_at: m.created_at })) })
       } else {
-        // Welcome message
         set({
           messages: [{
             id: 'welcome',
             role: 'assistant',
             message: "🤖 **Dumela! I'm KHUMO**, your Ndanduleni ERP AI Assistant. 🇿🇦\n\n" +
-              "I'm here to help you with:\n\n" +
-              "🚨 **Incident Analysis** - Track and analyze incidents\n" +
-              "📅 **Schedule Optimization** - Optimize job routing\n" +
-              "📦 **Inventory Management** - Monitor stock levels\n" +
-              "🛒 **Procurement** - Purchase orders and vendors\n" +
-              "👥 **HR Insights** - Staff and attendance overview\n" +
-              "💰 **Financial Overview** - Revenue and budgets\n" +
-              "🏢 **CRM** - Client information and pipeline\n" +
-              "🔧 **Maintenance** - Equipment health prediction\n\n" +
-              "How can I assist you today?",
+              "I can help you find anything in the ERP, show data, explain features, and guide you step by step.\n\n" +
+              "**Try asking me:**\n• \"Show me the employee list\"\n• \"Where do I report an incident?\"\n• \"How do I create a quotation?\"\n• \"How many jobs are open?\"\n\nJust type your question! 🎯",
             created_at: new Date().toISOString()
           }]
         })
@@ -84,43 +52,17 @@ const useAIStore = create((set, get) => ({
     const { sessionId, messages } = get()
     if (!message.trim()) return
 
-    const userMsg = {
-      id: Date.now().toString(),
-      role: 'user',
-      message,
-      created_at: new Date().toISOString()
-    }
-
+    const userMsg = { id: Date.now().toString(), role: 'user', message, created_at: new Date().toISOString() }
     set({ messages: [...messages, userMsg], loading: true })
 
-    // Save user message
-    await aiApi.saveChatMessage({
-      user_id: userContext.userId,
-      session_id: sessionId,
-      role: 'user',
-      message,
-      context: userContext
-    })
+    await aiApi.saveChatMessage({ user_id: userContext.userId, session_id: sessionId, role: 'user', message, context: userContext })
 
-    // Process with AI engine
     const response = await aiEngine.processQuery(message, userContext)
 
-    const aiMsg = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      message: response,
-      created_at: new Date().toISOString()
-    }
-
+    const aiMsg = { id: (Date.now() + 1).toString(), role: 'assistant', message: response, created_at: new Date().toISOString() }
     set(state => ({ messages: [...state.messages, aiMsg], loading: false }))
 
-    // Save AI response
-    await aiApi.saveChatMessage({
-      user_id: userContext.userId,
-      session_id: sessionId,
-      role: 'assistant',
-      message: response
-    })
+    await aiApi.saveChatMessage({ user_id: userContext.userId, session_id: sessionId, role: 'assistant', message: response })
   },
 
   sendQuickPrompt: async (promptText, userContext) => {
@@ -137,20 +79,8 @@ const useAIStore = create((set, get) => ({
 
   clearChat: async (userId) => {
     await aiApi.clearChatHistory(userId)
-    set({ messages: [{
-      id: 'welcome',
-      role: 'assistant',
-      message: "🤖 **Chat cleared!** How can KHUMO help you now?",
-      created_at: new Date().toISOString()
-    }]})
+    set({ messages: [{ id: 'welcome', role: 'assistant', message: "🤖 **Chat cleared!** How can KHUMO help you now?", created_at: new Date().toISOString() }] })
   },
-
-  loadChatHistory: async (userId) => {
-    const { data } = await aiApi.getChatHistory(userId)
-    if (data && data.length > 0) {
-      set({ messages: data.map(m => ({ id: m.id, role: m.role, message: m.message, created_at: m.created_at })) })
-    }
-  }
 }))
 
 export default useAIStore
