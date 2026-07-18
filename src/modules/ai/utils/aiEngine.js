@@ -3,636 +3,418 @@ import { supabase } from '../../../lib/supabaseClient'
 export const aiEngine = {
   async processQuery(query, userContext) {
     const { role, userId, currentPage, userName } = userContext
-    const lowerQuery = query.toLowerCase().trim()
+    const q = query.toLowerCase().trim()
 
     // ============================================
-    // GREETINGS & CASUAL CONVERSATION
+    // GREETINGS
     // ============================================
-    if (this.matchAny(lowerQuery, ['hello', 'hi', 'hey', 'dumela', 'sawubona', 'good morning', 'good afternoon', 'good evening'])) {
+    if (this.matchAny(q, ['hello', 'hi', 'hey', 'dumela', 'good morning', 'good afternoon', 'good evening'])) {
       return this.getWelcomeMessage(userName)
     }
+    if (this.matchAny(q, ['how are you'])) return `🤖 I'm great, ${userName || 'there'}! Ready to help. What do you need?`
+    if (this.matchAny(q, ['who are you', 'what are you', 'your name'])) return `🤖 I'm KHUMO, your Ndanduleni ERP AI Assistant. I know everything happening in your ERP. Ask me anything!`
+    if (this.matchAny(q, ['thank', 'thanks'])) return `🤖 You're welcome! 😊`
+    if (this.matchAny(q, ['bye', 'goodbye'])) return `👋 Goodbye! I'm always here when you need me.`
 
-    if (this.matchAny(lowerQuery, ['how are you', 'how do you do', 'how is it going'])) {
-      return `🤖 I'm doing great, thank you for asking! I'm KHUMO, your ERP assistant, ready to help you 24/7.\n\nHow can I assist you today?`
-    }
-
-    if (this.matchAny(lowerQuery, ['who are you', 'what are you', 'your name', 'what do you do'])) {
-      return `🤖 **I'm KHUMO!** I'm the AI assistant for the Ndanduleni Group ERP system.\n\nI can:\n🗺️ Guide you to any page in the ERP\n📊 Show you data and insights\n🔍 Find information for you\n📝 Explain how to use features\n💡 Give recommendations\n\nJust ask me anything about your ERP!`
-    }
-
-    if (this.matchAny(lowerQuery, ['thank', 'thanks', 'ke a leboga', 'appreciate'])) {
-      return `🤖 You're very welcome! I'm happy to help. 😊\n\nIs there anything else you need?`
-    }
-
-    if (this.matchAny(lowerQuery, ['bye', 'goodbye', 'see you', 'sala kahle'])) {
-      return `👋 Goodbye! Feel free to chat with me anytime you need help. I'm always here!`
+    // ============================================
+    // HOW-TO QUESTIONS
+    // ============================================
+    if (this.matchAny(q, ['how to', 'how do i', 'how can i', 'create', 'make', 'add new', 'report', 'clock in', 'clock out', 'assign'])) {
+      return this.handleHowTo(q)
     }
 
     // ============================================
-    // ERP SYSTEM OVERVIEW
+    // WHERE QUESTIONS
     // ============================================
-    if (this.matchAny(lowerQuery, ['what is this system', 'what is erp', 'about this system', 'what does this do', 'overview'])) {
-      return this.getSystemOverview(role)
+    if (this.matchAny(q, ['where', 'find', 'navigate', 'go to', 'show me', 'open', 'take me', 'location'])) {
+      return this.handleNavigation(q)
     }
 
     // ============================================
-    // NAVIGATION - WHERE TO FIND THINGS
+    // DASHBOARD OVERVIEW
     // ============================================
-    if (this.matchAny(lowerQuery, ['where', 'find', 'how do i', 'navigate', 'go to', 'show me', 'take me', 'open', 'location'])) {
-      return await this.handleNavigation(lowerQuery, role)
+    if (this.matchAny(q, ['dashboard', 'overview', 'summary', 'what is happening', 'whats going on', 'status', 'how is business'])) {
+      return await this.getFullDashboardOverview()
     }
 
     // ============================================
-    // EMPLOYEES / HR / STAFF
+    // HR / EMPLOYEES
     // ============================================
-    if (this.matchAny(lowerQuery, ['employee', 'staff', 'worker', 'hr', 'human resource', 'personnel', 'people', 'team member', 'colleague'])) {
-      return await this.handleEmployeeQuery(lowerQuery, role)
+    if (this.matchAny(q, ['employee', 'staff', 'worker', 'hr', 'personnel', 'people', 'team'])) {
+      return await this.getEmployeeInfo(q)
     }
 
     // ============================================
-    // INCIDENTS / SAFETY / ACCIDENTS
+    // INCIDENTS
     // ============================================
-    if (this.matchAny(lowerQuery, ['incident', 'accident', 'safety', 'injury', 'hazard', 'risk', 'near miss', 'danger'])) {
-      return await this.handleIncidentQuery(lowerQuery, role)
+    if (this.matchAny(q, ['incident', 'accident', 'safety', 'injury', 'hazard', 'risk', 'near miss'])) {
+      return await this.getIncidentInfo(q)
     }
 
     // ============================================
-    // JOBS / OPERATIONS / SCHEDULING
+    // JOBS / OPERATIONS
     // ============================================
-    if (this.matchAny(lowerQuery, ['job', 'schedule', 'operation', 'task', 'work order', 'assignment', 'route', 'shift'])) {
-      return await this.handleJobQuery(lowerQuery, role)
+    if (this.matchAny(q, ['job', 'schedule', 'operation', 'task', 'work order', 'assignment', 'route', 'shift'])) {
+      return await this.getJobInfo(q)
     }
 
     // ============================================
-    // CLIENTS / CRM / CUSTOMERS
+    // CLIENTS / CRM
     // ============================================
-    if (this.matchAny(lowerQuery, ['client', 'customer', 'crm', 'lead', 'prospect', 'account', 'company'])) {
-      return await this.handleCRMQuery(lowerQuery, role)
+    if (this.matchAny(q, ['client', 'customer', 'crm', 'lead', 'prospect', 'account'])) {
+      return await this.getCRMInfo(q)
     }
 
     // ============================================
-    // SALES / QUOTATIONS / INVOICES
+    // SALES / QUOTES / INVOICES
     // ============================================
-    if (this.matchAny(lowerQuery, ['sale', 'quote', 'quotation', 'invoice', 'proposal', 'deal', 'revenue', 'sell'])) {
-      return await this.handleSalesQuery(lowerQuery, role)
+    if (this.matchAny(q, ['sale', 'quote', 'quotation', 'invoice', 'proposal', 'revenue', 'sell'])) {
+      return await this.getSalesInfo(q)
     }
 
     // ============================================
-    // INVENTORY / STOCK / WAREHOUSE
+    // INVENTORY
     // ============================================
-    if (this.matchAny(lowerQuery, ['stock', 'inventory', 'warehouse', 'supply', 'item', 'product', 'material', 'equipment'])) {
-      return await this.handleInventoryQuery(lowerQuery, role)
+    if (this.matchAny(q, ['stock', 'inventory', 'warehouse', 'supply', 'item', 'product'])) {
+      return await this.getInventoryInfo(q)
     }
 
     // ============================================
-    // PROCUREMENT / PURCHASING / VENDORS
+    // PROCUREMENT
     // ============================================
-    if (this.matchAny(lowerQuery, ['purchase', 'procurement', 'vendor', 'supplier', 'rfq', 'order', 'buy', 'procure'])) {
-      return await this.handleProcurementQuery(lowerQuery, role)
+    if (this.matchAny(q, ['purchase', 'procurement', 'vendor', 'supplier', 'rfq', 'po', 'order'])) {
+      return await this.getProcurementInfo(q)
     }
 
     // ============================================
-    // FINANCE / BUDGET / PAYROLL
+    // FINANCE / PAYROLL
     // ============================================
-    if (this.matchAny(lowerQuery, ['finance', 'budget', 'money', 'payroll', 'salary', 'tax', 'payment', 'expense', 'cost', 'accounting'])) {
-      return await this.handleFinanceQuery(lowerQuery, role)
+    if (this.matchAny(q, ['finance', 'budget', 'money', 'payroll', 'salary', 'tax', 'payment', 'expense'])) {
+      return await this.getFinanceInfo(q, role)
     }
 
     // ============================================
-    // FLEET / VEHICLES / TRANSPORT
+    // FLEET
     // ============================================
-    if (this.matchAny(lowerQuery, ['fleet', 'vehicle', 'car', 'truck', 'transport', 'driver', 'fuel', 'mileage'])) {
-      return await this.handleFleetQuery(lowerQuery, role)
+    if (this.matchAny(q, ['fleet', 'vehicle', 'car', 'truck', 'transport', 'driver', 'fuel'])) {
+      return await this.getFleetInfo(q)
     }
 
     // ============================================
-    // ATTENDANCE / TIME TRACKING
+    // ATTENDANCE
     // ============================================
-    if (this.matchAny(lowerQuery, ['attendance', 'clock', 'timesheet', 'time tracking', 'absent', 'late', 'present'])) {
-      return await this.handleAttendanceQuery(lowerQuery, role)
+    if (this.matchAny(q, ['attendance', 'clock', 'timesheet', 'time tracking', 'absent', 'late', 'present'])) {
+      return await this.getAttendanceInfo(q)
     }
 
     // ============================================
-    // REPORTS / ANALYTICS
+    // REPORTS
     // ============================================
-    if (this.matchAny(lowerQuery, ['report', 'analytics', 'dashboard', 'chart', 'statistic', 'kpi', 'metric', 'data'])) {
-      return await this.handleReportQuery(lowerQuery, role)
+    if (this.matchAny(q, ['report', 'analytics', 'chart', 'statistic', 'kpi', 'metric'])) {
+      return `📊 **Reports** at /reports\n\nGenerate reports for any module. Each module also has its own reports section.`
     }
 
     // ============================================
-    // MOBILE / FIELD OPERATIONS
+    // MOBILE
     // ============================================
-    if (this.matchAny(lowerQuery, ['mobile', 'field', 'cleaner', 'app', 'phone', 'tablet'])) {
-      return this.handleMobileQuery(role)
-    }
-
-    // ============================================
-    // DOCUMENTS / FILES
-    // ============================================
-    if (this.matchAny(lowerQuery, ['document', 'file', 'upload', 'download', 'contract', 'policy', 'sop'])) {
-      return this.handleDocumentQuery(role)
-    }
-
-    // ============================================
-    // ASSETS / EQUIPMENT / MAINTENANCE
-    // ============================================
-    if (this.matchAny(lowerQuery, ['asset', 'maintenance', 'repair', 'machine', 'depreciation'])) {
-      return this.handleAssetQuery(role)
-    }
-
-    // ============================================
-    // HOW-TO / HELP / TUTORIAL
-    // ============================================
-    if (this.matchAny(lowerQuery, ['how to', 'how do', 'tutorial', 'guide', 'explain', 'help me', 'steps', 'process', 'workflow'])) {
-      return this.handleHowToQuery(lowerQuery, role)
+    if (this.matchAny(q, ['mobile', 'app', 'cleaner', 'phone'])) {
+      return `📱 **Mobile App** at /mobile\n\nCleaners can select jobs, clock in/out, take photos, and report incidents from their phones. Managers monitor at /fieldops/live-jobs`
     }
 
     // ============================================
     // SMART FALLBACK
     // ============================================
-    return this.getSmartFallback(lowerQuery, role)
+    return `🤖 I'm KHUMO! I know everything happening in your ERP.\n\nTry asking me:\n• "What's happening today?"\n• "How many open incidents?"\n• "Show me employees"\n• "How many active jobs?"\n• "Check stock levels"\n• "Show pending purchase orders"\n• "How many clients do we have?"\n• "How do I create a quotation?"`
   },
 
   // ============================================
-  // HELPER: Match any keyword
+  // HELPER
   // ============================================
   matchAny(text, keywords) {
     return keywords.some(kw => text.includes(kw))
   },
 
   // ============================================
-  // SYSTEM OVERVIEW
+  // FULL DASHBOARD OVERVIEW
   // ============================================
-  getSystemOverview(role) {
-    return `🏢 **Ndanduleni Group ERP System**\n\n` +
-      `This is a complete Enterprise Resource Planning system designed for cleaning, facilities management, security, and workforce operations.\n\n` +
-      `**📦 Available Modules:**\n\n` +
-      `| # | Module | Path |\n|---|--------|------|\n` +
-      `| 1 | 👥 HR Management | /hr |\n` +
-      `| 2 | 💰 Payroll | /payroll |\n` +
-      `| 3 | ⏰ Attendance | /hr/attendance |\n` +
-      `| 4 | 🏢 CRM & Clients | /crm |\n` +
-      `| 5 | 📋 Sales & Quotations | /sales |\n` +
-      `| 6 | ⚙️ Operations | /operations |\n` +
-      `| 7 | 📦 Inventory | /inventory |\n` +
-      `| 8 | 🛒 Procurement | /procurement |\n` +
-      `| 9 | 🚛 Fleet Management | /fleet |\n` +
-      `| 10 | 🚨 Incidents | /fieldops/incidents |\n` +
-      `| 11 | 📊 Reports | /reports |\n` +
-      `| 12 | 📁 Documents | /documents |\n` +
-      `| 13 | 📱 Mobile App | /mobile |\n\n` +
-      `You are logged in as **${role?.replace(/_/g, ' ') || 'User'}**.\n\n` +
-      `Ask me about any module or feature and I'll guide you!`
-  },
-
-  // ============================================
-  // SMART NAVIGATION
-  // ============================================
-  async handleNavigation(query, role) {
-    const q = query.toLowerCase()
-
-    if (this.matchAny(q, ['employee', 'staff', 'worker', 'hr', 'personnel'])) {
-      return `👥 **Employee Management**\n\n` +
-        `📌 **Location:** /hr/employees\n\n` +
-        `**How to get there:**\n` +
-        `1️⃣ Go to your Main Dashboard\n` +
-        `2️⃣ Click on **Human Resources** module\n` +
-        `3️⃣ Click **Employees** in the HR menu\n\n` +
-        `🔗 **Click this link:** /hr/employees\n\n` +
-        `**What you can do there:**\n` +
-        `• View all employees with search and filters\n` +
-        `• Add new employees\n` +
-        `• Edit employee details\n` +
-        `• View contracts, leave, training records\n\n` +
-        `Would you like to know about a specific HR feature?`
-    }
-
-    if (this.matchAny(q, ['job', 'schedule', 'operation'])) {
-      return `📅 **Job & Schedule Management**\n\n` +
-        `**Multiple locations depending on what you need:**\n\n` +
-        `📌 **All Jobs:** /operations\n` +
-        `📌 **Live Jobs (Real-time):** /fieldops/live-jobs\n` +
-        `📌 **Job Tracker (Audit):** /fieldops/job-tracker\n` +
-        `📌 **Create New Job:** /operations/jobs/new\n\n` +
-        `🔗 Click any link above to go directly there!\n\n` +
-        `**Which one do you need?**\n` +
-        `• **All Jobs** - View and manage all jobs\n` +
-        `• **Live Jobs** - See active jobs and assign staff in real-time\n` +
-        `• **Job Tracker** - Enter a job number to see its complete history`
-    }
-
-    if (this.matchAny(q, ['incident', 'accident', 'safety'])) {
-      return `🚨 **Incident Management**\n\n` +
-        `**Multiple locations:**\n\n` +
-        `📌 **Incident Dashboard:** /fieldops/incidents\n` +
-        `📌 **Report New Incident:** /fieldops/incidents/report\n` +
-        `📌 **View All Incidents:** /fieldops/incidents/list\n` +
-        `📌 **Track Incident:** /fieldops/incidents/tracker\n\n` +
-        `🔗 Click any link to go directly there!\n\n` +
-        `**Quick Guide:**\n` +
-        `• To **report** - Click "Report New" above\n` +
-        `• To **view** - Click "View All" above\n` +
-        `• To **audit** - Use Tracker with incident number`
-    }
-
-    if (this.matchAny(q, ['client', 'customer', 'crm'])) {
-      return `🏢 **CRM & Client Management**\n\n` +
-        `📌 **Location:** /crm\n\n` +
-        `**How to get there:**\n` +
-        `1️⃣ Go to Main Dashboard\n` +
-        `2️⃣ Click **CRM & Clients** module\n\n` +
-        `🔗 **Click:** /crm\n\n` +
-        `From CRM you can manage clients, contacts, pipeline, and services.`
-    }
-
-    if (this.matchAny(q, ['stock', 'inventory', 'warehouse'])) {
-      return `📦 **Inventory Management**\n\n` +
-        `📌 **Location:** /inventory\n\n` +
-        `🔗 **Click:** /inventory\n\n` +
-        `View stock levels, manage warehouses, track movements.`
-    }
-
-    if (this.matchAny(q, ['purchase', 'procurement', 'vendor'])) {
-      return `🛒 **Procurement**\n\n` +
-        `📌 **Location:** /procurement\n\n` +
-        `🔗 **Click:** /procurement\n\n` +
-        `Manage PRs, POs, RFQs, vendors, and goods receipts.`
-    }
-
-    if (this.matchAny(q, ['sale', 'quote', 'invoice'])) {
-      return `📋 **Sales & Quotations**\n\n` +
-        `📌 **Location:** /sales\n\n` +
-        `🔗 **Click:** /sales\n\n` +
-        `Create quotations, manage invoices, track payments.`
-    }
-
-    if (this.matchAny(q, ['finance', 'budget', 'payroll', 'salary'])) {
-      return `💰 **Finance & Payroll**\n\n` +
-        `📌 **Finance:** /finance\n` +
-        `📌 **Payroll:** /payroll\n\n` +
-        `🔗 Click either link to go directly there.`
-    }
-
-    if (this.matchAny(q, ['fleet', 'vehicle', 'car', 'truck'])) {
-      return `🚛 **Fleet Management**\n\n📌 **Location:** /fleet\n\n🔗 **Click:** /fleet`
-    }
-
-    if (this.matchAny(q, ['attendance', 'clock', 'timesheet'])) {
-      return `⏰ **Attendance**\n\n📌 **Location:** /hr/attendance\n\n🔗 **Click:** /hr/attendance`
-    }
-
-    if (this.matchAny(q, ['report', 'analytics'])) {
-      return `📊 **Reports**\n\n📌 **Location:** /reports\n\n🔗 **Click:** /reports`
-    }
-
-    if (this.matchAny(q, ['document', 'file'])) {
-      return `📁 **Documents**\n\n📌 **Location:** /documents\n\n🔗 **Click:** /documents`
-    }
-
-    if (this.matchAny(q, ['mobile', 'app', 'cleaner'])) {
-      return `📱 **Mobile App**\n\n📌 **Location:** /mobile\n\n🔗 **Click:** /mobile`
-    }
-
-    // General navigation
-    return this.getGeneralNavigation(role)
-  },
-
-  // ============================================
-  // EMPLOYEE QUERIES
-  // ============================================
-  async handleEmployeeQuery(query, role) {
-    const q = query.toLowerCase()
-
+  async getFullDashboardOverview() {
     try {
-      // List all employees
-      if (this.matchAny(q, ['list', 'show', 'all', 'see', 'view', 'how many', 'count'])) {
-        const { data: employees, count } = await supabase
-          .from('employees')
-          .select('first_name, last_name, employee_code, department, position, email, phone', { count: 'exact' })
-          .eq('employment_status', 'active')
-          .order('first_name')
-          .limit(15)
+      const [
+        { count: employees }, { count: openIncidents }, { count: criticalIncidents },
+        { count: openJobs }, { count: inProgressJobs }, { count: activeClients },
+        { count: totalStock }, { count: pendingPOs }, { count: pendingLeave },
+        { data: todayJobs }
+      ] = await Promise.all([
+        supabase.from('employees').select('*', { count: 'exact', head: true }).eq('employment_status', 'active'),
+        supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'under_investigation', 'acknowledged']),
+        supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('severity', 'critical').in('status', ['reported', 'under_investigation']),
+        supabase.from('jobs').select('*', { count: 'exact', head: true }).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled'),
+        supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'in_progress'),
+        supabase.from('clients').select('*', { count: 'exact', head: true }).eq('client_status', 'active'),
+        supabase.from('inventory_items').select('*', { count: 'exact', head: true }),
+        supabase.from('purchase_orders').select('*', { count: 'exact', head: true }).in('status', ['draft', 'sent', 'confirmed']),
+        supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('jobs').select('*').eq('scheduled_date', new Date().toISOString().split('T')[0]).not('status', 'eq', 'completed')
+      ])
 
-        let response = `👥 **Employee Directory**\n\n`
-        response += `📌 **Full list:** /hr/employees\n\n`
+      const today = new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-        if (employees && employees.length > 0) {
-          response += `**Showing ${employees.length} of ${count} active employees:**\n\n`
-          employees.forEach(emp => {
-            response += `• **${emp.first_name} ${emp.last_name || ''}** - ${emp.position || 'Staff'} (${emp.department || 'N/A'})\n`
-          })
-          if (count > 15) response += `\n*...and ${count - 15} more. View all at /hr/employees*\n`
-        }
-
-        response += `\n💡 You can search, filter, and manage employees at /hr/employees`
-        return response
-      }
-
-      // Department query
-      if (this.matchAny(q, ['department', 'which department'])) {
-        const { data: depts } = await supabase.from('employees').select('department').eq('employment_status', 'active')
-        const deptCount = {}
-        depts?.forEach(d => { const name = d.department || 'Unassigned'; deptCount[name] = (deptCount[name] || 0) + 1 })
-        
-        let response = `🏢 **Departments**\n\n`
-        Object.entries(deptCount).sort((a,b) => b[1] - a[1]).forEach(([dept, count]) => {
-          response += `• **${dept}**: ${count} employees\n`
-        })
-        response += `\n📌 View full breakdown at /hr/employees`
-        return response
-      }
-
-      // Leave query
-      if (this.matchAny(q, ['leave', 'off', 'vacation', 'holiday'])) {
-        const { count: pending } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-        return `🏖️ **Leave Management**\n\n` +
-          `📌 **Location:** /hr (HR Dashboard)\n\n` +
-          `• Pending Leave Requests: **${pending || 0}**\n\n` +
-          `**To manage leave:**\n` +
-          `• Go to /hr and click **Leave Management**\n` +
-          `• Approve or reject requests\n` +
-          `• View leave balances`
-      }
-
-      return `👥 **HR Management**\n\n📌 **Location:** /hr\n\n` +
-        `From HR you can manage employees, contracts, leave, training, attendance, and disciplinary records.\n\n` +
-        `What specifically would you like to know about?`
+      return `📊 **ERP Dashboard Overview - ${today}**\n\n` +
+        `| Module | Metric | Count |\n|--------|--------|-------|\n` +
+        `| 👥 HR | Active Employees | **${employees || 0}** |\n` +
+        `| 👥 HR | Pending Leave | **${pendingLeave || 0}** |\n` +
+        `| 🚨 Incidents | Open Incidents | **${openIncidents || 0}** |\n` +
+        `| 🚨 Incidents | Critical | **${criticalIncidents || 0}** |\n` +
+        `| 📅 Jobs | Open Jobs | **${openJobs || 0}** |\n` +
+        `| 📅 Jobs | In Progress | **${inProgressJobs || 0}** |\n` +
+        `| 📅 Jobs | Today | **${todayJobs?.length || 0}** |\n` +
+        `| 🏢 CRM | Active Clients | **${activeClients || 0}** |\n` +
+        `| 📦 Inventory | Total Items | **${totalStock || 0}** |\n` +
+        `| 🛒 Procurement | Pending POs | **${pendingPOs || 0}** |\n\n` +
+        `📌 **Quick Actions:**\n` +
+        `• View employees: /hr/employees\n` +
+        `• Report incident: /fieldops/incidents/report\n` +
+        `• Manage jobs: /operations\n` +
+        `• Check stock: /inventory`
     } catch (err) {
-      return `👥 **HR Management**\n\n📌 Navigate to /hr to manage all employee-related functions.`
+      return `🤖 I couldn't fetch the dashboard data right now. Please try again or check individual modules.`
     }
   },
 
   // ============================================
-  // INCIDENT QUERIES
+  // EMPLOYEE INFO
   // ============================================
-  async handleIncidentQuery(query, role) {
+  async getEmployeeInfo(q) {
+    try {
+      const { count: total } = await supabase.from('employees').select('*', { count: 'exact', head: true }).eq('employment_status', 'active')
+      const { data: recent } = await supabase.from('employees').select('first_name, last_name, department, position').eq('employment_status', 'active').order('created_at', { ascending: false }).limit(5)
+      const { count: onLeave } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'approved').gte('end_date', new Date().toISOString().split('T')[0])
+      const { data: departments } = await supabase.from('employees').select('department').eq('employment_status', 'active')
+
+      let response = `👥 **HR Overview**\n\n• Active Employees: **${total || 0}**\n• On Leave Today: **${onLeave || 0}**\n\n`
+
+      if (departments) {
+        const deptCount = {}
+        departments.forEach(d => { const n = d.department || 'Unassigned'; deptCount[n] = (deptCount[n] || 0) + 1 })
+        response += `**By Department:**\n`
+        Object.entries(deptCount).sort((a,b) => b[1] - a[1]).forEach(([d, c]) => response += `• ${d}: ${c}\n`)
+      }
+
+      response += `\n📌 Full list: /hr/employees\n📌 Add employee: /hr/employees/new`
+      return response
+    } catch { return `👥 **HR** at /hr - ${await this.getCount('employees', 'employment_status', 'active')} active employees` }
+  },
+
+  // ============================================
+  // INCIDENT INFO
+  // ============================================
+  async getIncidentInfo(q) {
     try {
       const { count: total } = await supabase.from('incidents').select('*', { count: 'exact', head: true })
-      const { count: open } = await supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'submitted', 'acknowledged', 'under_review', 'under_investigation'])
+      const { count: open } = await supabase.from('incidents').select('*', { count: 'exact', head: true }).in('status', ['reported', 'submitted', 'under_investigation', 'acknowledged'])
       const { count: critical } = await supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('severity', 'critical')
       const { count: closed } = await supabase.from('incidents').select('*', { count: 'exact', head: true }).eq('status', 'closed')
       const { data: recent } = await supabase.from('incidents').select('incident_number, title, severity, status, incident_date').order('created_at', { ascending: false }).limit(5)
 
-      let response = `🚨 **Incident Summary**\n\n`
-      response += `📌 **Dashboard:** /fieldops/incidents\n\n`
-      response += `| Metric | Count |\n|--------|-------|\n`
-      response += `| Total | ${total || 0} |\n`
-      response += `| Open | ${open || 0} |\n`
-      response += `| Critical | ${critical || 0} |\n`
-      response += `| Closed | ${closed || 0} |\n\n`
-
+      let response = `🚨 **Incident Report**\n\n• Total: **${total || 0}** | Open: **${open || 0}** | Critical: **${critical || 0}** | Closed: **${closed || 0}**\n\n`
+      
       if (recent && recent.length > 0) {
-        response += `**Recent Incidents:**\n`
-        recent.forEach(inc => {
-          const icon = inc.severity === 'critical' ? '🔴' : inc.severity === 'high' ? '🟠' : inc.severity === 'medium' ? '🟡' : '🟢'
-          response += `${icon} ${inc.incident_number}: ${inc.title}\n`
-        })
+        response += `**Recent:**\n`
+        recent.forEach(i => response += `• ${i.severity === 'critical' ? '🔴' : i.severity === 'high' ? '🟠' : '🟡'} ${i.incident_number}: ${i.title}\n`)
       }
 
-      response += `\n📌 **Report new:** /fieldops/incidents/report\n`
-      response += `📌 **Track incident:** /fieldops/incidents/tracker`
-
+      response += `\n📌 Report: /fieldops/incidents/report\n📌 Track: /fieldops/incidents/tracker`
       return response
-    } catch (err) {
-      return `🚨 **Incident Management**\n\n📌 Dashboard: /fieldops/incidents\n📌 Report: /fieldops/incidents/report`
-    }
+    } catch { return `🚨 **Incidents** at /fieldops/incidents` }
   },
 
   // ============================================
-  // JOB QUERIES
+  // JOB INFO
   // ============================================
-  async handleJobQuery(query, role) {
+  async getJobInfo(q) {
     try {
       const today = new Date().toISOString().split('T')[0]
-      const { data: todayJobs } = await supabase.from('jobs').select('*').eq('scheduled_date', today).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled')
-      const { count: total } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled')
+      const { count: open } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).not('status', 'eq', 'completed').not('status', 'eq', 'cancelled')
+      const { count: inProgress } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'in_progress')
+      const { count: todayCount } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('scheduled_date', today)
+      const { count: unassigned } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+      const { count: completed } = await supabase.from('jobs').select('*', { count: 'exact', head: true }).eq('status', 'completed')
 
-      let response = `📅 **Job Overview**\n\n`
-      response += `• Open Jobs: **${total || 0}**\n`
-      response += `• Today's Jobs: **${todayJobs?.length || 0}**\n\n`
-      response += `📌 **All Jobs:** /operations\n`
-      response += `📌 **Live Jobs:** /fieldops/live-jobs\n`
-      response += `📌 **Create Job:** /operations/jobs/new\n`
-      response += `📌 **Job Tracker:** /fieldops/job-tracker`
-
-      return response
-    } catch (err) {
-      return `📅 **Job Management**\n\n📌 Operations: /operations\n📌 Live Jobs: /fieldops/live-jobs`
-    }
+      return `📅 **Jobs Overview**\n\n` +
+        `• Open: **${open || 0}** | In Progress: **${inProgress || 0}** | Today: **${todayCount || 0}**\n` +
+        `• Unassigned: **${unassigned || 0}** | Completed: **${completed || 0}**\n\n` +
+        `📌 Manage: /operations\n📌 Live Jobs: /fieldops/live-jobs\n📌 Create: /operations/jobs/new`
+    } catch { return `📅 **Jobs** at /operations` }
   },
 
   // ============================================
-  // CRM QUERIES
+  // CRM INFO
   // ============================================
-  async handleCRMQuery(query, role) {
+  async getCRMInfo(q) {
     try {
       const { count: total } = await supabase.from('clients').select('*', { count: 'exact', head: true })
       const { count: active } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('client_status', 'active')
+      const { count: prospects } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('client_status', 'prospect')
+      const { data: recent } = await supabase.from('clients').select('company_name, city, client_rating').eq('client_status', 'active').order('created_at', { ascending: false }).limit(5)
 
-      return `🏢 **CRM Overview**\n\n` +
-        `• Total Clients: **${total || 0}**\n` +
-        `• Active: **${active || 0}**\n\n` +
-        `📌 **CRM Dashboard:** /crm\n` +
-        `📌 **Client List:** /crm/clients\n` +
-        `📌 **Add Client:** /crm/clients/new\n\n` +
-        `From CRM you can manage clients, contacts, pipeline, and services.`
-    } catch (err) {
-      return `🏢 **CRM Management**\n\n📌 Dashboard: /crm`
-    }
+      let response = `🏢 **CRM Overview**\n\n• Total Clients: **${total || 0}** | Active: **${active || 0}** | Prospects: **${prospects || 0}**\n\n`
+      if (recent && recent.length > 0) {
+        response += `**Active Clients:**\n`
+        recent.forEach(c => response += `• ${c.company_name} (${c.city || 'N/A'}) - Rating: ${c.client_rating || 'N/A'}\n`)
+      }
+      response += `\n📌 CRM: /crm\n📌 Add Client: /crm/clients/new`
+      return response
+    } catch { return `🏢 **CRM** at /crm` }
   },
 
   // ============================================
-  // SALES QUERIES
+  // SALES INFO
   // ============================================
-  async handleSalesQuery(query, role) {
-    return `📋 **Sales & Quotations**\n\n` +
-      `📌 **Sales Dashboard:** /sales\n\n` +
-      `**What you can do:**\n` +
-      `• Create Quotation: /sales/quotations/new\n` +
-      `• View Invoices: /sales/invoices\n` +
-      `• Record Payment: /sales/payments\n` +
-      `• Sales Reports: /sales/reports\n\n` +
-      `💡 Quotations can be downloaded as A4 PDF and converted to invoices.`
+  async getSalesInfo(q) {
+    try {
+      const { count: quotations } = await supabase.from('quotations').select('*', { count: 'exact', head: true })
+      const { count: pendingQuotes } = await supabase.from('quotations').select('*', { count: 'exact', head: true }).eq('status', 'sent')
+      const { count: invoices } = await supabase.from('invoices').select('*', { count: 'exact', head: true })
+      const { count: unpaidInvoices } = await supabase.from('invoices').select('*', { count: 'exact', head: true }).in('status', ['sent', 'overdue'])
+
+      return `📋 **Sales Overview**\n\n` +
+        `• Quotations: **${quotations || 0}** (${pendingQuotes || 0} pending)\n` +
+        `• Invoices: **${invoices || 0}** (${unpaidInvoices || 0} unpaid)\n\n` +
+        `📌 Sales: /sales\n📌 New Quote: /sales/quotations/new`
+    } catch { return `📋 **Sales** at /sales` }
   },
 
   // ============================================
-  // INVENTORY QUERIES
+  // INVENTORY INFO
   // ============================================
-  async handleInventoryQuery(query, role) {
+  async getInventoryInfo(q) {
     try {
       const { count: total } = await supabase.from('inventory_items').select('*', { count: 'exact', head: true })
-      const { data: lowItems } = await supabase.from('inventory_items').select('name, current_stock, reorder_point').lte('current_stock', supabase.raw('COALESCE(reorder_point, 10)')).limit(5)
+      const { data: lowStock } = await supabase.from('inventory_items').select('name, current_stock, reorder_point, unit').lte('current_stock', supabase.raw('COALESCE(reorder_point, 10)')).gt('current_stock', 0).limit(5)
+      const { count: outOfStock } = await supabase.from('inventory_items').select('*', { count: 'exact', head: true }).eq('current_stock', 0)
 
-      let response = `📦 **Inventory**\n\n• Total Items: **${total || 0}**\n\n`
-      
-      if (lowItems && lowItems.length > 0) {
+      let response = `📦 **Inventory**\n\n• Total Items: **${total || 0}**\n• Out of Stock: **${outOfStock || 0}**\n\n`
+      if (lowStock && lowStock.length > 0) {
         response += `⚠️ **Low Stock:**\n`
-        lowItems.forEach(i => response += `• ${i.name}: ${i.current_stock} left\n`)
+        lowStock.forEach(i => response += `• ${i.name}: ${i.current_stock} ${i.unit || 'units'} left\n`)
       }
-
-      response += `\n📌 **Dashboard:** /inventory\n📌 **Stock List:** /inventory/items`
+      response += `\n📌 Inventory: /inventory`
       return response
-    } catch (err) {
-      return `📦 **Inventory Management**\n\n📌 Dashboard: /inventory`
-    }
+    } catch { return `📦 **Inventory** at /inventory` }
   },
 
   // ============================================
-  // PROCUREMENT QUERIES
+  // PROCUREMENT INFO
   // ============================================
-  async handleProcurementQuery(query, role) {
-    return `🛒 **Procurement**\n\n` +
-      `📌 **Dashboard:** /procurement\n\n` +
-      `**Quick Links:**\n` +
-      `• Purchase Requests: /procurement/pr\n` +
-      `• Purchase Orders: /procurement/po\n` +
-      `• RFQs: /procurement/rfq\n` +
-      `• Vendors: /procurement/vendors\n` +
-      `• Goods Receipts: /procurement/receipts`
+  async getProcurementInfo(q) {
+    try {
+      const { count: pendingPRs } = await supabase.from('purchase_requisitions').select('*', { count: 'exact', head: true }).eq('status', 'pending_approval')
+      const { count: pendingPOs } = await supabase.from('purchase_orders').select('*', { count: 'exact', head: true }).in('status', ['draft', 'sent', 'confirmed'])
+      const { count: vendors } = await supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('status', 'active')
+
+      return `🛒 **Procurement**\n\n` +
+        `• Pending PRs: **${pendingPRs || 0}**\n` +
+        `• Pending POs: **${pendingPOs || 0}**\n` +
+        `• Active Vendors: **${vendors || 0}**\n\n` +
+        `📌 Procurement: /procurement`
+    } catch { return `🛒 **Procurement** at /procurement` }
   },
 
   // ============================================
-  // FINANCE QUERIES
+  // FINANCE INFO
   // ============================================
-  async handleFinanceQuery(query, role) {
+  async getFinanceInfo(q, role) {
     if (role !== 'super_admin' && role !== 'finance_officer') {
-      return `💰 **Finance**\n\n⚠️ Detailed financial data is restricted.\n\n📌 Available to you:\n• /sales - Revenue & invoices\n• /procurement - Purchase budgets\n\nContact your Finance Officer for full access.`
+      return `💰 **Finance** - Access restricted. Available: Sales at /sales and Procurement budgets at /procurement`
     }
-    return `💰 **Finance & Payroll**\n\n📌 Finance: /finance\n📌 Payroll: /payroll\n📌 Sales: /sales`
+    try {
+      const { data: invoices } = await supabase.from('invoices').select('total_amount').in('status', ['sent', 'overdue', 'partially_paid'])
+      const total = invoices?.reduce((s, i) => s + (i.total_amount || 0), 0) || 0
+      return `💰 **Finance**\n\n• Outstanding Invoices: R ${total.toLocaleString()}\n\n📌 Finance: /finance\n📌 Payroll: /payroll`
+    } catch { return `💰 **Finance** at /finance` }
   },
 
   // ============================================
-  // FLEET QUERIES
+  // FLEET INFO
   // ============================================
-  async handleFleetQuery(query, role) {
-    return `🚛 **Fleet Management**\n\n📌 Dashboard: /fleet\n\nTrack vehicles, schedule maintenance, monitor fuel, manage drivers.`
+  async getFleetInfo(q) {
+    return `🚛 **Fleet Management** at /fleet\n\nTrack vehicles, schedule maintenance, monitor fuel usage, and manage drivers.`
   },
 
   // ============================================
-  // ATTENDANCE QUERIES
+  // ATTENDANCE INFO
   // ============================================
-  async handleAttendanceQuery(query, role) {
-    return `⏰ **Attendance**\n\n📌 Location: /hr/attendance\n\nClock in/out, view timesheets, manage shifts, track attendance.`
+  async getAttendanceInfo(q) {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { count: present } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('attendance_date', today).eq('status', 'present')
+      const { count: absent } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('attendance_date', today).eq('status', 'absent')
+      return `⏰ **Attendance Today**\n\n• Present: **${present || 0}**\n• Absent: **${absent || 0}**\n\n📌 Attendance: /hr/attendance`
+    } catch { return `⏰ **Attendance** at /hr/attendance` }
   },
 
   // ============================================
-  // REPORT QUERIES
+  // HOW-TO
   // ============================================
-  async handleReportQuery(query, role) {
-    return `📊 **Reports & Analytics**\n\n📌 Location: /reports\n\nGenerate reports for HR, Sales, Operations, Finance, and Incidents.`
+  handleHowTo(q) {
+    if (this.matchAny(q, ['quote', 'quotation'])) return `📋 **Create Quotation:**\n1️⃣ Go to /sales\n2️⃣ Click "New Quotation"\n3️⃣ Select client\n4️⃣ Add items with prices\n5️⃣ Download as A4 PDF or send\n\n📌 /sales/quotations/new`
+    if (this.matchAny(q, ['incident', 'accident'])) return `🚨 **Report Incident:**\n1️⃣ Go to /fieldops/incidents\n2️⃣ Click "Report Incident"\n3️⃣ Fill details\n4️⃣ Submit\n\n📌 /fieldops/incidents/report`
+    if (this.matchAny(q, ['job', 'schedule'])) return `📝 **Create Job:**\n1️⃣ Go to /operations\n2️⃣ Click "New Job"\n3️⃣ Select client, fill details\n4️⃣ Schedule\n\n📌 /operations/jobs/new`
+    if (this.matchAny(q, ['assign', 'allocate'])) return `👤 **Assign Staff:**\n1️⃣ Go to /fieldops/live-jobs\n2️⃣ Click blue 👤+ button\n3️⃣ Select employee\n4️⃣ Click Assign\n\n📌 /fieldops/live-jobs`
+    if (this.matchAny(q, ['clock in', 'clock out'])) return `⏰ **Clock In/Out:**\n1️⃣ Go to /hr/attendance\n2️⃣ Click Clock In/Out\n3️⃣ GPS auto-captured\n\n📌 /hr/attendance`
+    if (this.matchAny(q, ['invoice'])) return `📄 **Create Invoice:**\n1️⃣ Go to /sales\n2️⃣ Convert from quotation or create new\n\n📌 /sales`
+    if (this.matchAny(q, ['client', 'customer'])) return `🏢 **Add Client:**\n1️⃣ Go to /crm\n2️⃣ Click "Add Client"\n3️⃣ Fill company details\n\n📌 /crm/clients/new`
+    if (this.matchAny(q, ['employee', 'staff'])) return `👥 **Add Employee:**\n1️⃣ Go to /hr/employees\n2️⃣ Click "Add Employee"\n3️⃣ Fill details\n\n📌 /hr/employees`
+    if (this.matchAny(q, ['purchase order', 'po'])) return `🛒 **Create PO:**\n1️⃣ Go to /procurement\n2️⃣ Click "New PO"\n3️⃣ Select vendor, add items\n\n📌 /procurement/po/new`
+    return `🤖 What would you like to learn how to do? Try: "How to create a quotation?" or "How to report an incident?"`
   },
 
   // ============================================
-  // MOBILE QUERIES
+  // NAVIGATION
   // ============================================
-  handleMobileQuery(role) {
-    return `📱 **Mobile Workforce**\n\n📌 App: /mobile\n📌 Live Jobs: /fieldops/live-jobs\n\nCleaners can select jobs, clock in/out, take photos, report incidents from their phones.`
+  handleNavigation(q) {
+    if (this.matchAny(q, ['employee', 'staff', 'hr'])) return `👥 **Employees** at /hr/employees`
+    if (this.matchAny(q, ['incident', 'accident'])) return `🚨 **Incidents** at /fieldops/incidents`
+    if (this.matchAny(q, ['job', 'operation'])) return `📅 **Jobs** at /operations\n📌 Live: /fieldops/live-jobs`
+    if (this.matchAny(q, ['client', 'crm'])) return `🏢 **Clients** at /crm`
+    if (this.matchAny(q, ['quote', 'sale', 'invoice'])) return `📋 **Sales** at /sales`
+    if (this.matchAny(q, ['stock', 'inventory'])) return `📦 **Inventory** at /inventory`
+    if (this.matchAny(q, ['purchase', 'procurement', 'vendor'])) return `🛒 **Procurement** at /procurement`
+    if (this.matchAny(q, ['finance', 'budget'])) return `💰 **Finance** at /finance`
+    if (this.matchAny(q, ['payroll', 'salary'])) return `💰 **Payroll** at /payroll`
+    if (this.matchAny(q, ['fleet', 'vehicle'])) return `🚛 **Fleet** at /fleet`
+    if (this.matchAny(q, ['attendance', 'clock'])) return `⏰ **Attendance** at /hr/attendance`
+    if (this.matchAny(q, ['report'])) return `📊 **Reports** at /reports`
+    if (this.matchAny(q, ['document'])) return `📁 **Documents** at /documents`
+    if (this.matchAny(q, ['mobile', 'app'])) return `📱 **Mobile App** at /mobile`
+    return `🤖 What are you looking for? Try: "Where do I see employees?"`
   },
 
   // ============================================
-  // DOCUMENT QUERIES
+  // HELPER: Get count
   // ============================================
-  handleDocumentQuery(role) {
-    return `📁 **Document Management**\n\n📌 Location: /documents\n\nUpload, store, and manage contracts, policies, SOPs, and compliance documents.`
+  async getCount(table, column, value) {
+    try {
+      const { count } = await supabase.from(table).select('*', { count: 'exact', head: true }).eq(column, value)
+      return count || 0
+    } catch { return 0 }
   },
 
   // ============================================
-  // ASSET QUERIES
-  // ============================================
-  handleAssetQuery(role) {
-    return `🔧 **Asset Management**\n\n📌 Location: /assets\n\nTrack assets, depreciation, maintenance schedules.`
-  },
-
-  // ============================================
-  // HOW-TO QUERIES
-  // ============================================
-  handleHowToQuery(query, role) {
-    const q = query.toLowerCase()
-
-    if (this.matchAny(q, ['create job', 'new job', 'add job'])) {
-      return `📝 **How to Create a Job**\n\n1️⃣ Go to /operations\n2️⃣ Click **"New Job"** button\n3️⃣ Fill in: Client, Title, Location, Date, Time\n4️⃣ Set priority and number of cleaners\n5️⃣ Click **"Create & Schedule"**\n\n📌 Direct link: /operations/jobs/new`
-    }
-
-    if (this.matchAny(q, ['report incident', 'new incident', 'log incident'])) {
-      return `🚨 **How to Report an Incident**\n\n1️⃣ Go to /fieldops/incidents\n2️⃣ Click **"Report Incident"** (red button)\n3️⃣ Fill in: Title, Category, Severity, Description\n4️⃣ Add location, people involved, injuries\n5️⃣ Click **"Submit Report"**\n\n📌 Direct link: /fieldops/incidents/report`
-    }
-
-    if (this.matchAny(q, ['create quotation', 'new quote', 'quotation'])) {
-      return `📋 **How to Create a Quotation**\n\n1️⃣ Go to /sales\n2️⃣ Click **"New Quotation"**\n3️⃣ Select client\n4️⃣ Add items/services with prices\n5️⃣ Download as A4 PDF or send to client\n\n📌 Direct link: /sales/quotations/new`
-    }
-
-    if (this.matchAny(q, ['assign', 'assign job', 'assign staff'])) {
-      return `👤 **How to Assign Staff to a Job**\n\n1️⃣ Go to /fieldops/live-jobs\n2️⃣ Find the job\n3️⃣ Click the blue **👤+** button\n4️⃣ Select employee from dropdown\n5️⃣ Click **"Assign"**\n\nThey will see it instantly on mobile!`
-    }
-
-    if (this.matchAny(q, ['clock in', 'clock out', 'attendance'])) {
-      return `⏰ **How to Clock In/Out**\n\n1️⃣ Go to /hr/attendance\n2️⃣ Click **"Clock In"** (green button)\n3️⃣ GPS location is captured automatically\n4️⃣ Click **"Clock Out"** when done\n\n📱 Also available on mobile app!`
-    }
-
-    return `🤖 **How can I help?**\n\nI can guide you through:\n• Creating jobs\n• Reporting incidents\n• Creating quotations\n• Assigning staff\n• Clock in/out\n• And more!\n\nJust ask "how to [what you want to do]"`
-  },
-
-  // ============================================
-  // WELCOME MESSAGE
+  // WELCOME
   // ============================================
   getWelcomeMessage(userName) {
     const name = userName || 'there'
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-
-    return `🤖 **${greeting}, ${name}!** I'm **KHUMO**, your Ndanduleni ERP AI Assistant. 🇿🇦\n\n` +
-      `I'm here to help you navigate and use the ERP system. Here's what I can do:\n\n` +
-      `🗺️ **Find anything** - "Where do I see employees?"\n` +
-      `📊 **Show data** - "How many open incidents?"\n` +
-      `📝 **Explain how** - "How do I create a quotation?"\n` +
-      `💡 **Give tips** - "What's the best way to...?"\n\n` +
-      `**Try asking me:**\n` +
-      `• "Show me the employee list"\n` +
-      `• "Where do I report an incident?"\n` +
-      `• "How many jobs are open today?"\n` +
-      `• "How do I assign staff to a job?"\n\n` +
-      `Just type your question below! 🎯`
-  },
-
-  // ============================================
-  // GENERAL NAVIGATION
-  // ============================================
-  getGeneralNavigation(role) {
-    return `🗺️ **ERP Navigation Guide**\n\n` +
-      `Here's where to find everything:\n\n` +
-      `| What | Where |\n|------|-------|\n` +
-      `| Employees | /hr |\n` +
-      `| Payroll | /payroll |\n` +
-      `| Attendance | /hr/attendance |\n` +
-      `| Clients | /crm |\n` +
-      `| Sales/Quotes | /sales |\n` +
-      `| Jobs/Operations | /operations |\n` +
-      `| Live Jobs | /fieldops/live-jobs |\n` +
-      `| Inventory | /inventory |\n` +
-      `| Procurement | /procurement |\n` +
-      `| Fleet | /fleet |\n` +
-      `| Incidents | /fieldops/incidents |\n` +
-      `| Reports | /reports |\n` +
-      `| Documents | /documents |\n` +
-      `| Mobile App | /mobile |\n\n` +
-      `Click any path above or ask me for directions!`
-  },
-
-  // ============================================
-  // SMART FALLBACK
-  // ============================================
-  getSmartFallback(query, role) {
-    return `🤖 I understand you're asking about something, but I need a bit more clarity.\n\n` +
-      `Here are some things I can help with:\n\n` +
-      `👥 **Employees** - "Show me the staff list"\n` +
-      `🚨 **Incidents** - "How many open incidents?"\n` +
-      `📅 **Jobs** - "What jobs are scheduled today?"\n` +
-      `🏢 **Clients** - "Show active clients"\n` +
-      `📦 **Inventory** - "Check stock levels"\n` +
-      `🛒 **Procurement** - "Pending purchase orders"\n` +
-      `💰 **Finance** - "Revenue overview"\n` +
-      `📱 **Mobile** - "How does the mobile app work?"\n\n` +
-      `Or try: "Where can I find...?" and I'll guide you!\n\n` +
-      `You can also click the Quick Prompts below ⚡`
+    return `🤖 **${greeting}, ${name}!** I'm **KHUMO**, your ERP AI Assistant. 🇿🇦\n\n` +
+      `I know everything happening in your system. Try:\n\n` +
+      `📊 **"What's happening today?"** - Full dashboard overview\n` +
+      `👥 **"Show me employees"** - Staff list and stats\n` +
+      `🚨 **"How many open incidents?"** - Incident report\n` +
+      `📅 **"What jobs are open?"** - Job overview\n` +
+      `📦 **"Check stock levels"** - Inventory status\n` +
+      `📝 **"How do I create a quotation?"** - Step-by-step\n\n` +
+      `Just ask! I'll fetch real-time data for you. 🎯`
   }
 }
