@@ -19,10 +19,10 @@ export default function App() {
   }, [initialize, initTheme])
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       initSession(user.id)
     }
-  }, [user, initSession])
+  }, [user?.id, initSession])
 
   return (
     <>
@@ -35,10 +35,18 @@ export default function App() {
             color: '#f1f5f9',
             borderRadius: '25px',
             border: '1px solid #334155',
+            boxShadow: '8px 8px 16px #020617, -8px -8px 16px #334155',
+          },
+          success: {
+            iconTheme: { primary: '#10B981', secondary: '#fff' },
+          },
+          error: {
+            iconTheme: { primary: '#EF4444', secondary: '#fff' },
           },
         }}
       />
       <AppRoutes />
+      {/* KHUMO AI Assistant - Available on every page */}
       <AIFloatButton />
       <AIChatWindow />
     </>
