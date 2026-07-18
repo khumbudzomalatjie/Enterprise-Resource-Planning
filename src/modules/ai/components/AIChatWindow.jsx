@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useAIStore from '../store/aiStore'
 import useAuthStore from '../../../store/authStore'
-import { Send, Sparkles, Trash2, X, Zap, Bot } from 'lucide-react'
+import { Send, Sparkles, Trash2, X, Zap, Bot, ExternalLink, Copy, Check } from 'lucide-react'
 
 export default function AIChatWindow() {
   const { isOpen, messages, loading, quickPrompts, sendMessage, sendQuickPrompt, toggleChat, clearChat } = useAIStore()
   const { user, profile } = useAuthStore()
+  const navigate = useNavigate()
   const [input, setInput] = useState('')
+  const [copiedId, setCopiedId] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -45,12 +48,60 @@ export default function AIChatWindow() {
     }
   }
 
-  const formatMessage = (text) => {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #7c3aed;">$1</strong>')
-      .replace(/\n/g, '<br/>')
-      .replace(/\|/g, '')
+  // ✅ Handle internal navigation when a link is clicked
+  const handleLinkClick = (e, path) => {
+    e.preventDefault()
+    // Close chat window
+    toggleChat()
+    // Navigate to the path
+    setTimeout(() => {
+      navigate(path)
+    }, 200)
   }
+
+  // ✅ Copy message to clipboard
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text.replace(/<[^>]*>/g, ''))
+    setCopiedId(Date.now())
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  // ✅ Parse message text and render clickable links
+  const renderMessage = (text) => {
+    // First, handle bold text
+    let html = text.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #7c3aed;">$1</strong>')
+    
+    // Handle newlines
+    html = html.replace(/\n/g, '<br/>')
+
+    // ✅ Convert /path routes to clickable links
+    html = html.replace(
+      /(\/[a-zA-Z0-9_\-\/]+)/g,
+      '<a href="$1" class="khumo-link" data-path="$1" style="color: #7c3aed; text-decoration: underline; cursor: pointer; font-weight: 500;">$1 🔗</a>'
+    )
+
+    return html
+  }
+
+  // ✅ Attach click handlers to links after render
+  useEffect(() => {
+    const links = document.querySelectorAll('.khumo-link')
+    links.forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault()
+        const path = this.getAttribute('data-path')
+        if (path) {
+          toggleChat()
+          setTimeout(() => navigate(path), 200)
+        }
+      })
+    })
+    return () => {
+      links.forEach(link => {
+        link.removeEventListener('click', () => {})
+      })
+    }
+  }, [messages])
 
   return (
     <AnimatePresence>
@@ -60,7 +111,7 @@ export default function AIChatWindow() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           transition={{ duration: 0.2 }}
-          className="fixed bottom-24 right-6 z-50 w-[400px] max-w-[95vw] h-[600px] max-h-[80vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden"
+          className="fixed bottom-24 right-6 z-50 w-[420px] max-w-[95vw] h-[620px] max-h-[80vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 p-4 flex items-center justify-between flex-shrink-0">
@@ -94,7 +145,7 @@ export default function AIChatWindow() {
             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             <span>KHUMO is online</span>
             <span className="text-purple-300 dark:text-purple-600">•</span>
-            <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI Powered</span>
+            <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> Click links to navigate</span>
           </div>
 
           {/* Messages */}
@@ -106,17 +157,36 @@ export default function AIChatWindow() {
                     <Bot className="w-4 h-4 text-purple-600" />
                   </div>
                 )}
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm relative group ${
                   msg.role === 'user' 
                     ? 'bg-purple-600 text-white rounded-br-md' 
                     : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-md'
                 }`}>
                   {msg.role === 'assistant' && (
-                    <p className="text-[10px] font-bold text-purple-500 dark:text-purple-400 mb-1">KHUMO</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] font-bold text-purple-500 dark:text-purple-400">KHUMO</p>
+                      <button 
+                        onClick={() => handleCopy(msg.message)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+                        title="Copy message"
+                      >
+                        {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                      </button>
+                    </div>
                   )}
                   <div 
-                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }} 
-                    className="prose prose-sm dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: renderMessage(msg.message) }} 
+                    className="prose prose-sm dark:prose-invert max-w-none khumo-message"
+                    onClick={(e) => {
+                      // Handle clicks on links
+                      const target = e.target
+                      if (target.tagName === 'A' && target.getAttribute('data-path')) {
+                        e.preventDefault()
+                        const path = target.getAttribute('data-path')
+                        toggleChat()
+                        setTimeout(() => navigate(path), 200)
+                      }
+                    }}
                   />
                   <p className={`text-[10px] mt-1.5 ${msg.role === 'user' ? 'text-white/60' : 'text-slate-400'}`}>
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -197,7 +267,7 @@ export default function AIChatWindow() {
               </button>
             </div>
             <p className="text-[10px] text-slate-400 text-center mt-1.5">
-              KHUMO can analyze data, provide insights, and answer ERP questions
+              💡 Click on <span className="text-purple-500 font-medium">/path</span> links to navigate directly within the ERP
             </p>
           </div>
         </motion.div>
