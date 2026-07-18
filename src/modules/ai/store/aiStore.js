@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '../../../lib/supabaseClient'
 import { aiEngine } from '../utils/aiEngine'
+import { aiApi } from '../api/aiApi'
 
 const useAIStore = create((set, get) => ({
   isOpen: false,
@@ -14,27 +15,69 @@ const useAIStore = create((set, get) => ({
   toggleChat: () => set(state => ({ isOpen: !state.isOpen })),
 
   initSession: async (userId) => {
-    const sessionId = `session-${userId}-${Date.now()}`
-    set({ sessionId, messages: [] })
-    
-    // Load quick prompts
-    const { data: prompts } = await supabase.from('ai_quick_prompts').select('*').eq('is_active', true).order('sort_order')
-    set({ quickPrompts: prompts || [] })
+    const sessionId = `khumo-${userId}-${Date.now()}`
+    set({ sessionId, messages: [], loading: true })
 
-    // Load recent insights
-    const { data: insights } = await supabase.from('ai_insights').select('*').order('created_at', { ascending: false }).limit(10)
-    const { count: unread } = await supabase.from('ai_insights').select('*', { count: 'exact', head: true }).eq('is_read', false)
-    set({ insights: insights || [], unreadInsights: unread || 0 })
+    try {
+      // Load quick prompts
+      const { data: prompts } = await supabase
+        .from('ai_quick_prompts')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order')
+      set({ quickPrompts: prompts || [] })
 
-    // Welcome message
-    set(state => ({
-      messages: [{
-        id: 'welcome',
-        role: 'assistant',
-        message: "🤖 **Hello! I'm your ERP AI Assistant.**\n\nI can analyze incidents, optimize schedules, predict maintenance, check inventory, and more!\n\nType your question or use a quick prompt below.",
-        created_at: new Date().toISOString()
-      }]
-    }))
+      // Load insights
+      const { data: insights } = await supabase
+        .from('ai_insights')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      const unreadCount = (insights || []).filter(i => !i.is_read).length
+      set({ insights: insights || [], unreadInsights: unreadCount })
+
+      // Load chat history
+      const { data: history } = await supabase
+        .from('ai_chat_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(50)
+
+      if (history && history.length > 0) {
+        set({
+          messages: history.map(m => ({
+            id: m.id,
+            role: m.role,
+            message: m.message,
+            created_at: m.created_at
+          }))
+        })
+      } else {
+        // Welcome message
+        set({
+          messages: [{
+            id: 'welcome',
+            role: 'assistant',
+            message: "🤖 **Dumela! I'm KHUMO**, your Ndanduleni ERP AI Assistant. 🇿🇦\n\n" +
+              "I'm here to help you with:\n\n" +
+              "🚨 **Incident Analysis** - Track and analyze incidents\n" +
+              "📅 **Schedule Optimization** - Optimize job routing\n" +
+              "📦 **Inventory Management** - Monitor stock levels\n" +
+              "🛒 **Procurement** - Purchase orders and vendors\n" +
+              "👥 **HR Insights** - Staff and attendance overview\n" +
+              "💰 **Financial Overview** - Revenue and budgets\n" +
+              "🏢 **CRM** - Client information and pipeline\n" +
+              "🔧 **Maintenance** - Equipment health prediction\n\n" +
+              "How can I assist you today?",
+            created_at: new Date().toISOString()
+          }]
+        })
+      }
+    } catch (err) {
+      console.error('KHUMO init error:', err)
+    }
+    set({ loading: false })
   },
 
   sendMessage: async (message, userContext) => {
@@ -50,14 +93,14 @@ const useAIStore = create((set, get) => ({
 
     set({ messages: [...messages, userMsg], loading: true })
 
-    // Save to history
-    await supabase.from('ai_chat_history').insert([{
+    // Save user message
+    await aiApi.saveChatMessage({
       user_id: userContext.userId,
       session_id: sessionId,
       role: 'user',
       message,
       context: userContext
-    }])
+    })
 
     // Process with AI engine
     const response = await aiEngine.processQuery(message, userContext)
@@ -72,12 +115,12 @@ const useAIStore = create((set, get) => ({
     set(state => ({ messages: [...state.messages, aiMsg], loading: false }))
 
     // Save AI response
-    await supabase.from('ai_chat_history').insert([{
+    await aiApi.saveChatMessage({
       user_id: userContext.userId,
       session_id: sessionId,
       role: 'assistant',
       message: response
-    }])
+    })
   },
 
   sendQuickPrompt: async (promptText, userContext) => {
@@ -85,15 +128,25 @@ const useAIStore = create((set, get) => ({
   },
 
   markInsightRead: async (insightId) => {
-    await supabase.from('ai_insights').update({ is_read: true }).eq('id', insightId)
+    await aiApi.markInsightRead(insightId)
     set(state => ({
       insights: state.insights.map(i => i.id === insightId ? { ...i, is_read: true } : i),
       unreadInsights: Math.max(0, state.unreadInsights - 1)
     }))
   },
 
+  clearChat: async (userId) => {
+    await aiApi.clearChatHistory(userId)
+    set({ messages: [{
+      id: 'welcome',
+      role: 'assistant',
+      message: "🤖 **Chat cleared!** How can KHUMO help you now?",
+      created_at: new Date().toISOString()
+    }]})
+  },
+
   loadChatHistory: async (userId) => {
-    const { data } = await supabase.from('ai_chat_history').select('*').eq('user_id', userId).order('created_at', { ascending: true }).limit(50)
+    const { data } = await aiApi.getChatHistory(userId)
     if (data && data.length > 0) {
       set({ messages: data.map(m => ({ id: m.id, role: m.role, message: m.message, created_at: m.created_at })) })
     }
