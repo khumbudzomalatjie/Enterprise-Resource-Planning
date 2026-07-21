@@ -551,4 +551,68 @@ export const khumoEngine = {
     try {
       const { count } = await supabase.from('employees').select('*', { count: 'exact', head: true }).eq('employment_status', 'active')
       return { text: `💰 ${count || 0} employees on payroll.`, action: { label: 'Open Payroll', navigate: '/payroll' } }
-    } catch { return { text: `Payroll in the main menu.
+    } catch { return { text: `Payroll in the main menu.`, action: { label: 'Open Payroll', navigate: '/payroll' } } }
+  },
+
+  async getAttendanceInfo() {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { count } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('attendance_date', today).not('clock_in_time', 'is', null)
+      return { text: `⏰ ${count || 0} clocked in today.`, action: { label: 'Open Attendance', navigate: '/hr/attendance' } }
+    } catch { return { text: `Attendance under HR.`, action: { label: 'Open Attendance', navigate: '/hr/attendance' } } }
+  },
+
+  async getLeaveInfo() {
+    try {
+      const { count: pending } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+      return { text: `🏖️ ${pending || 0} leave requests pending.`, action: { label: 'View Leave', navigate: '/hr' } }
+    } catch { return { text: `Leave Management under HR.`, action: { label: 'Open HR', navigate: '/hr' } } }
+  },
+
+  // ============================================
+  // NAVIGATION
+  // ============================================
+  getNavigation(q) {
+    const map = {
+      employee: { text: `HR Management → Employees`, action: { label: 'Open Employees', navigate: '/hr/employees' } },
+      incident: { text: `Field Operations → Incidents`, action: { label: 'Open Incidents', navigate: '/fieldops/incidents' } },
+      job: { text: `Operations`, action: { label: 'Open Operations', navigate: '/operations' } },
+      client: { text: `CRM & Clients`, action: { label: 'Open CRM', navigate: '/crm' } },
+      quote: { text: `Sales & Quotations`, action: { label: 'Open Sales', navigate: '/sales' } },
+      invoice: { text: `Sales & Quotations`, action: { label: 'Open Sales', navigate: '/sales' } },
+      stock: { text: `Inventory`, action: { label: 'Open Inventory', navigate: '/inventory' } },
+      purchase: { text: `Procurement`, action: { label: 'Open Procurement', navigate: '/procurement' } },
+      payroll: { text: `Payroll`, action: { label: 'Open Payroll', navigate: '/payroll' } },
+      attendance: { text: `HR → Attendance`, action: { label: 'Open Attendance', navigate: '/hr/attendance' } },
+      leave: { text: `HR → Leave Management`, action: { label: 'Open Leave', navigate: '/hr' } },
+      report: { text: `Reports`, action: { label: 'Open Reports', navigate: '/reports' } },
+      document: { text: `Documents`, action: { label: 'Open Documents', navigate: '/documents' } },
+      fleet: { text: `Fleet Management`, action: { label: 'Open Fleet', navigate: '/fleet' } },
+    }
+    for (const [key, val] of Object.entries(map)) {
+      if (this.hasWord(q, [key])) return val
+    }
+    return { text: `What are you looking for?` }
+  },
+
+  async searchPerson(q) {
+    const words = q.split(' ')
+    const nameIndex = words.findIndex(w => w === 'is' || w === 'search' || w === 'find' || w === 'look')
+    const name = nameIndex >= 0 ? words.slice(nameIndex + 1).join(' ') : ''
+    if (!name) return { text: `Who are you looking for?` }
+    try {
+      const { data } = await supabase.from('employees').select('*').or(`first_name.ilike.%${name}%,last_name.ilike.%${name}%`).limit(5)
+      if (data?.length) return { text: `Found:\n${data.map(e => `• ${e.first_name} ${e.last_name} - ${e.department || 'N/A'}`).join('\n')}`, action: { label: 'View Employees', navigate: '/hr/employees' } }
+      return { text: `No one found matching "${name}".` }
+    } catch { return { text: `Search failed. Try again.` } }
+  },
+
+  explainModule(q) {
+    if (this.hasWord(q, ['payroll', 'salary'])) return { text: `Payroll processes employee salaries, calculates tax (PAYE), UIF, deductions, and generates payslips. It connects to HR for employee data and Finance for reporting.` }
+    if (this.hasWord(q, ['crm', 'client'])) return { text: `CRM manages your client portfolio - companies, contacts, service agreements, sales pipeline, and client communications.` }
+    if (this.hasWord(q, ['inventory', 'stock'])) return { text: `Inventory tracks all stock items across warehouses, manages stock levels, reorder points, and connects to Procurement for purchasing.` }
+    if (this.hasWord(q, ['procurement'])) return { text: `Procurement handles purchase requests, purchase orders, RFQs, vendor management, and goods receipts.` }
+    if (this.hasWord(q, ['incident', 'accident'])) return { text: `Incident Management handles workplace incidents from reporting through investigation, root cause analysis, corrective actions, and approvals.` }
+    return { text: `Which module would you like explained? HR, Payroll, CRM, Sales, Operations, Inventory, Procurement, Incidents, Fleet?` }
+  }
+}
