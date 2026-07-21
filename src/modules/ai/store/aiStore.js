@@ -5,7 +5,6 @@ import { khumoEngine } from '../engine/khumoEngine'
 const useAIStore = create((set, get) => ({
   isOpen: false,
   messages: [],
-  sessionId: null,
   loading: false,
   quickPrompts: [],
   context: {},
@@ -13,33 +12,25 @@ const useAIStore = create((set, get) => ({
   toggleChat: () => set(state => ({ isOpen: !state.isOpen })),
 
   initSession: async (userId, userContext) => {
-    const sessionId = `khumo-${userId}-${Date.now()}`
-    set({ sessionId, context: userContext || {} })
-
+    set({ context: userContext || {} })
     try {
       const { data: prompts } = await supabase.from('ai_quick_prompts').select('*').eq('is_active', true).order('sort_order')
       set({ quickPrompts: prompts || [] })
-
-      const welcome = khumoEngine.greet(userContext?.userName, userContext?.role)
+      const hour = new Date().getHours()
+      const g = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
       set({
         messages: [{
           id: 'welcome',
           role: 'assistant',
-          message: welcome?.text || 'Hello! How can I help you?',
-          action: welcome?.action || null,
+          message: `${g}! I'm Khumo, your ERP assistant. How can I help?`,
+          action: null,
           created_at: new Date().toISOString()
         }]
       })
     } catch (err) {
-      console.error('Khumo init error:', err)
+      console.error('Init error:', err)
       set({
-        messages: [{
-          id: 'welcome',
-          role: 'assistant',
-          message: 'Hello! How can I help you with the ERP?',
-          action: null,
-          created_at: new Date().toISOString()
-        }]
+        messages: [{ id: 'welcome', role: 'assistant', message: 'Hello! How can I help?', action: null, created_at: new Date().toISOString() }]
       })
     }
   },
@@ -53,22 +44,21 @@ const useAIStore = create((set, get) => ({
 
     try {
       const response = await khumoEngine.processQuery(message, context)
-      
       const aiMsg = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        message: response?.text || 'I received your message. How can I help?',
+        message: response?.text || 'How can I help?',
         action: response?.action || null,
         created_at: new Date().toISOString()
       }
       set(state => ({ messages: [...state.messages, aiMsg], loading: false }))
     } catch (err) {
-      console.error('Khumo response error:', err)
+      console.error('Send error:', err)
       set(state => ({
         messages: [...state.messages, {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          message: 'Sorry, I encountered an error. Please try again.',
+          message: 'Sorry, something went wrong. Please try again.',
           action: null,
           created_at: new Date().toISOString()
         }],
@@ -77,22 +67,8 @@ const useAIStore = create((set, get) => ({
     }
   },
 
-  sendQuickPrompt: async (promptText) => {
-    await get().sendMessage(promptText)
-  },
-
-  clearChat: () => {
-    set({
-      messages: [{
-        id: 'welcome',
-        role: 'assistant',
-        message: 'Chat cleared. How can I help?',
-        action: null,
-        created_at: new Date().toISOString()
-      }]
-    })
-  },
-
+  sendQuickPrompt: async (text) => { await get().sendMessage(text) },
+  clearChat: () => set({ messages: [{ id: 'welcome', role: 'assistant', message: 'Chat cleared. How can I help?', action: null, created_at: new Date().toISOString() }] }),
   updateContext: (ctx) => set({ context: { ...get().context, ...ctx } }),
 }))
 
