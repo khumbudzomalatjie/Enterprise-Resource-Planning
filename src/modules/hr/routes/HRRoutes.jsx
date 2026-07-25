@@ -7,9 +7,16 @@ import EmployeeDetail from '../pages/EmployeeDetail'
 import CreateEmployee from '../pages/CreateEmployee'
 import LeaveManagement from '../pages/LeaveManagement'
 import AttendanceDashboard from '../attendance/pages/AttendanceDashboard'
+import Timesheets from '../attendance/pages/Timesheets'
+import ShiftManagement from '../attendance/pages/ShiftManagement'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function HRRoutes() {
+  const hrRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER]
+  const hrOpsRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER]
+  const attendanceRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]
+  const allStaffRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.CLEANER]
+
   return (
     <Routes>
       {/* ============================================ */}
@@ -19,11 +26,7 @@ export default function HRRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrOpsRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -33,46 +36,31 @@ export default function HRRoutes() {
       {/* ============================================ */}
       {/* EMPLOYEE MANAGEMENT                          */}
       {/* ============================================ */}
-      
-      {/* Employee List */}
       <Route
         path="/employees"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <EmployeeList />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
-
-      {/* Add New Employee */}
       <Route
         path="/employees/new"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <CreateEmployee />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
-
-      {/* Employee Detail/View/Edit */}
       <Route
         path="/employees/:id"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <EmployeeDetail />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -80,97 +68,73 @@ export default function HRRoutes() {
       />
 
       {/* ============================================ */}
-      {/* ATTENDANCE TRACKING (Sub-module under HR)    */}
+      {/* ATTENDANCE TRACKING                          */}
       {/* ============================================ */}
       <Route
         path="/attendance"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER, 
-              USER_ROLES.SUPERVISOR,
-              USER_ROLES.CLEANER
-            ]}>
+            <RoleBasedRoute requiredRoles={allStaffRoles}>
               <AttendanceDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
 
-      <Route
-        path="/attendance/records"
-        element={
-          <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER, 
-              USER_ROLES.SUPERVISOR
-            ]}>
-              <AttendanceDashboard />
-            </RoleBasedRoute>
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/attendance/qr"
-        element={
-          <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.SUPERVISOR
-            ]}>
-              <AttendanceDashboard />
-            </RoleBasedRoute>
-          </ProtectedRoute>
-        }
-      />
-
+      {/* ✅ TIMESHEETS - Connected to real Timesheets page */}
       <Route
         path="/attendance/timesheets"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER, 
-              USER_ROLES.SUPERVISOR
-            ]}>
-              <AttendanceDashboard />
+            <RoleBasedRoute requiredRoles={attendanceRoles}>
+              <Timesheets />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
 
+      {/* ✅ SHIFTS - Connected to real Shift Management page */}
       <Route
         path="/attendance/shifts"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER, 
-              USER_ROLES.SUPERVISOR
-            ]}>
+            <RoleBasedRoute requiredRoles={attendanceRoles}>
+              <ShiftManagement />
+            </RoleBasedRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Reports */}
+      <Route
+        path="/attendance/reports"
+        element={
+          <ProtectedRoute>
+            <RoleBasedRoute requiredRoles={hrOpsRoles}>
               <AttendanceDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
 
+      {/* QR Code */}
       <Route
-        path="/attendance/reports"
+        path="/attendance/qr"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={[USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.SUPERVISOR]}>
+              <AttendanceDashboard />
+            </RoleBasedRoute>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Records */}
+      <Route
+        path="/attendance/records"
+        element={
+          <ProtectedRoute>
+            <RoleBasedRoute requiredRoles={attendanceRoles}>
               <AttendanceDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -184,30 +148,17 @@ export default function HRRoutes() {
         path="/leave"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER,
-              USER_ROLES.SUPERVISOR,
-              USER_ROLES.CLEANER
-            ]}>
+            <RoleBasedRoute requiredRoles={allStaffRoles}>
               <LeaveManagement />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/leave/new"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER, 
-              USER_ROLES.OPERATIONS_MANAGER,
-              USER_ROLES.SUPERVISOR,
-              USER_ROLES.CLEANER
-            ]}>
+            <RoleBasedRoute requiredRoles={allStaffRoles}>
               <LeaveManagement />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -221,24 +172,17 @@ export default function HRRoutes() {
         path="/contracts"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/contracts/new"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -252,24 +196,17 @@ export default function HRRoutes() {
         path="/training"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/training/new"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -283,10 +220,7 @@ export default function HRRoutes() {
         path="/disciplinary"
         element={
           <ProtectedRoute>
-            <RoleBasedRoute requiredRoles={[
-              USER_ROLES.SUPER_ADMIN, 
-              USER_ROLES.HR_MANAGER
-            ]}>
+            <RoleBasedRoute requiredRoles={hrRoles}>
               <HRDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
@@ -296,18 +230,8 @@ export default function HRRoutes() {
       {/* ============================================ */}
       {/* REDIRECTS                                    */}
       {/* ============================================ */}
-      
-      {/* Redirect to Operations Module */}
-      <Route
-        path="/jobs"
-        element={<Navigate to="/operations" replace />}
-      />
-
-      {/* Catch-all redirect for HR */}
-      <Route
-        path="*"
-        element={<Navigate to="/hr" replace />}
-      />
+      <Route path="/jobs" element={<Navigate to="/operations" replace />} />
+      <Route path="*" element={<Navigate to="/hr" replace />} />
     </Routes>
   )
 }
