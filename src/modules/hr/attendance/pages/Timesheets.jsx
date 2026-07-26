@@ -104,6 +104,8 @@ export default function Timesheets() {
         attendanceRate: total > 0 ? Math.round((present / total) * 100) : 0,
         avgHours: present > 0 ? (hours / present).toFixed(1) : 0
       })
+    } else {
+      setEmployeeStats(null)
     }
 
     setLoadingEmployee(false)
@@ -123,7 +125,7 @@ export default function Timesheets() {
 
   const downloadCSV = () => {
     if (!employeeData || employeeAttendance.length === 0) {
-      toast.error('No data to download')
+      toast.error('No data to download. Search for an employee first.')
       return
     }
 
@@ -132,14 +134,10 @@ export default function Timesheets() {
     const stats = employeeStats
 
     let csv = ''
-    
-    // Company Header
     csv += 'NDANDULENI GROUP\n'
     csv += 'Employee Timesheet Report\n'
     csv += `Generated: ${new Date().toLocaleString('en-ZA')}\n`
     csv += '\n'
-    
-    // Employee Information
     csv += 'EMPLOYEE INFORMATION\n'
     csv += `Name,${emp.first_name} ${emp.last_name || ''}\n`
     csv += `Employee Code,${emp.employee_code || 'N/A'}\n`
@@ -147,11 +145,9 @@ export default function Timesheets() {
     csv += `Position,${emp.position || 'N/A'}\n`
     csv += `Email,${emp.email || 'N/A'}\n`
     csv += `Phone,${emp.phone || 'N/A'}\n`
-    csv += `Hire Date,${emp.date_of_hire ? formatDateCSV(emp.date_of_hire) : 'N/A'}\n`
+    csv += `Hire Date,${emp.date_of_hire ? new Date(emp.date_of_hire).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}\n`
     csv += `Status,${emp.employment_status || 'N/A'}\n`
     csv += '\n'
-    
-    // Summary Stats
     csv += 'ATTENDANCE SUMMARY\n'
     csv += `Total Records,${stats?.total || 0}\n`
     csv += `Present Days,${stats?.present || 0}\n`
@@ -161,8 +157,6 @@ export default function Timesheets() {
     csv += `Overtime Hours,${stats?.overtimeHours || 0}h\n`
     csv += `Attendance Rate,${stats?.attendanceRate || 0}%\n`
     csv += '\n'
-    
-    // Attendance Records
     csv += 'ATTENDANCE HISTORY\n'
     csv += 'Date,Day,Clock In,Clock Out,Total Hours,Status,Late,Method,GPS Location,Notes\n'
     attendance.forEach(r => {
@@ -179,13 +173,9 @@ export default function Timesheets() {
         (r.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
       ].join(',') + '\n'
     })
-    
     csv += '\n'
-    
-    // Monthly Breakdown
     csv += 'MONTHLY BREAKDOWN\n'
     csv += 'Month,Total Days,Present,Absent,Late,Total Hours\n'
-    
     const monthlyData = {}
     attendance.forEach(r => {
       if (r.attendance_date) {
@@ -198,12 +188,10 @@ export default function Timesheets() {
         monthlyData[month].hours += (r.total_hours || 0)
       }
     })
-    
     Object.entries(monthlyData).sort().forEach(([month, data]) => {
       const monthName = new Date(month + '-01').toLocaleDateString('en-ZA', { year: 'numeric', month: 'long' })
       csv += `${monthName},${data.total},${data.present},${data.absent},${data.late},${data.hours.toFixed(1)}\n`
     })
-    
     csv += '\n'
     csv += '--- End of Report ---\n'
     csv += 'Ndanduleni Group ERP System\n'
@@ -223,7 +211,6 @@ export default function Timesheets() {
 
   const formatTime = (d) => d ? new Date(d).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '-'
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '-'
-  const formatDateCSV = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'
 
   const statCards = [
     { icon: Clock, label: 'Hours Today', value: `${timesheetStats.totalHoursToday || 0}h`, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
@@ -257,11 +244,18 @@ export default function Timesheets() {
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3"><Clock className="w-8 h-8 text-emerald-600" />Timesheets</h1>
             <p className="text-slate-500 mt-1">Search an employee to view and download their attendance</p>
           </div>
-          {showEmployeeDetail && employeeData && (
-            <button onClick={downloadCSV} className="neu-raised neu-btn px-5 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 font-semibold">
-              <Download className="w-5 h-5" /> Download Report
-            </button>
-          )}
+          <button 
+            onClick={downloadCSV} 
+            disabled={!employeeData || employeeAttendance.length === 0}
+            className={`neu-raised neu-btn px-5 py-3 rounded-2xl flex items-center gap-2 font-semibold transition-all ${
+              employeeData && employeeAttendance.length > 0 
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                : 'bg-slate-300 dark:bg-slate-600 text-slate-500 cursor-not-allowed'
+            }`}
+            title={!employeeData ? 'Search for an employee first' : 'Download report'}
+          >
+            <Download className="w-5 h-5" /> Download Report
+          </button>
         </motion.div>
 
         {/* Stats */}
@@ -302,7 +296,6 @@ export default function Timesheets() {
                 </div>
               ) : employeeData ? (
                 <>
-                  {/* Profile Card */}
                   <div className="neu-raised rounded-3xl p-6 border-l-4 border-emerald-500">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-4">
@@ -330,7 +323,6 @@ export default function Timesheets() {
                     </div>
                   </div>
 
-                  {/* Stats Row */}
                   {employeeStats && (
                     <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
                       {[
@@ -350,7 +342,6 @@ export default function Timesheets() {
                     </div>
                   )}
 
-                  {/* Attendance History */}
                   <div className="neu-raised rounded-3xl overflow-hidden">
                     <h3 className="text-lg font-semibold p-4 pb-0 text-slate-800 dark:text-white">Attendance History ({employeeAttendance.length})</h3>
                     <div className="overflow-x-auto p-4">
@@ -383,7 +374,6 @@ export default function Timesheets() {
                     </div>
                   </div>
 
-                  {/* Shifts */}
                   {employeeShifts.length > 0 && (
                     <div className="neu-raised rounded-3xl p-4">
                       <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-white">Active Shifts ({employeeShifts.length})</h3>
