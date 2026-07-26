@@ -9,6 +9,7 @@ import LeaveManagement from '../pages/LeaveManagement'
 import AttendanceDashboard from '../attendance/pages/AttendanceDashboard'
 import Timesheets from '../attendance/pages/Timesheets'
 import ShiftManagement from '../attendance/pages/ShiftManagement'
+import AttendanceReports from '../attendance/pages/AttendanceReports'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function HRRoutes() {
@@ -81,7 +82,7 @@ export default function HRRoutes() {
         }
       />
 
-      {/* ✅ TIMESHEETS - Connected to real Timesheets page */}
+      {/* Timesheets */}
       <Route
         path="/attendance/timesheets"
         element={
@@ -93,7 +94,7 @@ export default function HRRoutes() {
         }
       />
 
-      {/* ✅ SHIFTS - Connected to real Shift Management page */}
+      {/* Shifts */}
       <Route
         path="/attendance/shifts"
         element={
@@ -105,13 +106,13 @@ export default function HRRoutes() {
         }
       />
 
-      {/* Reports */}
+      {/* ✅ Reports - Now connected to AttendanceReports page */}
       <Route
         path="/attendance/reports"
         element={
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={hrOpsRoles}>
-              <AttendanceDashboard />
+              <AttendanceReports />
             </RoleBasedRoute>
           </ProtectedRoute>
         }
