@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 const useAttendanceStore = create((set, get) => ({
   attendanceRecords: [],
   todayAttendance: null,
+  stats: {},
   timesheetStats: {},
   shiftTemplates: [],
   shiftAssignments: [],
@@ -13,7 +14,46 @@ const useAttendanceStore = create((set, get) => ({
   loading: false,
   error: null,
 
-  // Attendance
+  // ============================================
+  // ATTENDANCE STATS - Missing function added
+  // ============================================
+  fetchAttendanceStats: async () => {
+    set({ loading: true })
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { data: records } = await attendanceApi.getTodayAttendance()
+      
+      const totalEmployees = records?.length || 0
+      const presentToday = records?.filter(r => r.status === 'present').length || 0
+      const absentToday = records?.filter(r => r.status === 'absent').length || 0
+      const lateToday = records?.filter(r => r.is_late).length || 0
+      const onLeave = records?.filter(r => r.status === 'on_leave').length || 0
+      const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0
+      const recentAttendance = records?.slice(0, 10) || []
+
+      set({ 
+        stats: {
+          totalEmployees,
+          presentToday,
+          absentToday,
+          lateToday,
+          onLeave,
+          attendanceRate,
+          recentAttendance
+        },
+        loading: false
+      })
+      return get().stats
+    } catch (err) {
+      set({ 
+        stats: { totalEmployees: 0, presentToday: 0, absentToday: 0, lateToday: 0, onLeave: 0, attendanceRate: 0, recentAttendance: [] },
+        loading: false 
+      })
+      return get().stats
+    }
+  },
+
+  // Attendance Records
   fetchAttendanceRecords: async (filters = {}) => {
     set({ loading: true, error: null })
     const { data, error } = await attendanceApi.getAttendanceRecords(filters)
@@ -34,6 +74,7 @@ const useAttendanceStore = create((set, get) => ({
     if (error) return { success: false, error: error.message }
     toast.success('Clocked in successfully!')
     await get().fetchTodayAttendance()
+    await get().fetchAttendanceStats()
     return { success: true, data }
   },
 
@@ -42,6 +83,7 @@ const useAttendanceStore = create((set, get) => ({
     if (error) return { success: false, error: error.message }
     toast.success('Clocked out successfully!')
     await get().fetchTodayAttendance()
+    await get().fetchAttendanceStats()
     return { success: true, data }
   },
 
