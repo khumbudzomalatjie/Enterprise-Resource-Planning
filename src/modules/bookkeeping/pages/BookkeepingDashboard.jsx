@@ -8,7 +8,8 @@ import {
   DollarSign, TrendingUp, TrendingDown, CreditCard, 
   Banknote, FileText, Receipt, Upload, Download,
   Sun, Moon, Sparkles, ChevronRight, ArrowLeft,
-  Plus, BarChart3, PieChart, Target, Clock, CheckCircle2
+  Plus, BarChart3, PieChart, Target, Clock, CheckCircle2,
+  BookOpen, Calculator, Building2
 } from 'lucide-react'
 
 export default function BookkeepingDashboard() {
@@ -47,26 +48,27 @@ export default function BookkeepingDashboard() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        <Link to="/dashboard" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
-          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Dashboard</span>
+        {/* Breadcrumb - Back to Finance */}
+        <Link to="/finance" className="inline-flex items-center text-slate-600 dark:text-slate-400 hover:text-emerald-600 mb-6">
+          <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Finance</span>
         </Link>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <DollarSign className="w-8 h-8 text-emerald-600" />
+              <BookOpen className="w-8 h-8 text-blue-600" />
               <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Bookkeeping</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Financial management, transactions, banking & reports</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Financial transactions, chart of accounts, banking, VAT & reports</p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <button onClick={() => navigate('/bookkeeping/income/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
+            <button onClick={() => navigate('/finance/bookkeeping/income/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
               <Plus className="w-5 h-5" /><span>New Income</span>
             </button>
-            <button onClick={() => navigate('/bookkeeping/expenses/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2">
+            <button onClick={() => navigate('/finance/bookkeeping/expense/new')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2">
               <Plus className="w-5 h-5" /><span>New Expense</span>
             </button>
-            <button onClick={() => navigate('/bookkeeping/import')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
+            <button onClick={() => navigate('/finance/bookkeeping/import')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
               <Upload className="w-5 h-5" /><span>Import Excel</span>
             </button>
           </div>
@@ -86,17 +88,17 @@ export default function BookkeepingDashboard() {
         </div>
 
         {/* Quick Navigation */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {[
-            { label: 'Transactions', icon: FileText, path: '/bookkeeping/transactions' },
-            { label: 'Chart of Accounts', icon: PieChart, path: '/bookkeeping/chart-of-accounts' },
-            { label: 'Banking', icon: Banknote, path: '/bookkeeping/banking' },
-            { label: 'Journal', icon: FileText, path: '/bookkeeping/journal' },
-            { label: 'VAT', icon: Receipt, path: '/bookkeeping/vat' },
-            { label: 'Reports', icon: BarChart3, path: '/bookkeeping/reports' },
+            { label: 'Transactions', icon: FileText, path: '/finance/bookkeeping/transactions' },
+            { label: 'Chart of Accounts', icon: PieChart, path: '/finance/bookkeeping/chart-of-accounts' },
+            { label: 'Banking', icon: Banknote, path: '/finance/bookkeeping/banking' },
+            { label: 'Cashbook', icon: Calculator, path: '/finance/bookkeeping/cashbook' },
+            { label: 'Journal', icon: FileText, path: '/finance/bookkeeping/journal' },
+            { label: 'VAT', icon: Receipt, path: '/finance/bookkeeping/vat' },
           ].map(item => (
             <button key={item.label} onClick={() => navigate(item.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105">
-              <item.icon className="w-6 h-6 text-emerald-600" />
+              <item.icon className="w-6 h-6 text-blue-600" />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
             </button>
           ))}
@@ -106,9 +108,9 @@ export default function BookkeepingDashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="neu-raised rounded-3xl p-6">
           <div className="flex justify-between mb-4">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-600" />Recent Transactions
+              <Clock className="w-5 h-5 text-blue-600" />Recent Transactions
             </h2>
-            <Link to="/bookkeeping/transactions" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
+            <Link to="/finance/bookkeeping/transactions" className="text-sm text-emerald-600 flex items-center gap-1">View All <ChevronRight className="w-4 h-4" /></Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -124,7 +126,7 @@ export default function BookkeepingDashboard() {
               </thead>
               <tbody>
                 {(stats.recentTransactions || []).map(tx => (
-                  <tr key={tx.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer" onClick={() => navigate(`/bookkeeping/transactions/${tx.id}`)}>
+                  <tr key={tx.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer" onClick={() => navigate(`/finance/bookkeeping/transactions/${tx.id}`)}>
                     <td className="py-3 px-3 font-medium">{tx.transaction_number}</td>
                     <td className="py-3 px-3 text-xs">{new Date(tx.transaction_date).toLocaleDateString()}</td>
                     <td className="py-3 px-3">{tx.description?.substring(0, 40)}</td>
