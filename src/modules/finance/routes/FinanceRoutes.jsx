@@ -8,6 +8,7 @@ import AccountsPayable from '../pages/AccountsPayable'
 import AccountsReceivable from '../pages/AccountsReceivable'
 import BudgetManagement from '../pages/BudgetManagement'
 import GeneralLedger from '../pages/GeneralLedger'
+import BookkeepingDashboard from '../../bookkeeping/pages/BookkeepingDashboard'
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function FinanceRoutes() {
@@ -28,6 +29,20 @@ export default function FinanceRoutes() {
           <ProtectedRoute>
             <RoleBasedRoute requiredRoles={allowedRoles}>
               <FinanceDashboard />
+            </RoleBasedRoute>
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* ============================================ */}
+      {/* BOOKKEEPING - Full Bookkeeping Module        */}
+      {/* ============================================ */}
+      <Route 
+        path="/bookkeeping" 
+        element={
+          <ProtectedRoute>
+            <RoleBasedRoute requiredRoles={allowedRoles}>
+              <BookkeepingDashboard />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
