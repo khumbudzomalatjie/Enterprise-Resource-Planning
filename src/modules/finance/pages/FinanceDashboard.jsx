@@ -9,7 +9,8 @@ import {
   AlertCircle, FileText, 
   Sparkles, Sun, Moon, ArrowLeft,
   ShoppingCart, Receipt, BarChart3,
-  Briefcase, Building2, CheckCircle2, FileText as FileInvoice, ChevronRight
+  Briefcase, Building2, CheckCircle2, FileText as FileInvoice, ChevronRight,
+  BookOpen
 } from 'lucide-react'
 
 export default function FinanceDashboard() {
@@ -57,7 +58,7 @@ export default function FinanceDashboard() {
             <Landmark className="w-8 h-8 text-emerald-600" />
             <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-white">Finance & Accounting</h1>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 ml-11">Budgets, ledger, payables, receivables, vendor management & invoice generation</p>
+          <p className="text-slate-500 dark:text-slate-400 ml-11">Bookkeeping, budgets, ledger, payables, receivables, vendor management & invoice generation</p>
         </motion.div>
 
         {/* Stats */}
@@ -70,6 +71,25 @@ export default function FinanceDashboard() {
             </motion.div>
           ))}
         </div>
+
+        {/* Bookkeeping Card - NEW */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="neu-raised rounded-3xl p-6 mb-8 border-l-4 border-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent dark:from-blue-900/10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <BookOpen className="w-8 h-8 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Bookkeeping</h2>
+                <p className="text-sm text-slate-500 mt-1">Transactions, chart of accounts, banking, VAT, journals & financial reports</p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/finance/bookkeeping')} 
+              className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap">
+              <BookOpen className="w-5 h-5" /><span>Open Bookkeeping</span>
+            </button>
+          </div>
+        </motion.div>
 
         {/* Completed Jobs Ready for Invoicing */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="neu-raised rounded-3xl p-6 mb-8 border-l-4 border-emerald-500">
@@ -118,6 +138,7 @@ export default function FinanceDashboard() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
+              { label: 'Bookkeeping', icon: BookOpen, path: '/finance/bookkeeping', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
               { label: 'Jobs → Invoice', icon: Briefcase, path: '/finance/jobs', color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
               { label: 'Vendor Approvals', icon: Building2, path: '/finance/approvals', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
               { label: 'Payables', icon: TrendingDown, path: '/finance/payables', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
@@ -125,7 +146,6 @@ export default function FinanceDashboard() {
               { label: 'Budgets', icon: DollarSign, path: '/finance/budgets', color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
               { label: 'Ledger', icon: FileText, path: '/finance/ledger', color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
               { label: 'Payments', icon: Receipt, path: '/finance/payments', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
-              { label: 'Procurement', icon: ShoppingCart, path: '/procurement', color: 'text-teal-600', bg: 'bg-teal-100 dark:bg-teal-900/30' },
             ].map(action => (
               <button key={action.label} onClick={() => navigate(action.path)} 
                 className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform">
