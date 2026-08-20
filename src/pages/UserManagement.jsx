@@ -10,7 +10,7 @@ import { USER_ROLES, ROLE_LABELS } from '../types/authTypes'
 import { 
   Users, Search, Edit, Trash2, Shield, ChevronDown, 
   Plus, Mail, Phone, Calendar, X, Check, Sun, Moon, 
-  Sparkles, Eye, EyeOff, Key, AlertCircle
+  Sparkles, Eye, EyeOff, Key, AlertCircle, RefreshCw
 } from 'lucide-react'
 
 export default function UserManagement() {
@@ -30,19 +30,33 @@ export default function UserManagement() {
     loadUsers()
   }, [])
 
+  // ============================================
+  // LOAD USERS FROM SUPABASE
+  // ============================================
   const loadUsers = async () => {
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, full_name, role, is_active, created_at, phone')
         .order('created_at', { ascending: false })
+        .limit(200)
 
-      if (error) throw error
-      setUsers(data || [])
-      console.log(`📊 Loaded ${data?.length || 0} users`)
+      if (error) {
+        console.error('Load error:', error)
+        toast.error(`Failed to load users: ${error.message}`)
+        return
+      }
+
+      const usersData = (data || []).map(u => ({
+        ...u,
+        is_active: u.is_active !== undefined ? u.is_active : true
+      }))
+
+      setUsers(usersData)
+      console.log(`📊 Loaded ${usersData.length} users`)
     } catch (err) {
-      console.error('Failed to load users:', err)
+      console.error('Exception:', err)
       toast.error('Failed to load users')
     } finally {
       setLoading(false)
@@ -50,7 +64,7 @@ export default function UserManagement() {
   }
 
   // ============================================
-  // ✅ FIXED: Actually saves role to Supabase
+  // ✅ FIXED: Update role - No .single(), no .select()
   // ============================================
   const handleUpdateRole = async () => {
     if (!editingUser || !editRole) {
@@ -60,17 +74,16 @@ export default function UserManagement() {
 
     setSavingRole(true)
     try {
-      console.log(`🔄 Updating role for ${editingUser.email} to ${editRole}`)
+      console.log(`🔄 Updating role for ${editingUser.email} → ${editRole}`)
+      console.log('User ID:', editingUser.id)
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ 
           role: editRole,
           updated_at: new Date().toISOString() 
         })
         .eq('id', editingUser.id)
-        .select()
-        .single()
 
       if (error) {
         console.error('Update error:', error)
@@ -78,17 +91,16 @@ export default function UserManagement() {
         return
       }
 
-      console.log('✅ Role updated successfully:', data)
-      
-      // Update local state
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, role: editRole } : u))
-      
+      console.log('✅ Role updated successfully')
+
+      // Update local state immediately
+      setUsers(prev => prev.map(u => 
+        u.id === editingUser.id ? { ...u, role: editRole } : u
+      ))
+
       toast.success(`Role updated to ${ROLE_LABELS[editRole] || editRole}!`)
       setEditingUser(null)
       setEditRole('')
-      
-      // Reload to confirm
-      await loadUsers()
     } catch (err) {
       console.error('Exception:', err)
       toast.error('Failed to update role')
@@ -97,9 +109,17 @@ export default function UserManagement() {
     }
   }
 
+  // ============================================
+  // ADD NEW USER
+  // ============================================
   const handleAddUser = async () => {
     if (!newUser.email || !newUser.password) {
       toast.error('Email and password are required')
+      return
+    }
+
+    if (newUser.password.length < 6) {
+      toast.error('Password must be at least 6 characters')
       return
     }
 
@@ -113,29 +133,56 @@ export default function UserManagement() {
       })
 
       if (authError) {
+        console.error('Auth error:', authError)
         toast.error(`Failed to create user: ${authError.message}`)
         return
       }
 
+      console.log('✅ Auth user created:', authData?.user?.id)
+
       // Update profile with role
-      if (authData?.user) {
-        await supabase.from('profiles').update({ 
-          role: newUser.role, 
-          full_name: newUser.full_name 
-        }).eq('id', authData.user.id)
+      if (authData?.user?.id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ 
+            role: newUser.role, 
+            full_name: newUser.full_name,
+            is_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', authData.user.id)
+
+        if (profileError) {
+          console.error('Profile update error:', profileError)
+          // Try insert if update fails
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert([{
+              id: authData.user.id,
+              email: newUser.email,
+              full_name: newUser.full_name,
+              role: newUser.role,
+              is_active: true
+            }])
+          if (insertError) console.error('Insert error:', insertError)
+        }
       }
 
-      toast.success('User created!')
+      toast.success('User created successfully!')
       setShowAddModal(false)
       setNewUser({ email: '', password: '', full_name: '', role: 'cleaner' })
-      loadUsers()
+      await loadUsers()
     } catch (err) {
+      console.error('Exception:', err)
       toast.error('Failed to create user')
     }
   }
 
-  const handleDeactivate = async (userId) => {
-    if (!window.confirm('Deactivate this user? They will no longer be able to log in.')) return
+  // ============================================
+  // DEACTIVATE USER
+  // ============================================
+  const handleDeactivate = async (userId, userName) => {
+    if (!window.confirm(`Deactivate ${userName}? They will no longer be able to log in.`)) return
     
     try {
       const { error } = await supabase
@@ -143,29 +190,45 @@ export default function UserManagement() {
         .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('id', userId)
 
-      if (error) throw error
+      if (error) {
+        console.error('Deactivate error:', error)
+        toast.error(`Failed: ${error.message}`)
+        return
+      }
+
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: false } : u))
       toast.success('User deactivated')
-      loadUsers()
     } catch (err) {
       toast.error('Failed to deactivate')
     }
   }
 
-  const handleReactivate = async (userId) => {
+  // ============================================
+  // REACTIVATE USER
+  // ============================================
+  const handleReactivate = async (userId, userName) => {
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ is_active: true, updated_at: new Date().toISOString() })
         .eq('id', userId)
 
-      if (error) throw error
-      toast.success('User reactivated')
-      loadUsers()
+      if (error) {
+        console.error('Reactivate error:', error)
+        toast.error(`Failed: ${error.message}`)
+        return
+      }
+
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: true } : u))
+      toast.success(`${userName} reactivated`)
     } catch (err) {
       toast.error('Failed to reactivate')
     }
   }
 
+  // ============================================
+  // FILTERED USERS
+  // ============================================
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -173,6 +236,9 @@ export default function UserManagement() {
     return matchesSearch && matchesRole
   })
 
+  // ============================================
+  // STYLING HELPERS
+  // ============================================
   const getRoleBadge = (role) => {
     const colors = {
       super_admin: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -184,12 +250,14 @@ export default function UserManagement() {
       sales_agent: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
       customer: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
     }
-    return colors[role] || 'bg-slate-100 text-slate-600'
+    return colors[role] || 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
   }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
+      
+      {/* Top Bar */}
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -213,31 +281,34 @@ export default function UserManagement() {
             <button onClick={() => setShowAddModal(true)} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
               <Plus className="w-5 h-5" /><span>Add User</span>
             </button>
-            <button onClick={loadUsers} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700">
-              Refresh
+            <button onClick={loadUsers} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" /><span>Refresh</span>
             </button>
           </div>
         </motion.div>
 
         {/* Filters */}
-        <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search by name or email..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
           </div>
-          <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="px-4 py-3 neu-inset rounded-xl">
+          <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
             <option value="all">All Roles</option>
             {Object.entries(ROLE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-        </div>
+        </motion.div>
 
-        {/* Users List */}
+        {/* Users Table */}
         {loading ? (
-          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+            <p className="text-slate-500">Loading users...</p>
+          </div>
         ) : (
-          <div className="neu-raised rounded-3xl overflow-hidden">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -251,12 +322,12 @@ export default function UserManagement() {
                 </thead>
                 <tbody>
                   {filteredUsers.map(user => (
-                    <tr key={user.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <tr key={user.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                             <span className="text-emerald-600 font-semibold text-sm">
-                              {user.full_name?.[0] || user.email?.[0]?.toUpperCase()}
+                              {user.full_name?.[0] || user.email?.[0]?.toUpperCase() || '?'}
                             </span>
                           </div>
                           <div>
@@ -265,24 +336,42 @@ export default function UserManagement() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm text-slate-600">{user.email}</td>
+                      <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">{user.email}</td>
                       <td className="py-3 px-4">
                         {editingUser?.id === user.id ? (
                           <div className="flex items-center gap-2">
-                            <select value={editRole} onChange={e => setEditRole(e.target.value)} className="p-2 neu-inset rounded-lg text-sm">
+                            <select 
+                              value={editRole} 
+                              onChange={e => setEditRole(e.target.value)} 
+                              className="p-2 neu-inset rounded-lg text-sm text-slate-700 dark:text-slate-300"
+                              autoFocus
+                            >
                               {Object.entries(ROLE_LABELS).map(([value, label]) => (
                                 <option key={value} value={value}>{label}</option>
                               ))}
                             </select>
-                            <button onClick={handleUpdateRole} disabled={savingRole} className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
-                              <Check className="w-4 h-4" />
+                            <button 
+                              onClick={handleUpdateRole} 
+                              disabled={savingRole} 
+                              className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
+                              title="Save"
+                            >
+                              {savingRole ? (
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
                             </button>
-                            <button onClick={() => { setEditingUser(null); setEditRole('') }} className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">
+                            <button 
+                              onClick={() => { setEditingUser(null); setEditRole('') }} 
+                              className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+                              title="Cancel"
+                            >
                               <X className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
-                          <span className={`px-2 py-1 rounded-full text-xs ${getRoleBadge(user.role)}`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleBadge(user.role)}`}>
                             {ROLE_LABELS[user.role] || user.role || 'No Role'}
                           </span>
                         )}
@@ -296,16 +385,28 @@ export default function UserManagement() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {editingUser?.id !== user.id && (
-                            <button onClick={() => { setEditingUser(user); setEditRole(user.role || 'cleaner') }} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Role">
+                            <button 
+                              onClick={() => { setEditingUser(user); setEditRole(user.role || 'cleaner') }} 
+                              className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" 
+                              title="Edit Role"
+                            >
                               <Edit className="w-4 h-4" />
                             </button>
                           )}
                           {user.is_active !== false ? (
-                            <button onClick={() => handleDeactivate(user.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Deactivate">
+                            <button 
+                              onClick={() => handleDeactivate(user.id, user.full_name || user.email)} 
+                              className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors" 
+                              title="Deactivate"
+                            >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           ) : (
-                            <button onClick={() => handleReactivate(user.id)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Reactivate">
+                            <button 
+                              onClick={() => handleReactivate(user.id, user.full_name || user.email)} 
+                              className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" 
+                              title="Reactivate"
+                            >
                               <Check className="w-4 h-4" />
                             </button>
                           )}
@@ -316,35 +417,96 @@ export default function UserManagement() {
                 </tbody>
               </table>
             </div>
+            
             {filteredUsers.length === 0 && (
               <div className="text-center py-12">
-                <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <Users className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
                 <p className="text-slate-500 text-lg">No users found</p>
+                <p className="text-slate-400 text-sm">Try adjusting search or filters</p>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
       </main>
 
       {/* Add User Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Add New User</h3>
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" 
+            onClick={() => setShowAddModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} 
+              className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" 
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-600" />Add New User
+              </h3>
+              
               <div className="space-y-3">
-                <input type="text" value={newUser.full_name} onChange={e => setNewUser({...newUser, full_name: e.target.value})} placeholder="Full Name" className="w-full p-3 neu-inset rounded-xl" />
-                <input type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} placeholder="Email" className="w-full p-3 neu-inset rounded-xl" />
-                <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} placeholder="Password" className="w-full p-3 neu-inset rounded-xl" />
-                <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="text-sm text-slate-500 mb-1 block">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={newUser.full_name} 
+                    onChange={e => setNewUser({...newUser, full_name: e.target.value})} 
+                    placeholder="John Doe" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" 
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm text-slate-500 mb-1 block">Email</label>
+                  <input 
+                    type="email" 
+                    value={newUser.email} 
+                    onChange={e => setNewUser({...newUser, email: e.target.value})} 
+                    placeholder="john@ndanduleni.co.za" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" 
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm text-slate-500 mb-1 block">Password</label>
+                  <input 
+                    type="password" 
+                    value={newUser.password} 
+                    onChange={e => setNewUser({...newUser, password: e.target.value})} 
+                    placeholder="Minimum 6 characters" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" 
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm text-slate-500 mb-1 block">Role</label>
+                  <select 
+                    value={newUser.role} 
+                    onChange={e => setNewUser({...newUser, role: e.target.value})} 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
+                  >
+                    {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 rounded-xl bg-slate-600 text-white">Cancel</button>
-                <button onClick={handleAddUser} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-semibold">Create</button>
+              
+              <div className="flex gap-2 mt-6">
+                <button 
+                  onClick={() => setShowAddModal(false)} 
+                  className="flex-1 py-3 rounded-xl bg-slate-600 text-white font-medium hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleAddUser} 
+                  className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors"
+                >
+                  Create User
+                </button>
               </div>
             </motion.div>
           </motion.div>
