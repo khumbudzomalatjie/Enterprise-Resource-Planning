@@ -6,7 +6,7 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload, Barcode } from 'lucide-react'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload, Barcode, ScanLine } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
@@ -18,6 +18,7 @@ export default function MyJobs() {
   const [updatingJob, setUpdatingJob] = useState(null)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
+  // Modals
   const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [photoJobId, setPhotoJobId] = useState(null)
   const [photoType, setPhotoType] = useState('before')
@@ -37,13 +38,17 @@ export default function MyJobs() {
   const [incidentType, setIncidentType] = useState('other')
   const [incidentSeverity, setIncidentSeverity] = useState('medium')
 
+  // Inventory Scan (Quick Scan + Per-Job)
   const [showInventoryScan, setShowInventoryScan] = useState(false)
-  const [scanJobId, setScanJobId] = useState(null)
+  const [scanJobId, setScanJobId] = useState(null) // null = quick scan, set = per-job
+  const [scanContext, setScanContext] = useState('quick') // 'quick' or 'job'
   const [barcodeInput, setBarcodeInput] = useState('')
   const [scannedItem, setScannedItem] = useState(null)
   const [scanQty, setScanQty] = useState(1)
   const [scanNotes, setScanNotes] = useState('')
   const [scanning, setScanning] = useState(false)
+  const [showJobPicker, setShowJobPicker] = useState(false)
+  const [selectedJobForScan, setSelectedJobForScan] = useState('')
 
   useEffect(() => {
     setupAndLoad()
@@ -147,12 +152,29 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  const openInventoryScan = (jobId) => {
+  // ═══════════════════════════════════════════
+  // INVENTORY SCANNING - OPTION C
+  // ═══════════════════════════════════════════
+  const openQuickScan = () => {
+    setScanContext('quick')
+    setScanJobId(null)
+    setBarcodeInput('')
+    setScannedItem(null)
+    setScanQty(1)
+    setScanNotes('')
+    setSelectedJobForScan('')
+    setShowJobPicker(false)
+    setShowInventoryScan(true)
+  }
+
+  const openJobScan = (jobId) => {
+    setScanContext('job')
     setScanJobId(jobId)
     setBarcodeInput('')
     setScannedItem(null)
     setScanQty(1)
     setScanNotes('')
+    setShowJobPicker(false)
     setShowInventoryScan(true)
   }
 
@@ -165,23 +187,65 @@ export default function MyJobs() {
     if (!result.data) { toast.error('Item not found'); return }
     setScannedItem(result.data)
     setScanQty(1)
+
+    // For quick scan, check if we have an active job
+    if (scanContext === 'quick') {
+      if (myJobs.length === 1) {
+        // Auto-link to the single active job
+        setScanJobId(myJobs[0].id)
+        setSelectedJobForScan(myJobs[0].id)
+        toast.success(`Item found! Will link to: ${myJobs[0].title}`)
+      } else if (myJobs.length > 1) {
+        // Multiple jobs - ask which one
+        setShowJobPicker(true)
+      } else {
+        // No active jobs - show job picker from all jobs
+        setShowJobPicker(true)
+      }
+    }
   }
 
   const handleRecordUsage = async () => {
     if (!scannedItem) return
+
+    let finalJobId = scanJobId
+
+    // If quick scan and no job linked yet
+    if (scanContext === 'quick' && !finalJobId) {
+      if (selectedJobForScan) {
+        finalJobId = selectedJobForScan
+      } else if (myJobs.length === 1) {
+        finalJobId = myJobs[0].id
+      } else {
+        toast.error('Please select a job for this inventory')
+        setShowJobPicker(true)
+        return
+      }
+    }
+
+    if (!finalJobId) {
+      toast.error('No job selected. Please select a job.')
+      setShowJobPicker(true)
+      return
+    }
+
     if (scanQty > scannedItem.current_stock) {
       toast.error(`Not enough stock. Max ${scannedItem.current_stock}`)
       return
     }
+
     setScanning(true)
-    const result = await recordInventoryUsage(scanJobId, myEmployeeId, scannedItem.id, scanQty, scanNotes)
+    const result = await recordInventoryUsage(finalJobId, myEmployeeId, scannedItem.id, scanQty, scanNotes)
     setScanning(false)
+
     if (result.success) {
       toast.success('Inventory recorded!')
       setShowInventoryScan(false)
       setScannedItem(null)
       setBarcodeInput('')
       setScanNotes('')
+      setSelectedJobForScan('')
+      setShowJobPicker(false)
     } else {
       toast.error(result.error)
     }
@@ -201,10 +265,17 @@ export default function MyJobs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-500 via-blue-600 to-indigo-700 font-['Inter'] pb-20">
+      {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white">
         <div className="flex items-center justify-between">
           <div><h1 className="text-2xl font-bold">Jobs</h1><p className="text-blue-100 text-sm mt-1">Auto-refreshes</p></div>
-          <button onClick={refreshData} className="p-2 rounded-xl bg-white/20"><RefreshCw className="w-5 h-5 text-white" /></button>
+          <div className="flex gap-2">
+            <button onClick={openQuickScan} className="p-2 rounded-xl bg-teal-500/80 hover:bg-teal-500 flex items-center gap-1.5" title="Quick Scan Inventory">
+              <ScanLine className="w-5 h-5" />
+              <span className="text-xs font-bold">Scan</span>
+            </button>
+            <button onClick={refreshData} className="p-2 rounded-xl bg-white/20"><RefreshCw className="w-5 h-5 text-white" /></button>
+          </div>
         </div>
         {myJobs.length > 0 && (
           <div className="mt-3 bg-amber-400/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
@@ -217,6 +288,7 @@ export default function MyJobs() {
         )}
       </div>
 
+      {/* Tabs */}
       <div className="px-5 -mt-2">
         <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
           <button onClick={() => setActiveTab('open')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${activeTab === 'open' ? 'bg-white text-blue-700 shadow-lg' : 'text-white/70'}`}><List className="w-4 h-4" /> Open ({filteredOpen.length})</button>
@@ -224,8 +296,10 @@ export default function MyJobs() {
         </div>
       </div>
 
+      {/* Search */}
       <div className="px-5 mt-3 mb-3"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" /><input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/15 text-white placeholder-white/40 text-sm border border-white/10" /></div></div>
 
+      {/* Content */}
       <div className="px-5">
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div></div>
@@ -258,15 +332,16 @@ export default function MyJobs() {
                     <button onClick={() => openPhotoModal(job.id, 'before')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Camera className="w-3 h-3" /> Photos</button>
                     <button onClick={() => openSuppliesModal(job.id)} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Package className="w-3 h-3" /> Supplies</button>
                     <button onClick={() => openIncidentModal(job.id)} className="py-2 bg-red-50 text-red-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><AlertCircle className="w-3 h-3" /> Incident</button>
-                    <button onClick={() => openInventoryScan(job.id)} className="py-2 bg-teal-50 text-teal-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Barcode className="w-3 h-3" /> Scan</button>
+                    <button onClick={() => openJobScan(job.id)} className="py-2 bg-teal-50 text-teal-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Barcode className="w-3 h-3" /> Scan</button>
                   </div>
                 </motion.div>
               ))}
             </div>
-          ) : <div className="text-center py-12 bg-white/10 rounded-2xl"><User className="w-12 h-12 text-white/50 mx-auto mb-2" /><p className="text-white font-semibold">No jobs assigned</p><p className="text-white/50 text-xs mt-1">Select a job from Open Pool</p></div>
+          ) : <div className="text-center py-12 bg-white/10 rounded-2xl"><User className="w-12 h-12 text-white/50 mx-auto mb-2" /><p className="text-white font-semibold">No jobs assigned</p><p className="text-white/50 text-xs mt-1">Select a job from Open Pool or use Quick Scan</p></div>
         )}
       </div>
 
+      {/* PHOTO MODAL */}
       {showPhotoModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowPhotoModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
@@ -282,6 +357,7 @@ export default function MyJobs() {
         </div>
       )}
 
+      {/* SUPPLIES MODAL */}
       {showSuppliesModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowSuppliesModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
@@ -296,6 +372,7 @@ export default function MyJobs() {
         </div>
       )}
 
+      {/* INCIDENT MODAL */}
       {showIncidentModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowIncidentModal(false)}>
           <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -318,14 +395,32 @@ export default function MyJobs() {
         </div>
       )}
 
+      {/* INVENTORY SCAN MODAL - OPTION C */}
       {showInventoryScan && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowInventoryScan(false)}>
-          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2"><Barcode className="w-5 h-5" /> Scan Inventory Item</h3>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Barcode className="w-5 h-5 text-teal-600" />
+                {scanContext === 'quick' ? 'Quick Scan Inventory' : 'Scan Inventory for Job'}
+              </h3>
+              <button onClick={() => setShowInventoryScan(false)} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
+            </div>
+
             {!scannedItem ? (
               <>
-                <input type="text" value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} placeholder="Scan or enter barcode / item code" className="w-full p-3 border rounded-xl mb-3 text-sm" autoFocus />
-                <button onClick={handleScanSearch} disabled={scanning} className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">{scanning ? 'Searching...' : 'Search Item'}</button>
+                <input
+                  type="text"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  placeholder="Scan or enter barcode / item code"
+                  className="w-full p-3 border rounded-xl mb-3 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleScanSearch()}
+                />
+                <button onClick={handleScanSearch} disabled={scanning} className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                  {scanning ? 'Searching...' : '🔍 Search Item'}
+                </button>
               </>
             ) : (
               <>
@@ -334,18 +429,54 @@ export default function MyJobs() {
                   <p className="text-xs text-slate-500">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
                   <p className="text-sm mt-1">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
                 </div>
+
+                {/* Job Picker for Quick Scan */}
+                {showJobPicker && (
+                  <div className="mb-3">
+                    <label className="text-xs text-slate-500 font-semibold">Select Job for this inventory:</label>
+                    <select
+                      value={selectedJobForScan}
+                      onChange={(e) => setSelectedJobForScan(e.target.value)}
+                      className="w-full p-3 border rounded-xl mt-1 text-sm"
+                    >
+                      <option value="">-- Select Job --</option>
+                      {myJobs.map(j => (
+                        <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>
+                      ))}
+                      {openJobs.map(j => (
+                        <option key={j.id} value={j.id}>{j.job_number} - {j.title} (Open)</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="mb-3">
                   <label className="text-xs text-slate-500">Quantity to use</label>
-                  <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))} min="1" max={scannedItem.current_stock} className="w-full p-3 border rounded-xl mt-1 text-sm" />
+                  <input
+                    type="number"
+                    value={scanQty}
+                    onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    min="1"
+                    max={scannedItem.current_stock}
+                    className="w-full p-3 border rounded-xl mt-1 text-sm"
+                  />
                 </div>
-                <input type="text" value={scanNotes} onChange={(e) => setScanNotes(e.target.value)} placeholder="Notes (optional)" className="w-full p-3 border rounded-xl mb-3 text-sm" />
+                <input
+                  type="text"
+                  value={scanNotes}
+                  onChange={(e) => setScanNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  className="w-full p-3 border rounded-xl mb-3 text-sm"
+                />
+
                 <div className="flex gap-2">
-                  <button onClick={() => { setScannedItem(null); setBarcodeInput('') }} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Back</button>
-                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">{scanning ? 'Recording...' : 'Record Usage'}</button>
+                  <button onClick={() => { setScannedItem(null); setBarcodeInput(''); setShowJobPicker(false); setSelectedJobForScan('') }} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Back</button>
+                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                    {scanning ? 'Recording...' : '✅ Record Usage'}
+                  </button>
                 </div>
               </>
             )}
-            <button onClick={() => setShowInventoryScan(false)} className="w-full py-2 mt-2 text-slate-500 text-sm">Cancel</button>
           </div>
         </div>
       )}
