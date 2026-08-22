@@ -5,31 +5,74 @@ export const inventoryApi = {
   // ITEMS
   // ============================================
   async getItems(filters = {}) {
+    // Get items without joins first (avoids FK schema cache errors)
     let query = supabase
       .from('inventory_items')
-      .select('*, item_categories(name, color), warehouses(name), suppliers(company_name)')
+      .select('*')
       .order('name')
 
     if (filters.category_id) query = query.eq('category_id', filters.category_id)
     if (filters.status) query = query.eq('status', filters.status)
-    if (filters.low_stock) query = query.lte('current_stock', supabase.raw('reorder_point')).gt('current_stock', 0)
     if (filters.search) query = query.or(`name.ilike.%${filters.search}%,item_code.ilike.%${filters.search}%,barcode.ilike.%${filters.search}%`)
 
-    const { data, error } = await query
-    return { data, error }
+    const { data: items, error } = await query
+    if (error || !items || items.length === 0) return { data: items || [], error }
+
+    // Get categories separately
+    const catIds = [...new Set(items.map(i => i.category_id).filter(Boolean))]
+    const { data: categories } = await supabase.from('item_categories').select('id, name, color').in('id', catIds)
+
+    // Get warehouses separately
+    const whIds = [...new Set(items.map(i => i.default_warehouse_id).filter(Boolean))]
+    const { data: warehouses } = await supabase.from('warehouses').select('id, name').in('id', whIds)
+
+    // Get suppliers separately
+    const supIds = [...new Set(items.map(i => i.preferred_supplier_id).filter(Boolean))]
+    const { data: suppliers } = await supabase.from('suppliers').select('id, company_name').in('id', supIds)
+
+    // Merge everything
+    const merged = items.map(item => ({
+      ...item,
+      item_categories: (categories || []).find(c => c.id === item.category_id) || null,
+      warehouses: (warehouses || []).find(w => w.id === item.default_warehouse_id) || null,
+      suppliers: (suppliers || []).find(s => s.id === item.preferred_supplier_id) || null
+    }))
+
+    return { data: merged, error: null }
   },
 
   async getItem(id) {
-    const { data, error } = await supabase
+    const { data: item, error } = await supabase
       .from('inventory_items')
-      .select('*, item_categories(*), warehouses(*), suppliers(*), stock_batches(*), stock_movements(*)')
+      .select('*')
       .eq('id', id)
       .single()
-    return { data, error }
+    
+    if (error || !item) return { data: item, error }
+
+    // Get related data separately
+    const [catResult, whResult, supResult, batchesResult, movementsResult] = await Promise.all([
+      item.category_id ? supabase.from('item_categories').select('*').eq('id', item.category_id).single() : { data: null },
+      item.default_warehouse_id ? supabase.from('warehouses').select('*').eq('id', item.default_warehouse_id).single() : { data: null },
+      item.preferred_supplier_id ? supabase.from('suppliers').select('*').eq('id', item.preferred_supplier_id).single() : { data: null },
+      supabase.from('stock_batches').select('*').eq('item_id', id).order('expiry_date', { ascending: true }),
+      supabase.from('stock_movements').select('*').eq('item_id', id).order('created_at', { ascending: false }).limit(50)
+    ])
+
+    return {
+      data: {
+        ...item,
+        item_categories: catResult.data || null,
+        warehouses: whResult.data || null,
+        suppliers: supResult.data || null,
+        stock_batches: batchesResult.data || [],
+        stock_movements: movementsResult.data || []
+      },
+      error: null
+    }
   },
 
   async createItem(itemData) {
-    // Clean up empty strings to null for UUID fields
     const cleanedData = { ...itemData }
     if (cleanedData.category_id === '') cleanedData.category_id = null
     if (cleanedData.default_warehouse_id === '') cleanedData.default_warehouse_id = null
@@ -44,7 +87,6 @@ export const inventoryApi = {
   },
 
   async updateItem(id, updates) {
-    // Clean up empty strings to null for UUID fields
     const cleanedData = { ...updates }
     if (cleanedData.category_id === '') cleanedData.category_id = null
     if (cleanedData.default_warehouse_id === '') cleanedData.default_warehouse_id = null
@@ -73,7 +115,7 @@ export const inventoryApi = {
   async getStockMovements(filters = {}) {
     let query = supabase
       .from('stock_movements')
-      .select('*, inventory_items(name, item_code, unit), warehouses(name)')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (filters.item_id) query = query.eq('item_id', filters.item_id)
@@ -82,12 +124,28 @@ export const inventoryApi = {
     if (filters.date_to) query = query.lte('movement_date', filters.date_to)
     if (filters.warehouse_id) query = query.eq('warehouse_id', filters.warehouse_id)
 
-    const { data, error } = await query.limit(100)
-    return { data, error }
+    const { data: movements, error } = await query.limit(100)
+    if (error || !movements || movements.length === 0) return { data: movements || [], error }
+
+    // Get item names separately
+    const itemIds = [...new Set(movements.map(m => m.item_id).filter(Boolean))]
+    const { data: items } = await supabase.from('inventory_items').select('id, name, item_code, unit').in('id', itemIds)
+
+    // Get warehouse names separately
+    const whIds = [...new Set(movements.map(m => m.warehouse_id).filter(Boolean))]
+    const { data: warehouses } = await supabase.from('warehouses').select('id, name').in('id', whIds)
+
+    // Merge
+    const merged = movements.map(m => ({
+      ...m,
+      inventory_items: (items || []).find(i => i.id === m.item_id) || null,
+      warehouses: (warehouses || []).find(w => w.id === m.warehouse_id) || null
+    }))
+
+    return { data: merged, error: null }
   },
 
   async createStockMovement(movementData) {
-    // Clean up empty strings to null for UUID fields
     const cleanedData = { ...movementData }
     if (cleanedData.warehouse_id === '') cleanedData.warehouse_id = null
     if (cleanedData.batch_id === '') cleanedData.batch_id = null
@@ -229,13 +287,24 @@ export const inventoryApi = {
   async getBatches(itemId = null) {
     let query = supabase
       .from('stock_batches')
-      .select('*, inventory_items(name, item_code)')
+      .select('*')
       .order('expiry_date', { ascending: true })
 
     if (itemId) query = query.eq('item_id', itemId)
 
-    const { data, error } = await query
-    return { data, error }
+    const { data: batches, error } = await query
+    if (error || !batches || batches.length === 0) return { data: batches || [], error }
+
+    // Get item names separately
+    const itemIds = [...new Set(batches.map(b => b.item_id).filter(Boolean))]
+    const { data: items } = await supabase.from('inventory_items').select('id, name, item_code').in('id', itemIds)
+
+    const merged = batches.map(b => ({
+      ...b,
+      inventory_items: (items || []).find(i => i.id === b.item_id) || null
+    }))
+
+    return { data: merged, error: null }
   },
 
   async createBatch(batchData) {
@@ -263,14 +332,39 @@ export const inventoryApi = {
   async getStockCounts(filters = {}) {
     let query = supabase
       .from('stock_counts')
-      .select('*, warehouses(name), stock_count_items(*, inventory_items(name, item_code))')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.warehouse_id) query = query.eq('warehouse_id', filters.warehouse_id)
 
-    const { data, error } = await query
-    return { data, error }
+    const { data: counts, error } = await query
+    if (error || !counts || counts.length === 0) return { data: counts || [], error }
+
+    // Get warehouse names
+    const whIds = [...new Set(counts.map(c => c.warehouse_id).filter(Boolean))]
+    const { data: warehouses } = await supabase.from('warehouses').select('id, name').in('id', whIds)
+
+    // Get count items
+    const countIds = counts.map(c => c.id)
+    const { data: countItems } = await supabase.from('stock_count_items').select('*').in('stock_count_id', countIds)
+
+    // Get item names for count items
+    const itemIds = [...new Set((countItems || []).map(ci => ci.item_id).filter(Boolean))]
+    const { data: items } = await supabase.from('inventory_items').select('id, name, item_code').in('id', itemIds)
+
+    const merged = counts.map(c => ({
+      ...c,
+      warehouses: (warehouses || []).find(w => w.id === c.warehouse_id) || null,
+      stock_count_items: (countItems || [])
+        .filter(ci => ci.stock_count_id === c.id)
+        .map(ci => ({
+          ...ci,
+          inventory_items: (items || []).find(i => i.id === ci.item_id) || null
+        }))
+    }))
+
+    return { data: merged, error: null }
   },
 
   async createStockCount(countData) {
@@ -298,18 +392,42 @@ export const inventoryApi = {
   async getPurchaseOrders(filters = {}) {
     let query = supabase
       .from('purchase_orders')
-      .select('*, suppliers(company_name), purchase_order_items(*, inventory_items(name, item_code))')
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.supplier_id) query = query.eq('supplier_id', filters.supplier_id)
 
-    const { data, error } = await query
-    return { data, error }
+    const { data: pos, error } = await query
+    if (error || !pos || pos.length === 0) return { data: pos || [], error }
+
+    // Get supplier names
+    const supIds = [...new Set(pos.map(p => p.supplier_id).filter(Boolean))]
+    const { data: suppliers } = await supabase.from('suppliers').select('id, company_name').in('id', supIds)
+
+    // Get PO items
+    const poIds = pos.map(p => p.id)
+    const { data: poItems } = await supabase.from('purchase_order_items').select('*').in('purchase_order_id', poIds)
+
+    // Get item names
+    const itemIds = [...new Set((poItems || []).map(pi => pi.item_id).filter(Boolean))]
+    const { data: items } = await supabase.from('inventory_items').select('id, name, item_code').in('id', itemIds)
+
+    const merged = pos.map(p => ({
+      ...p,
+      suppliers: (suppliers || []).find(s => s.id === p.supplier_id) || null,
+      purchase_order_items: (poItems || [])
+        .filter(pi => pi.purchase_order_id === p.id)
+        .map(pi => ({
+          ...pi,
+          inventory_items: (items || []).find(i => i.id === pi.item_id) || null
+        }))
+    }))
+
+    return { data: merged, error: null }
   },
 
   async createPurchaseOrder(poData, items) {
-    // Clean up UUID fields
     const cleanedPO = { ...poData }
     if (cleanedPO.supplier_id === '') cleanedPO.supplier_id = null
 
@@ -384,14 +502,31 @@ export const inventoryApi = {
       supabase.from('inventory_items').select('*', { count: 'exact', head: true }).eq('current_stock', 0),
       supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('warehouses').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('stock_movements').select('*, inventory_items(name)').order('created_at', { ascending: false }).limit(10),
-      supabase.from('stock_batches').select('*, inventory_items(name)').lt('expiry_date', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()).gt('remaining_quantity', 0).limit(10)
+      supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(10),
+      supabase.from('stock_batches').select('*').lt('expiry_date', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()).gt('remaining_quantity', 0).limit(10)
     ])
+
+    // Get item names for recent movements
+    const movementItemIds = [...new Set((recentMovements || []).map(m => m.item_id).filter(Boolean))]
+    const { data: movementItems } = await supabase.from('inventory_items').select('id, name').in('id', movementItemIds)
+
+    const movementsWithNames = (recentMovements || []).map(m => ({
+      ...m,
+      inventory_items: (movementItems || []).find(i => i.id === m.item_id) || null
+    }))
+
+    // Get item names for expiring batches
+    const batchItemIds = [...new Set((expiringBatches || []).map(b => b.item_id).filter(Boolean))]
+    const { data: batchItems } = await supabase.from('inventory_items').select('id, name').in('id', batchItemIds)
+
+    const batchesWithNames = (expiringBatches || []).map(b => ({
+      ...b,
+      inventory_items: (batchItems || []).find(i => i.id === b.item_id) || null
+    }))
 
     const totalValue = await supabase.from('inventory_items').select('current_stock, unit_cost')
     const totalStockValue = totalValue.data?.reduce((sum, item) => sum + (item.current_stock || 0) * (item.unit_cost || 0), 0) || 0
 
-    // Get monthly movements summary
     const thisMonth = new Date().toISOString().slice(0, 7)
     const { data: monthlyMovements } = await supabase
       .from('stock_movements')
@@ -415,8 +550,8 @@ export const inventoryApi = {
       totalStockValue,
       stockInThisMonth,
       stockOutThisMonth,
-      recentMovements: recentMovements || [],
-      expiringBatches: expiringBatches || []
+      recentMovements: movementsWithNames,
+      expiringBatches: batchesWithNames
     }
   }
 }
