@@ -6,7 +6,8 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload, Barcode, ScanLine } from 'lucide-react'
+import { Html5Qrcode } from 'html5-qrcode'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload, Barcode, ScanLine, Keyboard } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
@@ -38,10 +39,11 @@ export default function MyJobs() {
   const [incidentType, setIncidentType] = useState('other')
   const [incidentSeverity, setIncidentSeverity] = useState('medium')
 
-  // Inventory Scan (Quick Scan + Per-Job)
+  // Inventory Scan
   const [showInventoryScan, setShowInventoryScan] = useState(false)
-  const [scanJobId, setScanJobId] = useState(null) // null = quick scan, set = per-job
-  const [scanContext, setScanContext] = useState('quick') // 'quick' or 'job'
+  const [scanJobId, setScanJobId] = useState(null)
+  const [scanContext, setScanContext] = useState('quick')
+  const [scanMode, setScanMode] = useState('camera') // 'camera' or 'manual'
   const [barcodeInput, setBarcodeInput] = useState('')
   const [scannedItem, setScannedItem] = useState(null)
   const [scanQty, setScanQty] = useState(1)
@@ -49,12 +51,101 @@ export default function MyJobs() {
   const [scanning, setScanning] = useState(false)
   const [showJobPicker, setShowJobPicker] = useState(false)
   const [selectedJobForScan, setSelectedJobForScan] = useState('')
+  const scannerRef = useRef(null)
+  const scannerIdRef = useRef('qr-scanner-' + Date.now())
 
   useEffect(() => {
     setupAndLoad()
     const interval = setInterval(() => { if (myEmployeeId) { fetchOpenJobs(); fetchMyJobs(myEmployeeId) } }, 15000)
     return () => clearInterval(interval)
   }, [myEmployeeId])
+
+  // Stop scanner when modal closes
+  useEffect(() => {
+    if (!showInventoryScan) {
+      stopScanner()
+    }
+  }, [showInventoryScan])
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop()
+        scannerRef.current.clear()
+      } catch (e) {
+        // Scanner already stopped
+      }
+      scannerRef.current = null
+    }
+  }
+
+  const startScanner = async () => {
+    setScanning(true)
+    try {
+      const scanner = new Html5Qrcode(scannerIdRef.current)
+      scannerRef.current = scanner
+
+      await scanner.start(
+        { facingMode: 'environment' }, // Use rear camera
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0
+        },
+        async (decodedText) => {
+          // On successful scan
+          await stopScanner()
+          setScanning(false)
+          setBarcodeInput(decodedText)
+          await handleBarcodeSearch(decodedText)
+        },
+        (errorMessage) => {
+          // Scan error (happens continuously - ignore)
+        }
+      )
+    } catch (err) {
+      console.error('Scanner error:', err)
+      setScanning(false)
+      toast.error('Camera not accessible. Try manual entry.')
+      setScanMode('manual')
+    }
+  }
+
+  const handleBarcodeSearch = async (barcode) => {
+    if (!barcode || !barcode.trim()) {
+      toast.error('No barcode detected')
+      return
+    }
+
+    setScanning(true)
+    const result = await searchInventoryByBarcode(barcode.trim())
+    setScanning(false)
+
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+    if (!result.data) {
+      toast.error('Item not found in inventory')
+      return
+    }
+
+    setScannedItem(result.data)
+    setScanQty(1)
+
+    // Auto-link job for quick scan
+    if (scanContext === 'quick') {
+      if (myJobs.length === 1) {
+        setScanJobId(myJobs[0].id)
+        setSelectedJobForScan(myJobs[0].id)
+        toast.success(`Item found! Linked to: ${myJobs[0].title}`)
+      } else if (myJobs.length > 1) {
+        setShowJobPicker(true)
+      } else {
+        setShowJobPicker(true)
+      }
+    }
+  }
 
   const setupAndLoad = async () => {
     const empId = await findOrCreateEmployee()
@@ -153,7 +244,7 @@ export default function MyJobs() {
   }
 
   // ═══════════════════════════════════════════
-  // INVENTORY SCANNING - OPTION C
+  // INVENTORY SCANNING
   // ═══════════════════════════════════════════
   const openQuickScan = () => {
     setScanContext('quick')
@@ -164,7 +255,10 @@ export default function MyJobs() {
     setScanNotes('')
     setSelectedJobForScan('')
     setShowJobPicker(false)
+    setScanMode('camera')
     setShowInventoryScan(true)
+    // Auto-start camera after modal renders
+    setTimeout(() => startScanner(), 500)
   }
 
   const openJobScan = (jobId) => {
@@ -175,34 +269,14 @@ export default function MyJobs() {
     setScanQty(1)
     setScanNotes('')
     setShowJobPicker(false)
+    setScanMode('camera')
     setShowInventoryScan(true)
+    setTimeout(() => startScanner(), 500)
   }
 
-  const handleScanSearch = async () => {
+  const handleManualSearch = async () => {
     if (!barcodeInput.trim()) return
-    setScanning(true)
-    const result = await searchInventoryByBarcode(barcodeInput.trim())
-    setScanning(false)
-    if (result.error) { toast.error(result.error); return }
-    if (!result.data) { toast.error('Item not found'); return }
-    setScannedItem(result.data)
-    setScanQty(1)
-
-    // For quick scan, check if we have an active job
-    if (scanContext === 'quick') {
-      if (myJobs.length === 1) {
-        // Auto-link to the single active job
-        setScanJobId(myJobs[0].id)
-        setSelectedJobForScan(myJobs[0].id)
-        toast.success(`Item found! Will link to: ${myJobs[0].title}`)
-      } else if (myJobs.length > 1) {
-        // Multiple jobs - ask which one
-        setShowJobPicker(true)
-      } else {
-        // No active jobs - show job picker from all jobs
-        setShowJobPicker(true)
-      }
-    }
+    await handleBarcodeSearch(barcodeInput.trim())
   }
 
   const handleRecordUsage = async () => {
@@ -210,7 +284,6 @@ export default function MyJobs() {
 
     let finalJobId = scanJobId
 
-    // If quick scan and no job linked yet
     if (scanContext === 'quick' && !finalJobId) {
       if (selectedJobForScan) {
         finalJobId = selectedJobForScan
@@ -341,6 +414,104 @@ export default function MyJobs() {
         )}
       </div>
 
+      {/* INVENTORY SCAN MODAL */}
+      {showInventoryScan && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowInventoryScan(false)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Barcode className="w-5 h-5 text-teal-600" />
+                {scanContext === 'quick' ? 'Quick Scan Inventory' : 'Scan Inventory for Job'}
+              </h3>
+              <button onClick={() => setShowInventoryScan(false)} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Mode Toggle */}
+            {!scannedItem && (
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => { setScanMode('camera'); setScanning(false); setTimeout(() => startScanner(), 300) }} className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1 ${scanMode === 'camera' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Camera className="w-4 h-4" /> Camera
+                </button>
+                <button onClick={() => { setScanMode('manual'); stopScanner(); setScanning(false) }} className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1 ${scanMode === 'manual' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Keyboard className="w-4 h-4" /> Type
+                </button>
+              </div>
+            )}
+
+            {!scannedItem ? (
+              scanMode === 'camera' ? (
+                <>
+                  {/* Camera Scanner */}
+                  <div className="relative rounded-2xl overflow-hidden bg-black mb-3">
+                    <div id={scannerIdRef.current} className="w-full" style={{ minHeight: '280px' }}></div>
+                    {/* Scanning frame overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-56 h-56 border-2 border-teal-400 rounded-2xl relative">
+                        <div className="absolute inset-0 animate-pulse border-2 border-teal-300/50 rounded-2xl"></div>
+                        <div className="absolute -top-0.5 -left-0.5 w-8 h-8 border-t-4 border-l-4 border-teal-400 rounded-tl-2xl"></div>
+                        <div className="absolute -top-0.5 -right-0.5 w-8 h-8 border-t-4 border-r-4 border-teal-400 rounded-tr-2xl"></div>
+                        <div className="absolute -bottom-0.5 -left-0.5 w-8 h-8 border-b-4 border-l-4 border-teal-400 rounded-bl-2xl"></div>
+                        <div className="absolute -bottom-0.5 -right-0.5 w-8 h-8 border-b-4 border-r-4 border-teal-400 rounded-br-2xl"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-center text-xs text-slate-500 mb-2">Point camera at QR code / barcode</p>
+                  {scanning && <p className="text-center text-xs text-teal-600 font-medium">Camera active...</p>}
+                </>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    placeholder="Enter barcode / item code"
+                    className="w-full p-3 border rounded-xl mb-3 text-sm"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+                  />
+                  <button onClick={handleManualSearch} disabled={scanning} className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                    {scanning ? 'Searching...' : '🔍 Search Item'}
+                  </button>
+                </>
+              )
+            ) : (
+              <>
+                <div className="bg-slate-50 rounded-xl p-4 mb-3">
+                  <p className="font-bold text-lg">{scannedItem.name}</p>
+                  <p className="text-xs text-slate-500">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
+                  <p className="text-sm mt-1">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
+                </div>
+
+                {/* Job Picker for Quick Scan */}
+                {showJobPicker && (
+                  <div className="mb-3">
+                    <label className="text-xs text-slate-500 font-semibold">Select Job for this inventory:</label>
+                    <select value={selectedJobForScan} onChange={(e) => setSelectedJobForScan(e.target.value)} className="w-full p-3 border rounded-xl mt-1 text-sm">
+                      <option value="">-- Select Job --</option>
+                      {myJobs.map(j => <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>)}
+                      {openJobs.map(j => <option key={j.id} value={j.id}>{j.job_number} - {j.title} (Open)</option>)}
+                    </select>
+                  </div>
+                )}
+
+                <div className="mb-3">
+                  <label className="text-xs text-slate-500">Quantity to use</label>
+                  <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))} min="1" max={scannedItem.current_stock} className="w-full p-3 border rounded-xl mt-1 text-sm" />
+                </div>
+                <input type="text" value={scanNotes} onChange={(e) => setScanNotes(e.target.value)} placeholder="Notes (optional)" className="w-full p-3 border rounded-xl mb-3 text-sm" />
+
+                <div className="flex gap-2">
+                  <button onClick={() => { setScannedItem(null); setBarcodeInput(''); setShowJobPicker(false); setSelectedJobForScan(''); setScanMode('camera'); setTimeout(() => startScanner(), 300) }} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Scan Again</button>
+                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                    {scanning ? 'Recording...' : '✅ Record Usage'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* PHOTO MODAL */}
       {showPhotoModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowPhotoModal(false)}>
@@ -391,92 +562,6 @@ export default function MyJobs() {
               <button onClick={() => setShowIncidentModal(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Cancel</button>
               <button onClick={handleIncidentReport} disabled={!incidentTitle} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">Report</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* INVENTORY SCAN MODAL - OPTION C */}
-      {showInventoryScan && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowInventoryScan(false)}>
-          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Barcode className="w-5 h-5 text-teal-600" />
-                {scanContext === 'quick' ? 'Quick Scan Inventory' : 'Scan Inventory for Job'}
-              </h3>
-              <button onClick={() => setShowInventoryScan(false)} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
-            </div>
-
-            {!scannedItem ? (
-              <>
-                <input
-                  type="text"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="Scan or enter barcode / item code"
-                  className="w-full p-3 border rounded-xl mb-3 text-sm"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleScanSearch()}
-                />
-                <button onClick={handleScanSearch} disabled={scanning} className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                  {scanning ? 'Searching...' : '🔍 Search Item'}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="bg-slate-50 rounded-xl p-4 mb-3">
-                  <p className="font-bold text-lg">{scannedItem.name}</p>
-                  <p className="text-xs text-slate-500">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
-                  <p className="text-sm mt-1">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
-                </div>
-
-                {/* Job Picker for Quick Scan */}
-                {showJobPicker && (
-                  <div className="mb-3">
-                    <label className="text-xs text-slate-500 font-semibold">Select Job for this inventory:</label>
-                    <select
-                      value={selectedJobForScan}
-                      onChange={(e) => setSelectedJobForScan(e.target.value)}
-                      className="w-full p-3 border rounded-xl mt-1 text-sm"
-                    >
-                      <option value="">-- Select Job --</option>
-                      {myJobs.map(j => (
-                        <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>
-                      ))}
-                      {openJobs.map(j => (
-                        <option key={j.id} value={j.id}>{j.job_number} - {j.title} (Open)</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="mb-3">
-                  <label className="text-xs text-slate-500">Quantity to use</label>
-                  <input
-                    type="number"
-                    value={scanQty}
-                    onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
-                    min="1"
-                    max={scannedItem.current_stock}
-                    className="w-full p-3 border rounded-xl mt-1 text-sm"
-                  />
-                </div>
-                <input
-                  type="text"
-                  value={scanNotes}
-                  onChange={(e) => setScanNotes(e.target.value)}
-                  placeholder="Notes (optional)"
-                  className="w-full p-3 border rounded-xl mb-3 text-sm"
-                />
-
-                <div className="flex gap-2">
-                  <button onClick={() => { setScannedItem(null); setBarcodeInput(''); setShowJobPicker(false); setSelectedJobForScan('') }} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Back</button>
-                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                    {scanning ? 'Recording...' : '✅ Record Usage'}
-                  </button>
-                </div>
-              </>
-            )}
           </div>
         </div>
       )}
