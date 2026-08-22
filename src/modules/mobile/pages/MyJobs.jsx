@@ -6,11 +6,11 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import toast from 'react-hot-toast'
 import { supabase } from '../../../lib/supabaseClient'
-import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload } from 'lucide-react'
+import { Briefcase, MapPin, Clock, Calendar, Search, Hand, Play, CheckCircle2, Camera, Package, AlertCircle, User, List, RefreshCw, Lock, X, Upload, Barcode } from 'lucide-react'
 
 export default function MyJobs() {
   const { user } = useAuthStore()
-  const { openJobs, myJobs, fetchOpenJobs, fetchMyJobs, selectJob, startJob, completeJob, uploadPhoto, createSuppliesRequest, reportIncident } = useMobileStore()
+  const { openJobs, myJobs, fetchOpenJobs, fetchMyJobs, selectJob, startJob, completeJob, uploadPhoto, createSuppliesRequest, reportIncident, searchInventoryByBarcode, recordInventoryUsage } = useMobileStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('open')
   const [loading, setLoading] = useState(true)
@@ -36,6 +36,14 @@ export default function MyJobs() {
   const [incidentDesc, setIncidentDesc] = useState('')
   const [incidentType, setIncidentType] = useState('other')
   const [incidentSeverity, setIncidentSeverity] = useState('medium')
+
+  const [showInventoryScan, setShowInventoryScan] = useState(false)
+  const [scanJobId, setScanJobId] = useState(null)
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [scannedItem, setScannedItem] = useState(null)
+  const [scanQty, setScanQty] = useState(1)
+  const [scanNotes, setScanNotes] = useState('')
+  const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
     setupAndLoad()
@@ -139,6 +147,46 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
+  const openInventoryScan = (jobId) => {
+    setScanJobId(jobId)
+    setBarcodeInput('')
+    setScannedItem(null)
+    setScanQty(1)
+    setScanNotes('')
+    setShowInventoryScan(true)
+  }
+
+  const handleScanSearch = async () => {
+    if (!barcodeInput.trim()) return
+    setScanning(true)
+    const result = await searchInventoryByBarcode(barcodeInput.trim())
+    setScanning(false)
+    if (result.error) { toast.error(result.error); return }
+    if (!result.data) { toast.error('Item not found'); return }
+    setScannedItem(result.data)
+    setScanQty(1)
+  }
+
+  const handleRecordUsage = async () => {
+    if (!scannedItem) return
+    if (scanQty > scannedItem.current_stock) {
+      toast.error(`Not enough stock. Max ${scannedItem.current_stock}`)
+      return
+    }
+    setScanning(true)
+    const result = await recordInventoryUsage(scanJobId, myEmployeeId, scannedItem.id, scanQty, scanNotes)
+    setScanning(false)
+    if (result.success) {
+      toast.success('Inventory recorded!')
+      setShowInventoryScan(false)
+      setScannedItem(null)
+      setBarcodeInput('')
+      setScanNotes('')
+    } else {
+      toast.error(result.error)
+    }
+  }
+
   const canComplete = (job) => job.assignment_status === 'in_progress'
   const needsStart = (job) => job.assignment_status === 'assigned' || job.assignment_status === 'accepted'
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
@@ -206,10 +254,11 @@ export default function MyJobs() {
                     <button onClick={() => handleStartJob(job.id)} disabled={updatingJob === job.id} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shadow-sm"><Play className="w-3.5 h-3.5" /> {needsStart(job) ? 'Start Job' : 'Restart'}</button>
                     <button onClick={() => handleCompleteJob(job.id)} disabled={updatingJob === job.id || !canComplete(job)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm ${canComplete(job) ? 'bg-emerald-600 text-white active:scale-95' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>{canComplete(job) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}{canComplete(job) ? 'Complete' : 'Start First'}</button>
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-4 gap-1.5">
                     <button onClick={() => openPhotoModal(job.id, 'before')} className="py-2 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Camera className="w-3 h-3" /> Photos</button>
                     <button onClick={() => openSuppliesModal(job.id)} className="py-2 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Package className="w-3 h-3" /> Supplies</button>
                     <button onClick={() => openIncidentModal(job.id)} className="py-2 bg-red-50 text-red-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><AlertCircle className="w-3 h-3" /> Incident</button>
+                    <button onClick={() => openInventoryScan(job.id)} className="py-2 bg-teal-50 text-teal-700 rounded-lg text-[10px] font-medium flex items-center justify-center gap-1 active:scale-95"><Barcode className="w-3 h-3" /> Scan</button>
                   </div>
                 </motion.div>
               ))}
@@ -265,6 +314,38 @@ export default function MyJobs() {
               <button onClick={() => setShowIncidentModal(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Cancel</button>
               <button onClick={handleIncidentReport} disabled={!incidentTitle} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">Report</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showInventoryScan && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowInventoryScan(false)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2"><Barcode className="w-5 h-5" /> Scan Inventory Item</h3>
+            {!scannedItem ? (
+              <>
+                <input type="text" value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} placeholder="Scan or enter barcode / item code" className="w-full p-3 border rounded-xl mb-3 text-sm" autoFocus />
+                <button onClick={handleScanSearch} disabled={scanning} className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">{scanning ? 'Searching...' : 'Search Item'}</button>
+              </>
+            ) : (
+              <>
+                <div className="bg-slate-50 rounded-xl p-4 mb-3">
+                  <p className="font-bold text-lg">{scannedItem.name}</p>
+                  <p className="text-xs text-slate-500">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
+                  <p className="text-sm mt-1">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
+                </div>
+                <div className="mb-3">
+                  <label className="text-xs text-slate-500">Quantity to use</label>
+                  <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))} min="1" max={scannedItem.current_stock} className="w-full p-3 border rounded-xl mt-1 text-sm" />
+                </div>
+                <input type="text" value={scanNotes} onChange={(e) => setScanNotes(e.target.value)} placeholder="Notes (optional)" className="w-full p-3 border rounded-xl mb-3 text-sm" />
+                <div className="flex gap-2">
+                  <button onClick={() => { setScannedItem(null); setBarcodeInput('') }} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Back</button>
+                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">{scanning ? 'Recording...' : 'Record Usage'}</button>
+                </div>
+              </>
+            )}
+            <button onClick={() => setShowInventoryScan(false)} className="w-full py-2 mt-2 text-slate-500 text-sm">Cancel</button>
           </div>
         </div>
       )}
