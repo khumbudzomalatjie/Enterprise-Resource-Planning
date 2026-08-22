@@ -3,6 +3,9 @@ import ProtectedRoute from '../../../components/ProtectedRoute'
 import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import InventoryDashboard from '../pages/InventoryDashboard'
 import StockList from '../pages/StockList'
+import StockDetail from '../pages/StockDetail'
+import StockMovements from '../pages/StockMovements'
+import AddItem from '../pages/AddItem'
 import ServiceList from '../pages/ServiceList'
 import ServiceForm from '../pages/ServiceForm'
 import ProductList from '../pages/ProductList'
@@ -35,10 +38,39 @@ export default function InventoryRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
+      
+      {/* ✅ NEW: Add Item Page */}
+      <Route path="/items/new" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <AddItem />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ NEW: Stock Detail Page */}
       <Route path="/items/:id" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
-            <StockList />
+            <StockDetail />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ NEW: Edit Item Page */}
+      <Route path="/items/:id/edit" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <AddItem />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ NEW: Stock Movements Page */}
+      <Route path="/movements" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <StockMovements />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
