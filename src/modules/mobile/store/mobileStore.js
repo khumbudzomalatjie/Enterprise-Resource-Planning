@@ -63,15 +63,11 @@ const useMobileStore = create((set, get) => ({
   fetchLeaveTypes: async () => { const { data } = await mobileApi.getLeaveTypes(); set({ leaveTypes: data }) },
   fetchLeaveBalances: async (eid) => { const { data } = await mobileApi.getLeaveBalances(eid); set({ leaveBalances: data }) },
   
-  // ✅ FIXED: Refresh leave data after applying
   applyLeave: async (data) => {
     const result = await mobileApi.applyLeave(data)
     if (!result.error && result.data) {
       const eid = data.employee_id
-      await Promise.all([
-        get().fetchLeaveRequests(eid),
-        get().fetchLeaveBalances(eid)
-      ])
+      await Promise.all([get().fetchLeaveRequests(eid), get().fetchLeaveBalances(eid)])
     }
     return result
   },
@@ -85,6 +81,19 @@ const useMobileStore = create((set, get) => ({
 
   fetchStats: async (eid) => { const stats = await mobileApi.getMobileStats(eid); set({ stats }) },
   fetchKPIData: async (eid) => { const kpiData = await mobileApi.getKPIData(eid); set({ kpiData }) },
+
+  // ============================================
+  // INVENTORY SCANNING
+  // ============================================
+  searchInventoryByBarcode: async (barcode) => {
+    return await mobileApi.searchInventoryByBarcode(barcode)
+  },
+  recordInventoryUsage: async (jobId, eid, itemId, qty, notes) => {
+    return await mobileApi.recordInventoryUsage(jobId, eid, itemId, qty, notes)
+  },
+  getJobInventoryUsage: async (jobId) => {
+    return await mobileApi.getJobInventoryUsage(jobId)
+  },
 
   setSelectedJob: (job) => set({ selectedJob: job }),
   clearError: () => set({ error: null }),
