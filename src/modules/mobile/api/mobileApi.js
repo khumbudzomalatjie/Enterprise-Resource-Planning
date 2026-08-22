@@ -33,9 +33,7 @@ export const mobileApi = {
   // ============================================
   // JOBS
   // ============================================
-  // ✅ FIXED: Only returns jobs that are NOT already selected by anyone
   async getOpenJobs() {
-    // Get all jobs that are available (pending or scheduled)
     const { data: availableJobs } = await supabase
       .from('jobs')
       .select('*, clients(company_name, phone, city), job_categories(name, color)')
@@ -45,7 +43,6 @@ export const mobileApi = {
 
     if (!availableJobs?.length) return { data: [] }
 
-    // Get all ACTIVE assignments (not released/completed)
     const jobIds = availableJobs.map(j => j.id)
     const { data: activeAssignments } = await supabase
       .from('field_job_assignments')
@@ -53,7 +50,6 @@ export const mobileApi = {
       .in('job_id', jobIds)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
 
-    // Filter out jobs that already have active assignments
     const assignedJobIds = new Set((activeAssignments || []).map(a => a.job_id))
     const trulyOpenJobs = availableJobs.filter(j => !assignedJobIds.has(j.id))
 
@@ -94,9 +90,7 @@ export const mobileApi = {
     return { data }
   },
 
-  // ✅ FIXED: Prevents duplicate selection, job disappears from Open Pool
   async selectJob(jobId, employeeId) {
-    // Check if this job already has an active assignment
     const { data: existingAssignments } = await supabase
       .from('field_job_assignments')
       .select('id, employee_id')
@@ -110,7 +104,6 @@ export const mobileApi = {
       return { success: false, error: 'This job is already taken by another cleaner' }
     }
 
-    // Assign the job to this cleaner
     const { error: aErr } = await supabase
       .from('field_job_assignments')
       .upsert({ 
@@ -122,7 +115,6 @@ export const mobileApi = {
     
     if (aErr) return { success: false, error: aErr.message }
 
-    // ✅ Change job status to in_progress so it disappears from Open Pool
     const { error: jobErr } = await supabase
       .from('jobs')
       .update({ status: 'in_progress', updated_at: new Date().toISOString() })
@@ -144,13 +136,9 @@ export const mobileApi = {
     return { success: true }
   },
 
-  // ═══════════════════════════════════════════════
-  // COMPLETE JOB - Marks done + creates invoice for finance
-  // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
     console.log('🔄 Completing job:', jobId, 'Employee:', employeeId)
     
-    // 1. Update assignment to completed
     const { error: assignError } = await supabase
       .from('field_job_assignments')
       .update({
@@ -169,7 +157,6 @@ export const mobileApi = {
     }
     console.log('✅ Assignment updated')
 
-    // 2. Get job details
     const { data: job, error: fetchError } = await supabase
       .from('jobs')
       .select('*, clients(company_name, client_code, email), job_categories(name)')
@@ -183,7 +170,6 @@ export const mobileApi = {
 
     console.log('📋 Job:', job?.job_number, 'Amount:', job?.quoted_amount)
 
-    // 3. Update job status to completed
     const { error: jobError } = await supabase
       .from('jobs')
       .update({
@@ -200,7 +186,6 @@ export const mobileApi = {
     }
     console.log('✅ Job marked as completed')
 
-    // 4. Create invoice for finance if job has value
     if (job && job.quoted_amount && job.quoted_amount > 0) {
       const invoiceResult = await mobileApi.createInvoiceForJob(job)
       console.log('📄 Invoice result:', invoiceResult.success ? 'Created: ' + invoiceResult.invoice?.invoice_number : 'Failed: ' + invoiceResult.error)
@@ -208,15 +193,11 @@ export const mobileApi = {
       console.log('ℹ️ No invoice needed - zero amount')
     }
 
-    // 5. Log action
     await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
 
     return { success: true, job }
   },
 
-  // ═══════════════════════════════════════════════
-  // CREATE INVOICE FOR FINANCE
-  // ═══════════════════════════════════════════════
   async createInvoiceForJob(job) {
     console.log('📄 Creating invoice for:', job?.job_number)
     
@@ -475,6 +456,89 @@ export const mobileApi = {
   async getEmployeeAuditLog(employeeId) {
     const { data } = await supabase.from('employee_audit_log').select('*').eq('employee_id', employeeId).order('created_at', { ascending: false }).limit(50)
     return { data: data || [] }
+  },
+
+  // ============================================
+  // INVENTORY BARCODE SCANNING (STOCK OUT)
+  // ============================================
+  async searchInventoryByBarcode(barcode) {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('id, name, item_code, barcode, unit, current_stock, unit_cost')
+      .or(`barcode.eq."${barcode}",item_code.eq."${barcode}"`)
+      .maybeSingle()
+    return { data, error }
+  },
+
+  async recordInventoryUsage(jobId, employeeId, inventoryItemId, quantity, notes = '') {
+    const { data: item, error: itemError } = await supabase
+      .from('inventory_items')
+      .select('id, name, item_code, barcode, current_stock, unit, unit_cost')
+      .eq('id', inventoryItemId)
+      .single()
+
+    if (itemError) return { success: false, error: itemError.message }
+    if (!item) return { success: false, error: 'Inventory item not found' }
+
+    if (item.current_stock < quantity) {
+      return { success: false, error: `Insufficient stock. Available: ${item.current_stock} ${item.unit}` }
+    }
+
+    const userData = await supabase.auth.getUser()
+
+    const { error: movementError } = await supabase
+      .from('stock_movements')
+      .insert([{
+        item_id: inventoryItemId,
+        movement_type: 'job_usage',
+        quantity: -quantity,
+        unit_cost: item.unit_cost,
+        reference_type: 'job',
+        reference_id: jobId,
+        job_id: jobId,
+        performed_by: userData.user?.id,
+        movement_date: new Date().toISOString().split('T')[0],
+        status: 'completed',
+        notes: notes || `Scanned out for job by employee ${employeeId}`
+      }])
+
+    if (movementError) {
+      console.error('Movement error:', movementError)
+      return { success: false, error: movementError.message }
+    }
+
+    const { error: stockError } = await supabase
+      .from('inventory_items')
+      .update({ current_stock: supabase.raw(`current_stock - ${quantity}`), updated_at: new Date().toISOString() })
+      .eq('id', inventoryItemId)
+
+    if (stockError) console.error('Stock update error:', stockError)
+
+    const { error: suppliesError } = await supabase
+      .from('job_supplies_used')
+      .insert([{
+        job_id: jobId,
+        supply_id: inventoryItemId,
+        quantity_used: quantity,
+        used_by: userData.user?.id,
+        used_at: new Date().toISOString(),
+        notes: notes || 'Barcode scan out'
+      }])
+
+    if (suppliesError) console.error('Supplies used error:', suppliesError)
+
+    await mobileApi.logAction(employeeId, 'inventory_scanned', `Scanned out ${quantity} x ${item.name} for job`, jobId, 'job')
+
+    return { success: true, item, quantity }
+  },
+
+  async getJobInventoryUsage(jobId) {
+    const { data, error } = await supabase
+      .from('job_supplies_used')
+      .select('*, inventory_items(name, unit, item_code)')
+      .eq('job_id', jobId)
+      .order('used_at', { ascending: false })
+    return { data, error }
   },
 
   // ============================================
