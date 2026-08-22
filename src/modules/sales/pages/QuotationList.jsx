@@ -5,11 +5,12 @@ import Navbar from '../../../components/Navbar'
 import useSalesStore from '../store/salesStore'
 import useThemeStore from '../../../store/themeStore'
 import toast from 'react-hot-toast'
+import { supabase } from '../../../lib/supabaseClient'
 import { 
   FileText, Search, Eye, Edit, ChevronRight,
   Sun, Moon, Sparkles, Download, MoreVertical,
   CheckCircle, XCircle, Send, Trash2, AlertTriangle,
-  Briefcase, Lock, User, Calendar
+  Briefcase, Lock, User, Calendar, Hammer
 } from 'lucide-react'
 
 export default function QuotationList() {
@@ -21,6 +22,7 @@ export default function QuotationList() {
   const [actionMenu, setActionMenu] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [acceptConfirm, setAcceptConfirm] = useState(null)
+  const [convertConfirm, setConvertConfirm] = useState(null)
   const [processingId, setProcessingId] = useState(null)
 
   useEffect(() => {
@@ -77,6 +79,110 @@ export default function QuotationList() {
     setAcceptConfirm(null)
   }
 
+  // ═══════════════════════════════════════════════
+  // ✅ NEW: CONVERT QUOTATION TO JOB
+  // ═══════════════════════════════════════════════
+  const handleConvertToJob = async () => {
+    if (!convertConfirm) return
+    
+    setProcessingId(convertConfirm)
+    
+    try {
+      // Get quotation details
+      const { data: quotation, error: fetchError } = await supabase
+        .from('quotations')
+        .select('*, clients(company_name, phone, email, city, address_line1)')
+        .eq('id', convertConfirm)
+        .single()
+
+      if (fetchError || !quotation) {
+        toast.error('Quotation not found')
+        setProcessingId(null)
+        setConvertConfirm(null)
+        return
+      }
+
+      // Check if already converted
+      if (quotation.status === 'converted') {
+        toast.error('Quotation already converted')
+        setProcessingId(null)
+        setConvertConfirm(null)
+        return
+      }
+
+      // Create job from quotation
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .insert([{
+          client_id: quotation.client_id,
+          title: quotation.clients?.company_name 
+            ? `${quotation.clients.company_name} - Quotation ${quotation.quotation_number}`
+            : `Job from Quotation ${quotation.quotation_number}`,
+          description: quotation.notes || `Converted from quotation ${quotation.quotation_number}`,
+          site_address: quotation.client_address || quotation.clients?.address_line1 || '',
+          site_city: quotation.clients?.city || '',
+          site_contact_name: quotation.clients?.company_name || '',
+          site_contact_phone: quotation.clients?.phone || quotation.client_phone || '',
+          quoted_amount: quotation.total_amount || 0,
+          quotation_id: quotation.id,
+          status: 'pending',
+          priority: 'medium',
+          cleaners_required: 1,
+          scheduled_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          scheduled_start_time: '08:00',
+          scheduled_end_time: '17:00',
+          notes: quotation.notes || '',
+          special_instructions: quotation.payment_terms || ''
+        }])
+        .select()
+        .single()
+
+      if (jobError) {
+        console.error('Job creation error:', jobError)
+        toast.error(`Failed to create job: ${jobError.message}`)
+        setProcessingId(null)
+        setConvertConfirm(null)
+        return
+      }
+
+      console.log('✅ Job created:', job?.job_number)
+
+      // Update quotation status to converted
+      const { error: updateError } = await supabase
+        .from('quotations')
+        .update({ 
+          status: 'converted', 
+          converted_to_invoice: false,
+          updated_at: new Date().toISOString(),
+          notes: quotation.notes 
+            ? `${quotation.notes}\nConverted to Job ${job.job_number}`
+            : `Converted to Job ${job.job_number}`
+        })
+        .eq('id', convertConfirm)
+
+      if (updateError) {
+        console.error('Quotation update error:', updateError)
+      }
+
+      toast.success(`Quotation converted to Job ${job.job_number}! 🎉`)
+      setConvertConfirm(null)
+      loadQuotations()
+      
+      // Ask if they want to go to Operations
+      setTimeout(() => {
+        if (window.confirm('Job created successfully! Would you like to view it in Operations?')) {
+          navigate('/operations')
+        }
+      }, 500)
+
+    } catch (err) {
+      console.error('Convert error:', err)
+      toast.error('Failed to convert quotation to job')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   // Delete quotation
   const handleDelete = async (id) => {
     setDeleteConfirm(null)
@@ -105,7 +211,7 @@ export default function QuotationList() {
     navigate(`/sales/quotations/${quote.id}/edit`)
   }
 
-  // DOWNLOAD PDF - Direct download using html2pdf
+  // DOWNLOAD PDF
   const handleDownloadPDF = async (quotation) => {
     try {
       toast.loading('Downloading PDF...')
@@ -198,17 +304,10 @@ h1{font-size:20px;color:#0D2D4A;margin:0}h2{font-size:15px;color:#1B5080;margin:
     return badges[status] || badges.draft
   }
 
-  const canEdit = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
-
-  const canChangeStatus = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
-
-  const canDelete = (status) => {
-    return status === 'draft' || status === 'sent'
-  }
+  const canEdit = (status) => status === 'draft' || status === 'sent'
+  const canChangeStatus = (status) => status === 'draft' || status === 'sent'
+  const canDelete = (status) => status === 'draft' || status === 'sent'
+  const canConvert = (status) => status === 'accepted' || status === 'sent' || status === 'draft'
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -301,28 +400,39 @@ h1{font-size:20px;color:#0D2D4A;margin:0}h2{font-size:15px;color:#1B5080;margin:
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* View Button - Always available */}
+                          {/* View Button */}
                           <button onClick={() => handleView(quote)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Details">
                             <Eye className="w-4 h-4" />
                           </button>
                           
-                          {/* Edit Button - Only for draft/sent (NOT accepted/converted) */}
+                          {/* Edit Button */}
                           {canEdit(quote.status) ? (
                             <button onClick={() => handleEdit(quote)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Quotation">
                               <Edit className="w-4 h-4" />
                             </button>
                           ) : (
-                            <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit accepted/converted quotations" disabled>
+                            <button className="p-2 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit" disabled>
                               <Lock className="w-4 h-4" />
                             </button>
                           )}
                           
-                          {/* Download PDF - Always available */}
+                          {/* Download PDF */}
                           <button onClick={() => handleDownloadPDF(quote)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download PDF">
                             <Download className="w-4 h-4" />
                           </button>
+
+                          {/* ✅ CONVERT TO JOB Button */}
+                          {canConvert(quote.status) && quote.status !== 'converted' && (
+                            <button 
+                              onClick={() => setConvertConfirm(quote.id)} 
+                              className="p-2 rounded-lg hover:bg-orange-100 text-slate-400 hover:text-orange-600" 
+                              title="Convert to Job"
+                            >
+                              <Hammer className="w-4 h-4" />
+                            </button>
+                          )}
                           
-                          {/* Status Change Menu - Only for draft/sent */}
+                          {/* Status Change Menu */}
                           {canChangeStatus(quote.status) && (
                             <div className="relative">
                               <button onClick={() => setActionMenu(actionMenu === quote.id ? null : quote.id)} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Change Status">
@@ -347,7 +457,7 @@ h1{font-size:20px;color:#0D2D4A;margin:0}h2{font-size:15px;color:#1B5080;margin:
                             </div>
                           )}
                           
-                          {/* Delete Button - Only for draft/sent */}
+                          {/* Delete Button */}
                           {canDelete(quote.status) && (
                             <button onClick={() => setDeleteConfirm(quote.id)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
                               <Trash2 className="w-4 h-4" />
@@ -364,13 +474,61 @@ h1{font-size:20px;color:#0D2D4A;margin:0}h2{font-size:15px;color:#1B5080;margin:
         </motion.div>
       </main>
 
-      {/* Accept Confirmation Modal */}
+      {/* CONVERT TO JOB CONFIRMATION MODAL */}
+      {convertConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mx-auto mb-4">
+                <Hammer className="w-10 h-10 text-orange-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Convert to Job?</h3>
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 mb-4 text-left">
+                <div className="flex items-start gap-2">
+                  <Briefcase className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">This will:</p>
+                    <ul className="text-xs text-blue-700 dark:text-blue-400 mt-1 space-y-1 list-disc list-inside">
+                      <li>Create a new Job in Operations</li>
+                      <li>Link the quotation to the job</li>
+                      <li>Mark quotation as <strong>Converted</strong></li>
+                      <li>Set job amount to {quotations.find(q => q.id === convertConfirm)?.total_amount ? formatCurrency(quotations.find(q => q.id === convertConfirm)?.total_amount) : 'N/A'}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
+                The job will appear in Operations & Scheduling. You can assign cleaners and schedule it there.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConvertConfirm(null)} className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl text-slate-600 hover:bg-slate-100">
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleConvertToJob} 
+                  disabled={processingId === convertConfirm}
+                  className="flex-1 neu-raised neu-btn px-6 py-3 rounded-xl bg-orange-600 text-white hover:bg-orange-700 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {processingId === convertConfirm ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <Hammer className="w-5 h-5" />
+                  )}
+                  Convert
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ACCEPT CONFIRMATION MODAL */}
       {acceptConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-lg w-full bg-white dark:bg-slate-800">
             <div className="text-center">
               <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4">
-                <Briefcase className="w-10 h-10 text-emerald-600" />
+                <CheckCircle className="w-10 h-10 text-emerald-600" />
               </div>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Accept Quotation?</h3>
               <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 text-left">
@@ -399,7 +557,7 @@ h1{font-size:20px;color:#0D2D4A;margin:0}h2{font-size:15px;color:#1B5080;margin:
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="neu-raised rounded-3xl p-8 max-w-md w-full bg-white dark:bg-slate-800">
