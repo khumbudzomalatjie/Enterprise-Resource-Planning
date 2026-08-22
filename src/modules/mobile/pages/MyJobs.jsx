@@ -215,9 +215,6 @@ export default function MyJobs() {
     setUpdatingJob(null)
   }
 
-  // ═══════════════════════════════════════════
-  // INVENTORY SCANNING
-  // ═══════════════════════════════════════════
   const openQuickScan = () => {
     setScanContext('quick')
     setScanJobId(null)
@@ -281,8 +278,6 @@ export default function MyJobs() {
     if (result.success) {
       setScanComplete(true)
       toast.success(`✅ ${scanQty} x ${scannedItem.name} moved to job!`)
-      
-      // Reset for next scan after a delay
       setTimeout(() => {
         setShowInventoryScan(false)
         setScannedItem(null)
@@ -386,91 +381,184 @@ export default function MyJobs() {
         )}
       </div>
 
-      {/* INVENTORY SCAN MODAL */}
+      {/* ✅ FULL-SCREEN INVENTORY SCAN MODAL */}
       {showInventoryScan && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowInventoryScan(false)}>
-          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Barcode className="w-5 h-5 text-teal-600" />
+        <div className="fixed inset-0 z-50 bg-white flex flex-col" onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div className="bg-teal-600 text-white px-5 pt-6 pb-4 flex items-center justify-between flex-shrink-0">
+            <div>
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Barcode className="w-6 h-6" />
                 {scanContext === 'quick' ? 'Quick Scan Inventory' : 'Scan for Job'}
               </h3>
-              <button onClick={() => setShowInventoryScan(false)} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
+              <p className="text-teal-100 text-xs mt-1">
+                {scanJobId ? `Job ID: ${scanJobId.slice(0, 8)}...` : 'Scan item to add to job'}
+              </p>
             </div>
+            <button onClick={() => setShowInventoryScan(false)} className="p-2 rounded-xl bg-white/20 hover:bg-white/30">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
 
-            {scanComplete ? (
-              /* ✅ SUCCESS SCREEN */
-              <div className="text-center py-8">
-                <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-10 h-10 text-emerald-600" />
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="p-5">
+              {scanComplete ? (
+                /* SUCCESS SCREEN */
+                <div className="text-center py-12">
+                  <div className="w-24 h-24 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                    <Check className="w-12 h-12 text-emerald-600" />
+                  </div>
+                  <h4 className="text-2xl font-bold text-slate-800 mb-1">Stock Moved!</h4>
+                  <p className="text-slate-500 text-lg mb-2">{scanQty} x {scannedItem?.name}</p>
+                  <p className="text-slate-400">Successfully recorded to job</p>
                 </div>
-                <h4 className="text-xl font-bold text-slate-800 mb-1">Stock Moved!</h4>
-                <p className="text-slate-500 mb-2">{scanQty} x {scannedItem?.name}</p>
-                <p className="text-xs text-slate-400">Successfully recorded to job</p>
-              </div>
-            ) : !scannedItem ? (
-              <>
-                <div className="flex gap-2 mb-3">
-                  <button onClick={() => { setScanMode('camera'); setScanning(false); setTimeout(() => startScanner(), 300) }} className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1 ${scanMode === 'camera' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                    <Camera className="w-4 h-4" /> Camera
-                  </button>
-                  <button onClick={() => { setScanMode('manual'); stopScanner(); setScanning(false) }} className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1 ${scanMode === 'manual' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                    <Keyboard className="w-4 h-4" /> Type
-                  </button>
-                </div>
+              ) : !scannedItem ? (
+                <>
+                  {/* Mode Toggle */}
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={() => { setScanMode('camera'); setScanning(false); setTimeout(() => startScanner(), 300) }} className={`flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${scanMode === 'camera' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      <Camera className="w-5 h-5" /> Camera
+                    </button>
+                    <button onClick={() => { setScanMode('manual'); stopScanner(); setScanning(false) }} className={`flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 ${scanMode === 'manual' ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      <Keyboard className="w-5 h-5" /> Type
+                    </button>
+                  </div>
 
-                {scanMode === 'camera' ? (
-                  <div className="relative rounded-2xl overflow-hidden bg-black mb-3">
-                    <div id={scannerIdRef.current} className="w-full" style={{ minHeight: '280px' }}></div>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-56 h-56 border-2 border-teal-400 rounded-2xl"></div>
+                  {scanMode === 'camera' ? (
+                    <div className="relative rounded-2xl overflow-hidden bg-black mb-4">
+                      <div id={scannerIdRef.current} className="w-full" style={{ minHeight: '400px' }}></div>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-64 h-64 border-2 border-teal-400 rounded-2xl relative">
+                          <div className="absolute -top-1 -left-1 w-10 h-10 border-t-4 border-l-4 border-teal-400 rounded-tl-2xl"></div>
+                          <div className="absolute -top-1 -right-1 w-10 h-10 border-t-4 border-r-4 border-teal-400 rounded-tr-2xl"></div>
+                          <div className="absolute -bottom-1 -left-1 w-10 h-10 border-b-4 border-l-4 border-teal-400 rounded-bl-2xl"></div>
+                          <div className="absolute -bottom-1 -right-1 w-10 h-10 border-b-4 border-r-4 border-teal-400 rounded-br-2xl"></div>
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    <>
+                      <input type="text" value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} placeholder="Enter barcode / item code" className="w-full p-4 border-2 border-slate-300 rounded-xl mb-3 text-lg" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleBarcodeSearch(barcodeInput)} />
+                      <button onClick={() => handleBarcodeSearch(barcodeInput)} className="w-full py-4 bg-teal-500 text-white rounded-xl text-lg font-bold">Search Item</button>
+                    </>
+                  )}
+
+                  <p className="text-center text-slate-400 text-sm mt-4">
+                    {scanMode === 'camera' ? 'Point camera at QR code / barcode' : 'Type the barcode number'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  {/* ITEM FOUND */}
+                  <div className="bg-teal-50 rounded-2xl p-5 mb-4 border-2 border-teal-200">
+                    <p className="font-bold text-xl text-slate-800">{scannedItem.name}</p>
+                    <p className="text-sm text-slate-500 mt-1">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
+                    <p className="text-lg mt-2">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
                   </div>
-                ) : (
-                  <>
-                    <input type="text" value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} placeholder="Enter barcode / item code" className="w-full p-3 border rounded-xl mb-3 text-sm" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleBarcodeSearch(barcodeInput)} />
-                    <button onClick={() => handleBarcodeSearch(barcodeInput)} className="w-full py-3 bg-teal-500 text-white rounded-xl text-sm font-bold">Search</button>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                {/* ITEM FOUND */}
-                <div className="bg-teal-50 rounded-xl p-4 mb-3 border border-teal-200">
-                  <p className="font-bold text-lg text-slate-800">{scannedItem.name}</p>
-                  <p className="text-xs text-slate-500">{scannedItem.item_code} | Barcode: {scannedItem.barcode || 'N/A'}</p>
-                  <p className="text-sm mt-1">Available: <span className="font-bold text-emerald-600">{scannedItem.current_stock} {scannedItem.unit}</span></p>
-                </div>
 
-                {/* Job Picker */}
-                {showJobPicker && (
-                  <div className="mb-3">
-                    <label className="text-xs font-semibold text-slate-500">Select Job for this inventory:</label>
-                    <select value={selectedJobForScan} onChange={(e) => setSelectedJobForScan(e.target.value)} className="w-full p-3 border rounded-xl mt-1 text-sm">
-                      <option value="">-- Select Job --</option>
-                      {myJobs.map(j => <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>)}
-                    </select>
+                  {/* Job Picker */}
+                  {showJobPicker && (
+                    <div className="mb-4">
+                      <label className="text-sm font-bold text-slate-600">Select Job:</label>
+                      <select value={selectedJobForScan} onChange={(e) => setSelectedJobForScan(e.target.value)} className="w-full p-4 border-2 border-slate-300 rounded-xl mt-1 text-lg">
+                        <option value="">-- Select Job --</option>
+                        {myJobs.map(j => <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Quantity */}
+                  <div className="mb-4">
+                    <label className="text-sm font-bold text-slate-600">Quantity:</label>
+                    <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))} min="1" max={scannedItem.current_stock} className="w-full p-4 border-2 border-slate-300 rounded-xl mt-1 text-lg" />
                   </div>
-                )}
 
-                <div className="mb-3">
-                  <label className="text-xs text-slate-500">Quantity</label>
-                  <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, parseInt(e.target.value) || 1))} min="1" max={scannedItem.current_stock} className="w-full p-3 border rounded-xl mt-1 text-sm" />
-                </div>
+                  {/* Notes */}
+                  <div className="mb-6">
+                    <label className="text-sm font-bold text-slate-600">Notes:</label>
+                    <input type="text" value={scanNotes} onChange={(e) => setScanNotes(e.target.value)} placeholder="Optional notes..." className="w-full p-4 border-2 border-slate-300 rounded-xl mt-1 text-lg" />
+                  </div>
 
-                <input type="text" value={scanNotes} onChange={(e) => setScanNotes(e.target.value)} placeholder="Notes (optional)" className="w-full p-3 border rounded-xl mb-3 text-sm" />
+                  {/* ACTION BUTTONS */}
+                  <div className="space-y-3 pb-5">
+                    <button 
+                      onClick={handleRecordUsage} 
+                      disabled={scanning}
+                      className="w-full py-4 bg-emerald-600 text-white rounded-xl text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg active:scale-95"
+                    >
+                      {scanning ? (
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                      ) : (
+                        <Check className="w-6 h-6" />
+                      )}
+                      {scanning ? 'Moving Stock...' : `Confirm & Move ${scanQty} to Job`}
+                    </button>
+                    
+                    <button 
+                      onClick={() => { setScannedItem(null); setBarcodeInput(''); setShowJobPicker(false); setSelectedJobForScan(''); setScanMode('camera'); setTimeout(() => startScanner(), 300) }}
+                      className="w-full py-4 bg-slate-200 text-slate-700 rounded-xl text-lg font-bold flex items-center justify-center gap-2 active:scale-95"
+                    >
+                      <ScanLine className="w-5 h-5" /> Scan Another Item
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-                {/* ✅ CLEAR CONFIRM BUTTONS */}
-                <div className="flex gap-2 mb-2">
-                  <button onClick={() => { setScannedItem(null); setBarcodeInput(''); setShowJobPicker(false); setSelectedJobForScan(''); setScanMode('camera'); setTimeout(() => startScanner(), 300) }} className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">
-                    Scan Again
-                  </button>
-                  <button onClick={handleRecordUsage} disabled={scanning} className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg">
-                    {scanning ? 'Moving...' : <><Check className="w-4 h-4" /> Confirm & Move to Job</>}
-                  </button>
-                </div>
-              </>
-            )}
+      {/* PHOTO MODAL */}
+      {showPhotoModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowPhotoModal(false)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Upload {photoType === 'before' ? 'Before' : 'After'} Photo</h3>
+            <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelect} className="w-full mb-3 text-sm" />
+            {selectedFile && <p className="text-xs text-emerald-600 mb-2">✅ {selectedFile.name}</p>}
+            <input type="text" value={photoCaption} onChange={e => setPhotoCaption(e.target.value)} placeholder="Caption (optional)" className="w-full p-2 border rounded-lg mb-3 text-sm" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowPhotoModal(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Cancel</button>
+              <button onClick={handleUploadPhoto} disabled={!selectedFile} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">Upload</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUPPLIES MODAL */}
+      {showSuppliesModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowSuppliesModal(false)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Request Supplies</h3>
+            <input type="text" value={supplyItem} onChange={e => setSupplyItem(e.target.value)} placeholder="Item name" className="w-full p-2 border rounded-lg mb-2 text-sm" />
+            <input type="number" value={supplyQty} onChange={e => setSupplyQty(parseInt(e.target.value) || 1)} min="1" placeholder="Quantity" className="w-full p-2 border rounded-lg mb-3 text-sm" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowSuppliesModal(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Cancel</button>
+              <button onClick={handleSuppliesRequest} disabled={!supplyItem} className="flex-1 py-2.5 bg-purple-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">Request</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INCIDENT MODAL */}
+      {showIncidentModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowIncidentModal(false)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Report Incident</h3>
+            <input type="text" value={incidentTitle} onChange={e => setIncidentTitle(e.target.value)} placeholder="Incident title *" className="w-full p-2 border rounded-lg mb-2 text-sm" />
+            <textarea value={incidentDesc} onChange={e => setIncidentDesc(e.target.value)} placeholder="Description..." rows={3} className="w-full p-2 border rounded-lg mb-2 text-sm" />
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <select value={incidentType} onChange={e => setIncidentType(e.target.value)} className="p-2 border rounded-lg text-sm">
+                <option value="accident">Accident</option><option value="injury">Injury</option><option value="property_damage">Property Damage</option><option value="near_miss">Near Miss</option><option value="other">Other</option>
+              </select>
+              <select value={incidentSeverity} onChange={e => setIncidentSeverity(e.target.value)} className="p-2 border rounded-lg text-sm">
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowIncidentModal(false)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold">Cancel</button>
+              <button onClick={handleIncidentReport} disabled={!incidentTitle} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold disabled:opacity-50">Report</button>
+            </div>
           </div>
         </div>
       )}
