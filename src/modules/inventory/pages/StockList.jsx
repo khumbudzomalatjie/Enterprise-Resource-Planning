@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useInventoryStore from '../store/inventoryStore'
 import useThemeStore from '../../../store/themeStore'
-import { Search, Package, Plus, Filter, ChevronRight, ArrowLeft, Sparkles, Sun, Moon } from 'lucide-react'
+import { Search, Package, Plus, Filter, ChevronRight, ArrowLeft, Sparkles, Sun, Moon, Barcode } from 'lucide-react'
 
 export default function StockList() {
   const { items, fetchItems, fetchCategories, categories, loading } = useInventoryStore()
@@ -112,6 +112,7 @@ export default function StockList() {
                       <div>
                         <h3 className="font-semibold text-slate-800 dark:text-white">{item.name}</h3>
                         <p className="text-xs text-slate-500">{item.item_code}</p>
+                        {item.barcode && <p className="text-xs text-slate-400 flex items-center gap-1"><Barcode className="w-3 h-3" /> {item.barcode}</p>}
                       </div>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs ${stockStatus.color}`}>{stockStatus.label}</span>
