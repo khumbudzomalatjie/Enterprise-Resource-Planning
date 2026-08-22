@@ -22,12 +22,18 @@ export const mobileApi = {
         data = created
       }
     }
-    await supabase.rpc('log_employee_action', { p_employee_id: data?.id, p_action_type: 'mobile_login', p_description: 'Logged into mobile app', p_module: 'mobile' })
+    try {
+      await supabase.rpc('log_employee_action', { p_employee_id: data?.id, p_action_type: 'mobile_login', p_description: 'Logged into mobile app', p_module: 'mobile' })
+    } catch {}
     return { data }
   },
 
   async logAction(employeeId, actionType, description, refId = null, refType = null, lat = null, lng = null) {
-    await supabase.rpc('log_employee_action', { p_employee_id: employeeId, p_action_type: actionType, p_description: description, p_module: 'mobile', p_reference_id: refId, p_reference_type: refType, p_lat: lat, p_lng: lng })
+    try {
+      await supabase.rpc('log_employee_action', { p_employee_id: employeeId, p_action_type: actionType, p_description: description, p_module: 'mobile', p_reference_id: refId, p_reference_type: refType, p_lat: lat, p_lng: lng })
+    } catch (err) {
+      console.warn('logAction error (non-critical):', err.message)
+    }
   },
 
   // ============================================
@@ -316,7 +322,7 @@ export const mobileApi = {
       if (!publicUrl) return { error: 'Failed to get public URL' }
       const { data, error: dbError } = await supabase.from('job_photos').insert([{ job_id: jobId, employee_id: employeeId, photo_type: type, photo_url: publicUrl, caption: caption || '' }]).select().single()
       if (dbError) return { error: dbError.message }
-      if (!error) await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
+      await mobileApi.logAction(employeeId, 'photo_uploaded', `Uploaded ${type} photo`, jobId, 'job')
       return { data, error: null }
     } catch (err) { return { error: err.message || 'Upload failed' } }
   },
@@ -470,66 +476,93 @@ export const mobileApi = {
     return { data, error }
   },
 
+  // ✅ FIXED: Proper error handling, no hanging
   async recordInventoryUsage(jobId, employeeId, inventoryItemId, quantity, notes = '') {
-    const { data: item, error: itemError } = await supabase
-      .from('inventory_items')
-      .select('id, name, item_code, barcode, current_stock, unit, unit_cost')
-      .eq('id', inventoryItemId)
-      .single()
+    try {
+      console.log('📦 Recording inventory usage:', { jobId, employeeId, itemId: inventoryItemId, quantity })
 
-    if (itemError) return { success: false, error: itemError.message }
-    if (!item) return { success: false, error: 'Inventory item not found' }
+      // 1. Get item
+      const { data: item, error: itemError } = await supabase
+        .from('inventory_items')
+        .select('id, name, item_code, barcode, current_stock, unit, unit_cost')
+        .eq('id', inventoryItemId)
+        .single()
 
-    if (item.current_stock < quantity) {
-      return { success: false, error: `Insufficient stock. Available: ${item.current_stock} ${item.unit}` }
+      if (itemError) {
+        console.error('❌ Item fetch error:', itemError.message)
+        return { success: false, error: itemError.message }
+      }
+
+      if (!item) {
+        return { success: false, error: 'Item not found' }
+      }
+
+      if (item.current_stock < quantity) {
+        return { success: false, error: `Not enough stock. Available: ${item.current_stock}` }
+      }
+
+      // 2. Get user
+      const { data: userData } = await supabase.auth.getUser()
+
+      // 3. Insert stock movement
+      const { error: movementError } = await supabase
+        .from('stock_movements')
+        .insert([{
+          item_id: inventoryItemId,
+          movement_type: 'job_usage',
+          quantity: -quantity,
+          unit_cost: item.unit_cost || 0,
+          reference_type: 'job',
+          reference_id: jobId,
+          job_id: jobId,
+          performed_by: userData?.user?.id || null,
+          movement_date: new Date().toISOString().split('T')[0],
+          status: 'completed',
+          notes: notes || `Scanned out for job`
+        }])
+
+      if (movementError) {
+        console.error('❌ Movement insert error:', movementError.message)
+        return { success: false, error: movementError.message }
+      }
+
+      // 4. Update stock (use direct value, not raw)
+      const newStock = parseFloat(item.current_stock) - quantity
+      const { error: stockError } = await supabase
+        .from('inventory_items')
+        .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+        .eq('id', inventoryItemId)
+
+      if (stockError) {
+        console.warn('⚠️ Stock update warning (movement recorded):', stockError.message)
+      }
+
+      // 5. Record supplies (non-critical)
+      try {
+        await supabase
+          .from('job_supplies_used')
+          .insert([{
+            job_id: jobId,
+            supply_id: inventoryItemId,
+            quantity_used: quantity,
+            used_by: userData?.user?.id || null,
+            used_at: new Date().toISOString(),
+            notes: notes || 'Barcode scan out'
+          }])
+      } catch (suppliesError) {
+        console.warn('⚠️ Supplies log error:', suppliesError)
+      }
+
+      // 6. Log action (non-critical)
+      await mobileApi.logAction(employeeId, 'inventory_scanned', `Scanned out ${quantity} x ${item.name}`, jobId, 'job')
+
+      console.log('✅ Inventory usage recorded successfully!')
+      return { success: true, item, quantity }
+
+    } catch (error) {
+      console.error('❌ Unexpected error:', error)
+      return { success: false, error: error.message || 'Unexpected error' }
     }
-
-    const userData = await supabase.auth.getUser()
-
-    const { error: movementError } = await supabase
-      .from('stock_movements')
-      .insert([{
-        item_id: inventoryItemId,
-        movement_type: 'job_usage',
-        quantity: -quantity,
-        unit_cost: item.unit_cost,
-        reference_type: 'job',
-        reference_id: jobId,
-        job_id: jobId,
-        performed_by: userData.user?.id,
-        movement_date: new Date().toISOString().split('T')[0],
-        status: 'completed',
-        notes: notes || `Scanned out for job by employee ${employeeId}`
-      }])
-
-    if (movementError) {
-      console.error('Movement error:', movementError)
-      return { success: false, error: movementError.message }
-    }
-
-    const { error: stockError } = await supabase
-      .from('inventory_items')
-      .update({ current_stock: supabase.raw(`current_stock - ${quantity}`), updated_at: new Date().toISOString() })
-      .eq('id', inventoryItemId)
-
-    if (stockError) console.error('Stock update error:', stockError)
-
-    const { error: suppliesError } = await supabase
-      .from('job_supplies_used')
-      .insert([{
-        job_id: jobId,
-        supply_id: inventoryItemId,
-        quantity_used: quantity,
-        used_by: userData.user?.id,
-        used_at: new Date().toISOString(),
-        notes: notes || 'Barcode scan out'
-      }])
-
-    if (suppliesError) console.error('Supplies used error:', suppliesError)
-
-    await mobileApi.logAction(employeeId, 'inventory_scanned', `Scanned out ${quantity} x ${item.name} for job`, jobId, 'job')
-
-    return { success: true, item, quantity }
   },
 
   async getJobInventoryUsage(jobId) {
@@ -548,11 +581,9 @@ export const mobileApi = {
     const today = new Date().toISOString().split('T')[0]
     const now = new Date()
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
-    const weekEnd = new Date(now); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23, 59, 59, 999)
-    const [{ data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance }, { data: completedToday }, { data: notifications }] = await Promise.all([
+    const [{ data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance }, { data: completedToday }] = await Promise.all([
       mobileApi.getMyJobs(employeeId), mobileApi.getTodayAttendance(employeeId), mobileApi.getWeeklyAttendance(employeeId),
-      supabase.from('field_job_assignments').select('id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`).lte('completed_at', `${today}T23:59:59`),
-      supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', employeeId).eq('is_read', false)
+      supabase.from('field_job_assignments').select('id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`).lte('completed_at', `${today}T23:59:59`)
     ])
     const totalWeekMs = (weeklyAttendance || []).reduce((sum, a) => {
       if (a.clock_in_time && a.clock_out_time) return sum + (new Date(a.clock_out_time) - new Date(a.clock_in_time))
@@ -561,29 +592,23 @@ export const mobileApi = {
     return {
       myJobsCount: myJobs?.length || 0, weeklyHours: Math.round((totalWeekMs / 3600000) * 10) / 10,
       completedToday: completedToday?.length || 0, isClockedIn: !!todayAttendance?.clock_in_time && !todayAttendance?.clock_out_time,
-      clockInTime: todayAttendance?.clock_in_time || null, clockOutTime: todayAttendance?.clock_out_time || null,
-      unreadNotifications: notifications?.count || 0
+      clockInTime: todayAttendance?.clock_in_time || null, clockOutTime: todayAttendance?.clock_out_time || null
     }
   },
 
   async getKPIData(employeeId) {
     const today = new Date().toISOString().split('T')[0]
     const now = new Date()
-    const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
-    const [{ data: completedToday }, { data: completedWeek }, { data: completedMonth }, { data: completedYear }, { data: allCompleted }] = await Promise.all([
+    const [{ data: completedToday }, { data: completedMonth }, { data: allCompleted }] = await Promise.all([
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${today}T00:00:00`),
-      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', weekStart.toISOString()),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${monthStart}T00:00:00`),
-      supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed').gte('completed_at', `${yearStart}T00:00:00`),
       supabase.from('field_job_assignments').select('id').eq('employee_id', employeeId).eq('assignment_status', 'completed')
     ])
     return {
-      completedToday: completedToday?.length || 0, completedWeek: completedWeek?.length || 0,
-      completedMonth: completedMonth?.length || 0, completedYear: completedYear?.length || 0,
-      totalCompleted: allCompleted?.length || 0,
-      avgPerDay: allCompleted?.length > 0 ? Math.round((allCompleted.length / Math.max(1, Math.ceil((now - new Date(yearStart)) / 86400000))) * 10) / 10 : 0
+      completedToday: completedToday?.length || 0,
+      completedMonth: completedMonth?.length || 0,
+      totalCompleted: allCompleted?.length || 0
     }
   }
 }
