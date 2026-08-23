@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import { 
   Package, Search, Download, ChevronDown, ChevronUp,
   ChevronRight, Sun, Moon, Sparkles, Edit,
-  AlertTriangle, CheckCircle2, Plus, RefreshCw,
+  AlertTriangle, Plus, RefreshCw,
   FileSpreadsheet, FileText, Beaker, Shield, HardHat, ShoppingCart
 } from 'lucide-react'
 
@@ -29,18 +29,16 @@ export default function ConsumableProducts() {
     loadProducts()
   }, [categoryTab])
 
-  // ✅ FIXED: Separate queries, no FK joins
+  // ✅ Load products with separate queries
   const loadProducts = async () => {
     setLoading(true)
     
-    // Get items WITHOUT joins first
     let query = supabase
       .from('inventory_items')
       .select('*')
       .eq('is_consumable', true)
       .order('name')
 
-    // Apply category filter by getting category ID first
     if (categoryTab === 'chemicals' || categoryTab === 'ppe' || categoryTab === 'equipment') {
       const categoryName = categoryTab === 'chemicals' ? 'Cleaning Chemicals' : 
                            categoryTab === 'ppe' ? 'PPE & Safety' : 'Cleaning Equipment'
@@ -72,21 +70,18 @@ export default function ConsumableProducts() {
       return
     }
 
-    // Get categories separately
     const catIds = [...new Set(items.map(i => i.category_id).filter(Boolean))]
     const { data: categories } = await supabase
       .from('item_categories')
       .select('id, name, color')
       .in('id', catIds)
 
-    // Get suppliers separately
     const supIds = [...new Set(items.map(i => i.preferred_supplier_id).filter(Boolean))]
     const { data: suppliers } = await supabase
       .from('suppliers')
       .select('id, company_name')
       .in('id', supIds)
 
-    // Merge manually
     const mergedProducts = items.map(item => ({
       ...item,
       item_categories: (categories || []).find(c => c.id === item.category_id) || null,
@@ -130,9 +125,9 @@ export default function ConsumableProducts() {
   }
 
   const getStockStatus = (product) => {
-    if (product.current_stock <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', dot: 'bg-red-500' }
-    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', dot: 'bg-amber-500' }
-    return { label: 'In Stock', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', dot: 'bg-emerald-500' }
+    if (product.current_stock <= 0) return { label: 'Out of Stock', dot: 'bg-red-500' }
+    if (product.current_stock <= product.reorder_point) return { label: 'Low Stock', dot: 'bg-amber-500' }
+    return { label: 'In Stock', dot: 'bg-emerald-500' }
   }
 
   const toggleSelectAll = () => {
@@ -145,17 +140,33 @@ export default function ConsumableProducts() {
     else setSelectedRows([...selectedRows, id])
   }
 
-  const getLogoBase64 = () => {
-    const logoImg = document.querySelector('img[src="/logo.png"]')
-    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
-      const canvas = document.createElement('canvas')
-      canvas.width = logoImg.naturalWidth
-      canvas.height = logoImg.naturalHeight
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(logoImg, 0, 0)
-      return canvas.toDataURL('image/png')
+  // ✅ FIXED: Get logo as base64 from the actual /logo.png file
+  const getLogoBase64 = async () => {
+    try {
+      // Try to fetch the logo from public folder
+      const response = await fetch('/logo.png')
+      const blob = await response.blob()
+      
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result)
+        reader.readAsDataURL(blob)
+      })
+    } catch (err) {
+      console.error('Logo fetch error:', err)
+      
+      // Fallback: Try to get from an img element already on page
+      const logoImg = document.querySelector('img[src="/logo.png"]')
+      if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+        const canvas = document.createElement('canvas')
+        canvas.width = logoImg.naturalWidth
+        canvas.height = logoImg.naturalHeight
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(logoImg, 0, 0)
+        return canvas.toDataURL('image/png')
+      }
+      return null
     }
-    return null
   }
 
   const exportToExcel = async () => {
@@ -168,13 +179,16 @@ export default function ConsumableProducts() {
       return
     }
 
+    // Get logo as base64
+    const logoBase64 = await getLogoBase64()
+    console.log('Logo base64:', logoBase64 ? '✅ Loaded' : '❌ Not found')
+
     const today = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })
     const categoryLabel = categoryTab === 'all' ? 'All Products' : categoryTab.charAt(0).toUpperCase() + categoryTab.slice(1)
-    const logoBase64 = getLogoBase64()
     
     const companyName = 'NDANDULENI GROUP'
     const companyTagline = 'Professional Cleaning & Hygiene Services'
-    const companyInfo = '123 Main Street, Johannesburg, 2000 | Tel: +27 11 234 5678 | info@ndanduleni.co.za'
+    const companyInfo = '2220 Manthata Street, Midrand, 1685 | Tel: 070 419 9457 | account@ndandulenigroup.co.za'
     
     let html = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -183,7 +197,8 @@ export default function ConsumableProducts() {
         <style>
           body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; }
           .report-header { background: linear-gradient(135deg, #059669, #047857); color: white; padding: 20px 25px; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 20px; }
-          .report-header img { width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3); object-fit: contain; background: white; padding: 5px; }
+          .report-header img { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3); object-fit: contain; background: white; padding: 5px; }
+          .report-header .logo-placeholder { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; color: white; }
           .report-header h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
           .report-header p { margin: 3px 0 0 0; font-size: 11px; opacity: 0.9; }
           .subheader { background: #f0fdf4; padding: 12px 25px; border-left: 4px solid #059669; border-right: 4px solid #059669; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #374151; }
@@ -214,7 +229,10 @@ export default function ConsumableProducts() {
       </head>
       <body>
         <div class="report-header">
-          ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" />` : ''}
+          ${logoBase64 
+            ? `<img src="${logoBase64}" alt="Ndanduleni Group Logo" />`
+            : `<div class="logo-placeholder">NG</div>`
+          }
           <div>
             <h1>${companyName}</h1>
             <p>${companyTagline}</p>
@@ -304,13 +322,18 @@ export default function ConsumableProducts() {
     URL.revokeObjectURL(url)
     
     setShowExportMenu(false)
-    toast.success(`📥 Exported ${dataToExport.length} products to Excel`)
+    toast.success(`📥 Exported ${dataToExport.length} products to Excel with logo`)
   }
 
   const exportToCSV = () => {
     const dataToExport = selectedRows.length > 0 
       ? sortedProducts.filter(p => selectedRows.includes(p.id))
       : sortedProducts
+
+    if (dataToExport.length === 0) {
+      toast.error('No data to export')
+      return
+    }
 
     const rows = dataToExport.map(p => ({
       'Item Code': p.item_code || '',
@@ -322,11 +345,6 @@ export default function ConsumableProducts() {
       'Purchase Price (ZAR)': p.unit_cost || 0,
       'Status': getStockStatus(p).label
     }))
-
-    if (rows.length === 0) {
-      toast.error('No data to export')
-      return
-    }
 
     const csv = [
       Object.keys(rows[0]).join(','),
@@ -358,9 +376,9 @@ export default function ConsumableProducts() {
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-sm font-semibold tracking-wide text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hidden sm:inline">ERP</span>
         </div>
-        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110">
+        <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center">
           {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
         </button>
       </div>
@@ -377,19 +395,16 @@ export default function ConsumableProducts() {
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
               <Package className="w-8 h-8 text-emerald-600" />Consumable Products
             </h1>
-            <p className="text-slate-500 mt-1">
-              {stats.total} products • Chemicals, PPE & equipment used on jobs
-            </p>
+            <p className="text-slate-500 mt-1">{stats.total} products • Chemicals, PPE & equipment</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={loadProducts} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm">
+            <button onClick={loadProducts} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-slate-600 text-white flex items-center gap-2 text-sm">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
             
             <div className="relative">
-              <button onClick={() => setShowExportMenu(!showExportMenu)} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
-                <Download className="w-4 h-4" /> Export
-                <ChevronDown className="w-3 h-3" />
+              <button onClick={() => setShowExportMenu(!showExportMenu)} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-emerald-600 text-white flex items-center gap-2 text-sm">
+                <Download className="w-4 h-4" /> Export <ChevronDown className="w-3 h-3" />
               </button>
               <AnimatePresence>
                 {showExportMenu && (
@@ -398,15 +413,15 @@ export default function ConsumableProducts() {
                     <button onClick={exportToExcel} className="w-full text-left px-4 py-3 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-sm flex items-center gap-3">
                       <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
                       <div>
-                        <p className="font-medium text-slate-800 dark:text-white">Excel (.xls)</p>
-                        <p className="text-xs text-slate-500">Formatted with logo</p>
+                        <p className="font-medium">Excel (.xls)</p>
+                        <p className="text-xs text-slate-500">With logo & formatting</p>
                       </div>
                     </button>
                     <button onClick={exportToCSV} className="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm flex items-center gap-3">
                       <FileText className="w-5 h-5 text-blue-600" />
                       <div>
-                        <p className="font-medium text-slate-800 dark:text-white">CSV</p>
-                        <p className="text-xs text-slate-500">Plain data format</p>
+                        <p className="font-medium">CSV</p>
+                        <p className="text-xs text-slate-500">Plain data</p>
                       </div>
                     </button>
                   </motion.div>
@@ -414,7 +429,7 @@ export default function ConsumableProducts() {
               </AnimatePresence>
             </div>
 
-            <button onClick={() => navigate('/inventory/items/new')} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-sm">
+            <button onClick={() => navigate('/inventory/items/new')} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-blue-600 text-white flex items-center gap-2 text-sm">
               <Plus className="w-4 h-4" /> Add Product
             </button>
           </div>
@@ -430,13 +445,11 @@ export default function ConsumableProducts() {
           ].map(tab => (
             <button key={tab.id} onClick={() => { setCategoryTab(tab.id); setSelectedRows([]) }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                categoryTab === tab.id 
-                  ? 'bg-emerald-600 text-white shadow-lg' 
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                categoryTab === tab.id ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
               }`}>
               <tab.icon className="w-4 h-4" />
               <span>{tab.label}</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${categoryTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-600'}`}>
+              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${categoryTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200'}`}>
                 {tab.count}
               </span>
             </button>
@@ -449,124 +462,85 @@ export default function ConsumableProducts() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by item name, code, category, or supplier..."
-              className="w-full pl-10 pr-4 py-2.5 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
+              className="w-full pl-10 pr-4 py-2.5 neu-inset rounded-xl text-sm" />
           </div>
         </div>
 
         {/* Products Table */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl overflow-hidden">
           {loading ? (
-            <div className="text-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto"></div><p className="text-slate-500 mt-3">Loading products...</p></div>
+            <div className="text-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mx-auto"></div><p className="text-slate-500 mt-3">Loading...</p></div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-800 z-10">
-                    <tr className="border-b-2 border-slate-200 dark:border-slate-700">
-                      <th className="py-4 px-4 w-10">
-                        <input type="checkbox" checked={selectedRows.length === sortedProducts.length && sortedProducts.length > 0}
-                          onChange={toggleSelectAll} className="w-4 h-4 rounded" />
-                      </th>
-                      <th className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider py-4 px-4 cursor-pointer hover:text-emerald-600" onClick={() => handleSort('name')}>
-                        <div className="flex items-center gap-1">Item Name {getSortIcon('name')}</div>
-                      </th>
-                      <th className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider py-4 px-4 cursor-pointer hover:text-emerald-600" onClick={() => handleSort('category')}>
-                        <div className="flex items-center gap-1">Category {getSortIcon('category')}</div>
-                      </th>
-                      <th className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider py-4 px-4 cursor-pointer hover:text-emerald-600" onClick={() => handleSort('stock')}>
-                        <div className="flex items-center gap-1 justify-center">Quantity {getSortIcon('stock')}</div>
-                      </th>
-                      <th className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider py-4 px-4 cursor-pointer hover:text-emerald-600" onClick={() => handleSort('supplier')}>
-                        <div className="flex items-center gap-1">Supplier {getSortIcon('supplier')}</div>
-                      </th>
-                      <th className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider py-4 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedProducts.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-16">
-                          <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                          <p className="text-slate-500 text-lg">No products found</p>
-                          <p className="text-slate-400 text-sm">Try adjusting your search or category filter</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      sortedProducts.map((product) => {
-                        const status = getStockStatus(product)
-                        return (
-                          <tr key={product.id} 
-                            className={`border-b border-slate-100 dark:border-slate-700/50 transition-all hover:bg-emerald-50/30 dark:hover:bg-emerald-900/5 ${
-                              selectedRows.includes(product.id) ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : ''
-                            }`}>
-                            <td className="py-4 px-4">
-                              <input type="checkbox" checked={selectedRows.includes(product.id)}
-                                onChange={() => toggleSelectRow(product.id)} className="w-4 h-4 rounded" />
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dot}`}></div>
-                                <div>
-                                  <p className="font-semibold text-sm text-slate-800 dark:text-white">{product.name}</p>
-                                  <p className="text-xs text-slate-400 font-mono">{product.item_code}</p>
-                                </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-slate-200 dark:border-slate-700">
+                    <th className="py-4 px-4 w-10">
+                      <input type="checkbox" checked={selectedRows.length === sortedProducts.length && sortedProducts.length > 0}
+                        onChange={toggleSelectAll} className="w-4 h-4 rounded" />
+                    </th>
+                    <th className="text-left text-xs font-bold uppercase py-4 px-4 cursor-pointer" onClick={() => handleSort('name')}>
+                      Item Name {getSortIcon('name')}
+                    </th>
+                    <th className="text-left text-xs font-bold uppercase py-4 px-4 cursor-pointer" onClick={() => handleSort('category')}>
+                      Category {getSortIcon('category')}
+                    </th>
+                    <th className="text-center text-xs font-bold uppercase py-4 px-4 cursor-pointer" onClick={() => handleSort('stock')}>
+                      Qty {getSortIcon('stock')}
+                    </th>
+                    <th className="text-left text-xs font-bold uppercase py-4 px-4">Supplier</th>
+                    <th className="text-center text-xs font-bold uppercase py-4 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedProducts.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-16"><Package className="w-16 h-16 text-slate-300 mx-auto mb-4" /><p className="text-slate-500">No products found</p></td></tr>
+                  ) : (
+                    sortedProducts.map((product) => {
+                      const status = getStockStatus(product)
+                      return (
+                        <tr key={product.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${selectedRows.includes(product.id) ? 'bg-emerald-50/50' : ''}`}>
+                          <td className="py-4 px-4">
+                            <input type="checkbox" checked={selectedRows.includes(product.id)}
+                              onChange={() => toggleSelectRow(product.id)} className="w-4 h-4 rounded" />
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2 h-2 rounded-full ${status.dot}`}></div>
+                              <div>
+                                <p className="font-semibold text-sm">{product.name}</p>
+                                <p className="text-xs text-slate-400 font-mono">{product.item_code}</p>
                               </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              {product.item_categories && (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                                  style={{ backgroundColor: (product.item_categories.color || '#10b981') + '15', color: product.item_categories.color || '#10b981' }}>
-                                  {product.item_categories.name === 'Cleaning Chemicals' && <Beaker className="w-3 h-3" />}
-                                  {product.item_categories.name === 'PPE & Safety' && <Shield className="w-3 h-3" />}
-                                  {product.item_categories.name === 'Cleaning Equipment' && <HardHat className="w-3 h-3" />}
-                                  {product.item_categories.name}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-4 px-4 text-center">
-                              <span className={`text-lg font-bold ${
-                                product.current_stock <= 0 ? 'text-red-600' : 
-                                product.current_stock <= product.reorder_point ? 'text-amber-600' : 
-                                'text-emerald-600'
-                              }`}>
-                                {product.current_stock}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            {product.item_categories && (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-medium"
+                                style={{ backgroundColor: (product.item_categories.color || '#10b981') + '15', color: product.item_categories.color }}>
+                                {product.item_categories.name}
                               </span>
-                              <span className="text-xs text-slate-400 ml-1">{product.unit}</span>
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex items-center gap-2">
-                                <ShoppingCart className="w-4 h-4 text-slate-400" />
-                                <span className="text-sm text-slate-600 dark:text-slate-400">
-                                  {product.suppliers?.company_name || 'No supplier'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-4 px-4 text-center">
-                              <button onClick={() => navigate(`/inventory/items/${product.id}`)} 
-                                className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" title="View/Edit">
-                                <Edit className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
-                <p className="text-sm text-slate-500">
-                  {sortedProducts.length} product{sortedProducts.length !== 1 ? 's' : ''} • 
-                  {selectedRows.length > 0 && <span className="text-emerald-600 font-medium"> {selectedRows.length} selected</span>}
-                </p>
-                <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> In Stock</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Low Stock</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Out of Stock</span>
-                </div>
-              </div>
-            </>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`text-lg font-bold ${product.current_stock <= 0 ? 'text-red-600' : product.current_stock <= product.reorder_point ? 'text-amber-600' : 'text-emerald-600'}`}>
+                              {product.current_stock}
+                            </span>
+                            <span className="text-xs text-slate-400 ml-1">{product.unit}</span>
+                          </td>
+                          <td className="py-4 px-4 text-sm text-slate-600">{product.suppliers?.company_name || '—'}</td>
+                          <td className="py-4 px-4 text-center">
+                            <button onClick={() => navigate(`/inventory/items/${product.id}`)} 
+                              className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600">
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </motion.div>
       </main>
