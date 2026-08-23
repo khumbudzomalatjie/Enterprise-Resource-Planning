@@ -14,10 +14,27 @@ export const mobileApi = {
         await supabase.from('employees').update({ user_id: userId }).eq('id', byEmail.id)
         data = byEmail
       } else {
+        // ✅ Sequential employee code: NG0001, NG0002, etc.
+        const { data: lastEmp } = await supabase
+          .from('employees')
+          .select('employee_code')
+          .like('employee_code', 'NG%')
+          .order('employee_code', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        
+        let nextNum = 1
+        if (lastEmp?.employee_code) {
+          const match = lastEmp.employee_code.match(/NG(\d+)/)
+          if (match) nextNum = parseInt(match[1]) + 1
+        }
+        
+        const newCode = 'NG' + String(nextNum).padStart(4, '0')
+        
         const { data: created } = await supabase.from('employees').insert([{
           user_id: userId, email, first_name: email?.split('@')[0] || 'Worker',
           last_name: '', employment_status: 'active', department: 'Cleaning',
-          employee_code: 'MOB-' + Date.now().toString(36).toUpperCase().slice(-4)
+          employee_code: newCode
         }]).select().single()
         data = created
       }
@@ -40,16 +57,28 @@ export const mobileApi = {
   // JOBS
   // ============================================
   async getOpenJobs() {
+    // Get all available jobs
     const { data: availableJobs } = await supabase
       .from('jobs')
-      .select('*, clients(company_name, phone, city), job_categories(name, color)')
+      .select('*')
       .in('status', ['pending', 'scheduled'])
       .order('scheduled_date')
       .limit(50)
 
     if (!availableJobs?.length) return { data: [] }
 
+    // Get job IDs
     const jobIds = availableJobs.map(j => j.id)
+
+    // Get clients separately
+    const clientIds = [...new Set(availableJobs.map(j => j.client_id).filter(Boolean))]
+    const { data: clients } = await supabase.from('clients').select('id, company_name, phone, city').in('id', clientIds)
+
+    // Get categories separately
+    const catIds = [...new Set(availableJobs.map(j => j.job_category_id).filter(Boolean))]
+    const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
+
+    // Get active assignments
     const { data: activeAssignments } = await supabase
       .from('field_job_assignments')
       .select('job_id, employee_id, assignment_status')
@@ -57,7 +86,13 @@ export const mobileApi = {
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
 
     const assignedJobIds = new Set((activeAssignments || []).map(a => a.job_id))
-    const trulyOpenJobs = availableJobs.filter(j => !assignedJobIds.has(j.id))
+    const trulyOpenJobs = availableJobs
+      .filter(j => !assignedJobIds.has(j.id))
+      .map(j => ({
+        ...j,
+        clients: (clients || []).find(c => c.id === j.client_id) || null,
+        job_categories: (categories || []).find(c => c.id === j.job_category_id) || null
+      }))
 
     return { data: trulyOpenJobs }
   },
@@ -74,26 +109,94 @@ export const mobileApi = {
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
     
-    const { data: jobs } = await supabase
-      .from('jobs')
-      .select('*, clients(company_name, phone, city), job_categories(name, color)')
-      .in('id', jobIds)
+    const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
+
+    // Get clients
+    const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
+    const { data: clients } = await supabase.from('clients').select('id, company_name, phone, city').in('id', clientIds)
+
+    // Get categories
+    const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
+    const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
     
-    const activeJobs = (jobs || []).filter(j => j.status !== 'completed' && j.status !== 'cancelled')
-    return { data: activeJobs.map(j => ({ ...j, assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status })) }
+    const activeJobs = (jobs || [])
+      .filter(j => j.status !== 'completed' && j.status !== 'cancelled')
+      .map(j => ({
+        ...j,
+        clients: (clients || []).find(c => c.id === j.client_id) || null,
+        job_categories: (categories || []).find(c => c.id === j.job_category_id) || null,
+        assignment_status: assignments.find(a => a.job_id === j.id)?.assignment_status
+      }))
+
+    return { data: activeJobs }
   },
 
   async getCompletedJobs(employeeId) {
-    const { data: assignments } = await supabase.from('field_job_assignments').select('job_id, completed_at').eq('employee_id', employeeId).eq('assignment_status', 'completed').order('completed_at', { ascending: false }).limit(50)
+    const { data: assignments } = await supabase.from('field_job_assignments')
+      .select('job_id, completed_at')
+      .eq('employee_id', employeeId)
+      .eq('assignment_status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(50)
+    
     if (!assignments?.length) return { data: [] }
-    const jobIds = assignments.map(a => a.job_id)
-    const { data: jobs } = await supabase.from('jobs').select('*, clients(company_name), job_categories(name, color)').in('id', jobIds)
-    return { data: (jobs || []).map(j => ({ ...j, completed_at: assignments.find(a => a.job_id === j.id)?.completed_at })) }
+    
+    const jobIds = assignments.map(a => a.job_id).filter(Boolean)
+    const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
+
+    // Get clients
+    const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
+    const { data: clients } = await supabase.from('clients').select('id, company_name').in('id', clientIds)
+
+    // Get categories
+    const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
+    const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
+
+    return { 
+      data: (jobs || []).map(j => ({ 
+        ...j, 
+        clients: (clients || []).find(c => c.id === j.client_id) || null,
+        job_categories: (categories || []).find(c => c.id === j.job_category_id) || null,
+        completed_at: assignments.find(a => a.job_id === j.id)?.completed_at 
+      })) 
+    }
   },
 
   async getJobDetail(jobId) {
-    const { data } = await supabase.from('jobs').select('*, clients(*), job_categories(*), field_job_assignments(*, employees(first_name, last_name, phone, employee_code)), job_checklist_items(*), job_photos(*), job_reports(*)').eq('id', jobId).single()
-    return { data }
+    const { data: job } = await supabase.from('jobs').select('*').eq('id', jobId).single()
+    if (!job) return { data: null }
+
+    // Get all related data separately
+    const [clientsResult, categoriesResult, assignmentsResult, checklistsResult, photosResult, reportsResult] = await Promise.all([
+      job.client_id ? supabase.from('clients').select('*').eq('id', job.client_id).single() : { data: null },
+      job.job_category_id ? supabase.from('job_categories').select('*').eq('id', job.job_category_id).single() : { data: null },
+      supabase.from('field_job_assignments').select('*').eq('job_id', jobId),
+      supabase.from('job_checklist_items').select('*').eq('job_id', jobId),
+      supabase.from('job_photos').select('*').eq('job_id', jobId),
+      supabase.from('job_reports').select('*').eq('job_id', jobId)
+    ])
+
+    // Get employee names for assignments
+    let assignmentsWithNames = assignmentsResult.data || []
+    if (assignmentsWithNames.length > 0) {
+      const empIds = [...new Set(assignmentsWithNames.map(a => a.employee_id).filter(Boolean))]
+      const { data: emps } = await supabase.from('employees').select('id, first_name, last_name, phone, employee_code').in('id', empIds)
+      const empMap = {}
+      ;(emps || []).forEach(e => { empMap[e.id] = e })
+      assignmentsWithNames = assignmentsWithNames.map(a => ({ ...a, employees: empMap[a.employee_id] || null }))
+    }
+
+    return {
+      data: {
+        ...job,
+        clients: clientsResult.data || null,
+        job_categories: categoriesResult.data || null,
+        field_job_assignments: assignmentsWithNames,
+        job_checklist_items: checklistsResult.data || [],
+        job_photos: photosResult.data || [],
+        job_reports: reportsResult.data || []
+      }
+    }
   },
 
   async selectJob(jobId, employeeId) {
@@ -126,9 +229,7 @@ export const mobileApi = {
       .update({ status: 'in_progress', updated_at: new Date().toISOString() })
       .eq('id', jobId)
     
-    if (jobErr) {
-      console.error('Job status update error:', jobErr)
-    }
+    if (jobErr) console.error('Job status update error:', jobErr)
 
     await mobileApi.logAction(employeeId, 'job_selected', 'Selected job', jobId, 'job')
     return { success: true }
@@ -142,9 +243,13 @@ export const mobileApi = {
     return { success: true }
   },
 
+  // ═══════════════════════════════════════════════
+  // ✅ COMPLETE JOB - Links invoice to Finance
+  // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
     console.log('🔄 Completing job:', jobId, 'Employee:', employeeId)
     
+    // 1. Update assignment to completed
     const { error: assignError } = await supabase
       .from('field_job_assignments')
       .update({
@@ -157,25 +262,29 @@ export const mobileApi = {
       .eq('job_id', jobId)
       .eq('employee_id', employeeId)
 
-    if (assignError) {
-      console.error('❌ Assignment error:', assignError)
-      return { success: false, error: assignError.message }
-    }
-    console.log('✅ Assignment updated')
+    if (assignError) return { success: false, error: assignError.message }
 
+    // 2. Get job details
     const { data: job, error: fetchError } = await supabase
       .from('jobs')
-      .select('*, clients(company_name, client_code, email), job_categories(name)')
+      .select('*')
       .eq('id', jobId)
       .single()
 
-    if (fetchError) {
-      console.error('❌ Fetch job error:', fetchError)
-      return { success: false, error: fetchError.message }
+    if (fetchError) return { success: false, error: fetchError.message }
+
+    // Get client info separately
+    let clientInfo = null
+    if (job.client_id) {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('company_name, email, phone, address_line1, city')
+        .eq('id', job.client_id)
+        .single()
+      clientInfo = client
     }
 
-    console.log('📋 Job:', job?.job_number, 'Amount:', job?.quoted_amount)
-
+    // 3. Mark job as completed
     const { error: jobError } = await supabase
       .from('jobs')
       .update({
@@ -186,25 +295,40 @@ export const mobileApi = {
       })
       .eq('id', jobId)
 
-    if (jobError) {
-      console.error('❌ Job update error:', jobError)
-      return { success: false, error: jobError.message }
-    }
-    console.log('✅ Job marked as completed')
+    if (jobError) return { success: false, error: jobError.message }
 
+    // 4. ✅ CREATE INVOICE AND LINK TO JOB
+    let invoiceId = null
     if (job && job.quoted_amount && job.quoted_amount > 0) {
-      const invoiceResult = await mobileApi.createInvoiceForJob(job)
-      console.log('📄 Invoice result:', invoiceResult.success ? 'Created: ' + invoiceResult.invoice?.invoice_number : 'Failed: ' + invoiceResult.error)
-    } else {
-      console.log('ℹ️ No invoice needed - zero amount')
+      const invoiceResult = await mobileApi.createInvoiceForJob(job, clientInfo)
+      
+      if (invoiceResult.success && invoiceResult.invoice) {
+        invoiceId = invoiceResult.invoice.id
+        
+        // ✅ LINK INVOICE TO JOB
+        const { error: linkError } = await supabase
+          .from('jobs')
+          .update({ invoice_id: invoiceId, updated_at: new Date().toISOString() })
+          .eq('id', jobId)
+        
+        if (linkError) {
+          console.warn('⚠️ Failed to link invoice to job:', linkError.message)
+        } else {
+          console.log('✅ Invoice linked to job:', invoiceResult.invoice.invoice_number)
+        }
+      }
     }
 
+    // 5. Log action
     await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
 
-    return { success: true, job }
+    return { success: true, job: { ...job, invoice_id: invoiceId } }
   },
 
-  async createInvoiceForJob(job) {
+  // ═══════════════════════════════════════════════
+  // ✅ CREATE INVOICE - Properly linked with job_id
+  // ═══════════════════════════════════════════════
+  async createInvoiceForJob(job, clientInfo = null) {
     console.log('📄 Creating invoice for:', job?.job_number)
     
     try {
@@ -221,16 +345,19 @@ export const mobileApi = {
         .from('invoices')
         .insert([{
           invoice_number: invoiceNumber,
-          client_id: job.client_id,
-          client_name: job.clients?.company_name || 'Client',
-          client_email: job.clients?.email || '',
-          client_address: job.site_address || '',
+          job_id: job.id,
+          client_id: job.client_id || null,
+          client_name: clientInfo?.company_name || job.client_name || 'Client',
+          client_email: clientInfo?.email || '',
+          client_phone: clientInfo?.phone || '',
+          client_address: clientInfo?.address_line1 || job.site_address || '',
           invoice_date: new Date().toISOString().split('T')[0],
           due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           subtotal: amount,
           tax_rate: taxRate,
           tax_amount: taxAmount,
           total_amount: totalAmount,
+          amount_paid: 0,
           status: 'sent',
           notes: `Job: ${job.job_number} - ${job.title || 'Cleaning Service'}`
         }])
@@ -244,23 +371,26 @@ export const mobileApi = {
 
       console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
 
+      // Insert invoice item
       const { error: itemError } = await supabase
         .from('invoice_items')
         .insert([{
           invoice_id: invoice.id,
           item_number: 1,
-          description: `${job.job_categories?.name || 'Cleaning Service'}: ${job.title || job.job_number}`,
+          description: `${job.title || 'Cleaning Service'}`,
           quantity: 1,
           unit: 'service',
           unit_price: amount,
-          tax_percent: taxRate
+          tax_percent: taxRate,
+          total_price: amount
         }])
 
       if (itemError) console.error('❌ Invoice item error:', itemError.message)
 
+      // Update quotation if exists
       if (job.quotation_id) {
         await supabase.from('quotations').update({
-          status: 'converted', converted_to_invoice: true, invoice_id: invoice.id, updated_at: new Date().toISOString()
+          status: 'converted', converted_to_invoice: true, invoice_id: invoice.id
         }).eq('id', job.quotation_id)
       }
 
@@ -382,17 +512,6 @@ export const mobileApi = {
     return { data, error }
   },
 
-  async uploadLeaveAttachment(leaveRequestId, employeeId, file) {
-    const ext = file.name.split('.').pop()
-    const path = `leave/${employeeId}/${leaveRequestId}-${Date.now()}.${ext}`
-    try { await supabase.storage.createBucket('leave-attachments', { public: true, fileSizeLimit: 10485760 }) } catch {}
-    const { error: upErr } = await supabase.storage.from('leave-attachments').upload(path, file, { upsert: true, contentType: file.type })
-    if (upErr) return { error: upErr.message }
-    const { data: { publicUrl } } = supabase.storage.from('leave-attachments').getPublicUrl(path)
-    const { data, error } = await supabase.from('leave_requests').update({ attachment_url: publicUrl, attachment_name: file.name, attachment_type: file.type, attachment_size: file.size }).eq('id', leaveRequestId).select().single()
-    return { data, error }
-  },
-
   // ============================================
   // MESSAGES
   // ============================================
@@ -421,28 +540,6 @@ export const mobileApi = {
     return { data, error }
   },
 
-  async getConversations(userId) {
-    const { data: participations } = await supabase.from('conversation_participants').select('conversation_id').eq('user_id', userId)
-    const convIds = (participations || []).map(p => p.conversation_id)
-    if (convIds.length === 0) {
-      const { data: messages } = await supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`).limit(100)
-      const otherUserIds = [...new Set((messages || []).flatMap(m => [m.sender_id, m.receiver_id]).filter(id => id !== userId))]
-      if (otherUserIds.length === 0) return { data: [] }
-      const { data: profiles } = await supabase.from('profiles').select('id, full_name, role').in('id', otherUserIds)
-      return { data: (profiles || []).map(p => ({ id: p.id, display_name: p.full_name, role: p.role, is_direct: true })) }
-    }
-    const { data: conversations } = await supabase.from('conversations').select('*').in('id', convIds)
-    const enriched = await Promise.all((conversations || []).map(async (conv) => {
-      const { data: participants } = await supabase.from('conversation_participants').select('user_id').eq('conversation_id', conv.id).neq('user_id', userId)
-      const ids = (participants || []).map(p => p.user_id)
-      const { data: profiles } = await supabase.from('profiles').select('full_name').in('id', ids)
-      const names = (profiles || []).map(p => p.full_name).join(', ')
-      const { data: lastMsg } = await supabase.from('messages').select('content, created_at').eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-      return { ...conv, display_name: names || conv.title, last_message: lastMsg?.content?.substring(0, 60), last_time: lastMsg?.created_at }
-    }))
-    return { data: enriched }
-  },
-
   // ============================================
   // NOTIFICATIONS
   // ============================================
@@ -465,7 +562,7 @@ export const mobileApi = {
   },
 
   // ============================================
-  // INVENTORY BARCODE SCANNING (STOCK OUT)
+  // INVENTORY BARCODE SCANNING
   // ============================================
   async searchInventoryByBarcode(barcode) {
     const { data, error } = await supabase
@@ -476,35 +573,20 @@ export const mobileApi = {
     return { data, error }
   },
 
-  // ✅ FIXED: Proper error handling, no hanging
   async recordInventoryUsage(jobId, employeeId, inventoryItemId, quantity, notes = '') {
     try {
-      console.log('📦 Recording inventory usage:', { jobId, employeeId, itemId: inventoryItemId, quantity })
-
-      // 1. Get item
       const { data: item, error: itemError } = await supabase
         .from('inventory_items')
         .select('id, name, item_code, barcode, current_stock, unit, unit_cost')
         .eq('id', inventoryItemId)
         .single()
 
-      if (itemError) {
-        console.error('❌ Item fetch error:', itemError.message)
-        return { success: false, error: itemError.message }
-      }
+      if (itemError) return { success: false, error: itemError.message }
+      if (!item) return { success: false, error: 'Item not found' }
+      if (item.current_stock < quantity) return { success: false, error: `Not enough stock. Available: ${item.current_stock}` }
 
-      if (!item) {
-        return { success: false, error: 'Item not found' }
-      }
-
-      if (item.current_stock < quantity) {
-        return { success: false, error: `Not enough stock. Available: ${item.current_stock}` }
-      }
-
-      // 2. Get user
       const { data: userData } = await supabase.auth.getUser()
 
-      // 3. Insert stock movement
       const { error: movementError } = await supabase
         .from('stock_movements')
         .insert([{
@@ -518,49 +600,25 @@ export const mobileApi = {
           performed_by: userData?.user?.id || null,
           movement_date: new Date().toISOString().split('T')[0],
           status: 'completed',
-          notes: notes || `Scanned out for job`
+          notes: notes || 'Scanned out for job'
         }])
 
-      if (movementError) {
-        console.error('❌ Movement insert error:', movementError.message)
-        return { success: false, error: movementError.message }
-      }
+      if (movementError) return { success: false, error: movementError.message }
 
-      // 4. Update stock (use direct value, not raw)
       const newStock = parseFloat(item.current_stock) - quantity
-      const { error: stockError } = await supabase
-        .from('inventory_items')
-        .update({ current_stock: newStock, updated_at: new Date().toISOString() })
-        .eq('id', inventoryItemId)
+      await supabase.from('inventory_items').update({ current_stock: newStock, updated_at: new Date().toISOString() }).eq('id', inventoryItemId)
 
-      if (stockError) {
-        console.warn('⚠️ Stock update warning (movement recorded):', stockError.message)
-      }
-
-      // 5. Record supplies (non-critical)
       try {
-        await supabase
-          .from('job_supplies_used')
-          .insert([{
-            job_id: jobId,
-            supply_id: inventoryItemId,
-            quantity_used: quantity,
-            used_by: userData?.user?.id || null,
-            used_at: new Date().toISOString(),
-            notes: notes || 'Barcode scan out'
-          }])
-      } catch (suppliesError) {
-        console.warn('⚠️ Supplies log error:', suppliesError)
-      }
+        await supabase.from('job_supplies_used').insert([{
+          job_id: jobId, supply_id: inventoryItemId, quantity_used: quantity,
+          used_by: userData?.user?.id || null, used_at: new Date().toISOString(),
+          notes: notes || 'Barcode scan out'
+        }])
+      } catch (suppliesError) { console.warn('Supplies log error:', suppliesError) }
 
-      // 6. Log action (non-critical)
       await mobileApi.logAction(employeeId, 'inventory_scanned', `Scanned out ${quantity} x ${item.name}`, jobId, 'job')
-
-      console.log('✅ Inventory usage recorded successfully!')
       return { success: true, item, quantity }
-
     } catch (error) {
-      console.error('❌ Unexpected error:', error)
       return { success: false, error: error.message || 'Unexpected error' }
     }
   },
