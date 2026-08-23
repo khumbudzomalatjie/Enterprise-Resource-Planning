@@ -9,7 +9,8 @@ import { supabase } from '../../../lib/supabaseClient'
 import { 
   Package, ArrowLeft, Sun, Moon, Sparkles,
   MoveRight, MoveLeft, RefreshCw, Save, Search, History,
-  Clock, Truck, Briefcase, Plus, Barcode, Lock, User
+  Clock, Truck, Briefcase, Plus, Barcode, Lock, User,
+  TrendingUp, TrendingDown, Calendar, FileText
 } from 'lucide-react'
 
 export default function StockInOut({ type = 'in' }) {
@@ -18,9 +19,7 @@ export default function StockInOut({ type = 'in' }) {
   const { fetchItems, createStockMovement, fetchStockMovements } = useInventoryStore()
   const { isDark, toggleTheme } = useThemeStore()
   
-  // ────────────────────────────────────────
-  // STOCK OUT (TRACKER) STATE - READ ONLY
-  // ────────────────────────────────────────
+  // STOCK OUT (TRACKER) STATE
   const [trackerCode, setTrackerCode] = useState('')
   const [trackerItem, setTrackerItem] = useState(null)
   const [trackerHistory, setTrackerHistory] = useState([])
@@ -30,9 +29,7 @@ export default function StockInOut({ type = 'in' }) {
   const [issueJob, setIssueJob] = useState('')
   const [issuing, setIssuing] = useState(false)
 
-  // ────────────────────────────────────────
   // STOCK IN (ADD STOCK) STATE
-  // ────────────────────────────────────────
   const [stockInMode, setStockInMode] = useState('existing')
   const [stockInItems, setStockInItems] = useState([])
   const [supplier, setSupplier] = useState('')
@@ -44,7 +41,7 @@ export default function StockInOut({ type = 'in' }) {
   }, [])
 
   // ═══════════════════════════════════════════
-  // STOCK OUT - TRACKER (READ ONLY HISTORY)
+  // STOCK OUT - FULL HISTORY TRACKER
   // ═══════════════════════════════════════════
   const handleTrackItem = async () => {
     if (!trackerCode.trim()) {
@@ -56,33 +53,39 @@ export default function StockInOut({ type = 'in' }) {
     setTrackerItem(null)
     setTrackerHistory([])
 
-    const { data: item, error } = await supabase
+    // Step 1: Find the item
+    const { data: item, error: itemError } = await supabase
       .from('inventory_items')
       .select('*')
       .or(`barcode.eq."${trackerCode.trim()}",item_code.eq."${trackerCode.trim()}"`)
       .maybeSingle()
 
-    if (error || !item) {
+    if (itemError || !item) {
       toast.error('Item not found')
       setTrackerLoading(false)
       return
     }
 
     setTrackerItem(item)
+    console.log('📦 Item found:', item.name, 'ID:', item.id)
 
-    // Get FULL audit trail with user names and job numbers
-    const { data: movements } = await supabase
+    // Step 2: Get ALL stock movements for this item since creation
+    const { data: movements, error: movementError } = await supabase
       .from('stock_movements')
-      .select(`
-        *,
-        jobs(job_number, title),
-        employees(first_name, last_name, employee_code)
-      `)
+      .select('*')
       .eq('item_id', item.id)
-      .order('created_at', { ascending: false })
-      .limit(100)
+      .order('created_at', { ascending: true }) // Oldest first = since received
 
-    // Get user names for performed_by
+    if (movementError) {
+      console.error('Movement error:', movementError)
+      toast.error('Failed to load history')
+      setTrackerLoading(false)
+      return
+    }
+
+    console.log(`📊 Found ${movements?.length || 0} movements`)
+
+    // Step 3: Get user names for all performed_by
     const userIds = [...new Set((movements || []).map(m => m.performed_by).filter(Boolean))]
     let userMap = {}
     if (userIds.length > 0) {
@@ -91,17 +94,31 @@ export default function StockInOut({ type = 'in' }) {
         .select('id, full_name, email')
         .in('id', userIds)
       
-      userMap = {}
-      ;(profiles || []).forEach(p => { userMap[p.id] = p.full_name || p.email })
+      ;(profiles || []).forEach(p => { userMap[p.id] = p.full_name || p.email || 'Unknown' })
     }
 
-    // Enrich movements with user names
-    const enrichedMovements = (movements || []).map(m => ({
-      ...m,
-      performed_by_name: userMap[m.performed_by] || 'System',
-      job_number: m.jobs?.job_number || m.reference_number || null,
-      job_title: m.jobs?.title || null
-    }))
+    // Step 4: Get job numbers for all movements
+    const jobIds = [...new Set((movements || []).map(m => m.job_id).filter(Boolean))]
+    let jobMap = {}
+    if (jobIds.length > 0) {
+      const { data: jobs } = await supabase
+        .from('jobs')
+        .select('id, job_number, title')
+        .in('id', jobIds)
+      
+      ;(jobs || []).forEach(j => { jobMap[j.id] = j })
+    }
+
+    // Step 5: Enrich movements with user names and job info
+    const enrichedMovements = (movements || []).map(m => {
+      const job = m.job_id ? jobMap[m.job_id] : null
+      return {
+        ...m,
+        performed_by_name: userMap[m.performed_by] || m.performed_by || 'System',
+        job_number: job?.job_number || m.reference_number || null,
+        job_title: job?.title || null
+      }
+    })
 
     setTrackerHistory(enrichedMovements)
     setTrackerLoading(false)
@@ -115,15 +132,17 @@ export default function StockInOut({ type = 'in' }) {
 
     setIssuing(true)
 
+    const { data: jobData } = issueJob ? await supabase.from('jobs').select('id').eq('job_number', issueJob).single() : { data: null }
+
     const notes = `${issueJob ? `Job: ${issueJob} | ` : ''}${issueReason ? `Reason: ${issueReason}` : 'Stock out'}`
 
     const result = await createStockMovement({
       item_id: trackerItem.id,
       movement_type: 'job_usage',
-      quantity: -issueQty,
+      quantity: -Math.abs(issueQty),
       reference_type: 'job',
       reference_number: issueJob || null,
-      job_id: issueJob ? await getJobIdByNumber(issueJob) : null,
+      job_id: jobData?.id || null,
       notes: notes,
       movement_date: new Date().toISOString().split('T')[0],
       status: 'completed'
@@ -136,19 +155,10 @@ export default function StockInOut({ type = 'in' }) {
       setIssueQty(1)
       setIssueReason('')
       setIssueJob('')
-      handleTrackItem()
+      handleTrackItem() // Refresh full history
     } else {
       toast.error(result.error || 'Failed to issue')
     }
-  }
-
-  const getJobIdByNumber = async (jobNumber) => {
-    const { data } = await supabase
-      .from('jobs')
-      .select('id')
-      .eq('job_number', jobNumber)
-      .single()
-    return data?.id || null
   }
 
   // ═══════════════════════════════════════════
@@ -206,13 +216,14 @@ export default function StockInOut({ type = 'in' }) {
 
       if (item.isNew) {
         if (!item.newName) { toast.error('New item name required'); setSavingStockIn(false); return }
+        if (!item.newBarcode) { toast.error('Barcode required for new item'); setSavingStockIn(false); return }
 
         const { data: newItem, error: newItemError } = await supabase
           .from('inventory_items')
           .insert([{
             name: item.newName,
             item_code: item.newCode || 'ITEM-' + Date.now().toString(36).toUpperCase(),
-            barcode: item.newBarcode || null,
+            barcode: item.newBarcode,
             unit: item.unit,
             unit_cost: item.unit_cost || 0,
             current_stock: 0,
@@ -230,11 +241,6 @@ export default function StockInOut({ type = 'in' }) {
         }
 
         finalItemId = newItem.id
-      } else {
-        // Update barcode for existing item if changed
-        if (item.barcode && item.barcode !== item.originalBarcode) {
-          await supabase.from('inventory_items').update({ barcode: item.barcode }).eq('id', item.item_id)
-        }
       }
 
       const result = await createStockMovement({
@@ -266,6 +272,22 @@ export default function StockInOut({ type = 'in' }) {
     return new Date(date).toLocaleString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
+  const getMovementTypeLabel = (type) => {
+    const labels = {
+      'purchase': 'Received',
+      'adjustment': 'Stock In',
+      'job_usage': 'Issued for Job',
+      'sale': 'Sold',
+      'transfer_in': 'Transferred In',
+      'transfer_out': 'Transferred Out',
+      'write_off': 'Written Off',
+      'damage': 'Damaged',
+      'return': 'Returned',
+      'count_correction': 'Count Correction'
+    }
+    return labels[type] || type?.replace(/_/g, ' ') || 'Movement'
+  }
+
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -286,7 +308,7 @@ export default function StockInOut({ type = 'in' }) {
 
         {isStockIn ? (
           /* ═══════════════════════════════════════
-             STOCK IN
+             STOCK IN - ADD NEW STOCK
              ═══════════════════════════════════════ */
           <>
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-3xl p-6 text-white mb-6">
@@ -415,7 +437,7 @@ export default function StockInOut({ type = 'in' }) {
           </>
         ) : (
           /* ═══════════════════════════════════════
-             STOCK OUT - TRACKER (READ ONLY)
+             STOCK OUT - FULL HISTORY TRACKER
              ═══════════════════════════════════════ */
           <>
             <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-3xl p-6 text-white mb-6">
@@ -424,49 +446,46 @@ export default function StockInOut({ type = 'in' }) {
                   <History className="w-8 h-8" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold">STOCK OUT TRACKER</h1>
-                  <p className="text-red-100 mt-1">Enter item code to view complete audit trail</p>
+                  <h1 className="text-3xl font-bold">STOCK HISTORY TRACKER</h1>
+                  <p className="text-red-100 mt-1">View complete item history from receipt to all movements</p>
                 </div>
               </div>
             </div>
 
-            {/* Search - Read Only Lookup */}
+            {/* Search */}
             <div className="neu-raised rounded-3xl p-6 mb-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Search className="w-5 h-5 text-red-600" /> Search Item History
-              </h2>
               <div className="flex gap-3">
                 <input type="text" value={trackerCode} onChange={e => setTrackerCode(e.target.value)} 
-                  placeholder="Enter item code or barcode" 
+                  placeholder="Enter item code or scan barcode" 
                   className="flex-1 p-4 neu-inset rounded-xl text-lg font-mono"
                   onKeyDown={e => e.key === 'Enter' && handleTrackItem()} />
                 <button onClick={handleTrackItem} disabled={trackerLoading}
                   className="px-8 py-4 rounded-xl bg-red-600 text-white font-bold flex items-center gap-2 disabled:opacity-50">
                   {trackerLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                  Search
+                  View History
                 </button>
               </div>
             </div>
 
-            {/* Item Info - READ ONLY */}
+            {/* Item Summary */}
             {trackerItem && (
               <div className="neu-raised rounded-3xl p-6 mb-6 border-l-4 border-l-red-600">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">{trackerItem.name}</h3>
+                    <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{trackerItem.name}</h3>
                     <p className="text-sm text-slate-500">
-                      {trackerItem.item_code} 
+                      {trackerItem.item_code}
                       {trackerItem.barcode ? ` | Barcode: ${trackerItem.barcode}` : ''}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-emerald-600">{trackerItem.current_stock} {trackerItem.unit}</p>
+                    <p className="text-3xl font-bold text-emerald-600">{trackerItem.current_stock} {trackerItem.unit}</p>
                     <p className="text-xs text-slate-500">Current Stock</p>
                   </div>
                 </div>
 
-                {/* Issue Form - ONLY for issuing */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+                {/* Issue Form */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
                   <div>
                     <label className="text-xs font-semibold">Quantity to Issue *</label>
                     <input type="number" value={issueQty} onChange={e => setIssueQty(Math.max(1, parseInt(e.target.value) || 1))} 
@@ -497,75 +516,91 @@ export default function StockInOut({ type = 'in' }) {
               </div>
             )}
 
-            {/* AUDIT TRAIL - READ ONLY with user names and job numbers */}
+            {/* FULL HISTORY - READ ONLY */}
             {trackerHistory.length > 0 && (
               <div className="neu-raised rounded-3xl p-6">
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
                   <History className="w-5 h-5 text-blue-600" /> 
-                  Complete Audit Trail ({trackerHistory.length} movements)
-                  <Lock className="w-4 h-4 text-slate-400" title="Read only" />
+                  Complete Movement History
                 </h2>
+                <p className="text-sm text-slate-500 mb-4 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Read-only • {trackerHistory.length} movements since first received
+                </p>
                 
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                  {trackerHistory.map((m, index) => (
-                    <div key={m.id || index} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700">
-                      <div className="flex items-center gap-3">
-                        {/* Movement Type Badge */}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${m.quantity > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                          {m.quantity > 0 ? <MoveRight className="w-5 h-5" /> : <MoveLeft className="w-5 h-5" />}
-                        </div>
-                        
-                        <div className="flex-1">
-                          {/* Top row: Quantity + Type */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`font-bold text-lg ${m.quantity > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {m.quantity > 0 ? '+' : ''}{m.quantity} {trackerItem?.unit || ''}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${m.quantity > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                              {m.movement_type?.replace(/_/g, ' ')}
-                            </span>
+                {/* Timeline */}
+                <div className="relative">
+                  {/* Vertical line */}
+                  <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+                  
+                  <div className="space-y-4">
+                    {trackerHistory.map((m, index) => {
+                      const isIn = m.quantity > 0
+                      const isFirst = index === 0
+                      
+                      return (
+                        <div key={m.id || index} className="relative pl-14">
+                          {/* Timeline dot */}
+                          <div className={`absolute left-3 top-2 w-5 h-5 rounded-full border-2 border-white dark:border-slate-800 flex items-center justify-center ${
+                            isIn ? 'bg-emerald-500' : 'bg-red-500'
+                          }`}>
+                            {isIn ? <TrendingUp className="w-3 h-3 text-white" /> : <TrendingDown className="w-3 h-3 text-white" />}
                           </div>
                           
-                          {/* Job Number if available */}
-                          {m.job_number && (
-                            <p className="text-sm mt-1">
-                              📋 <span className="font-semibold text-blue-600">{m.job_number}</span>
-                              {m.job_title && <span className="text-slate-500"> - {m.job_title}</span>}
-                            </p>
-                          )}
-                          
-                          {/* Reference number if no job but has reference */}
-                          {!m.job_number && m.reference_number && (
-                            <p className="text-sm mt-1">
-                              🔗 Ref: <span className="font-semibold">{m.reference_number}</span>
-                            </p>
-                          )}
-                          
-                          {/* Notes */}
-                          {m.notes && (
-                            <p className="text-xs text-slate-500 mt-1">{m.notes}</p>
-                          )}
-                          
-                          {/* User + Time */}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                            <span className="flex items-center gap-1">
-                              <User className="w-3 h-3" /> {m.performed_by_name || 'System'}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> {formatDateTime(m.created_at)}
-                            </span>
+                          {/* Card */}
+                          <div className={`p-4 rounded-xl border ${
+                            isIn 
+                              ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-700/30' 
+                              : 'bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-700/30'
+                          }`}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold text-lg ${isIn ? 'text-emerald-600' : 'text-red-600'}`}>
+                                  {isIn ? '+' : ''}{m.quantity} {trackerItem?.unit || ''}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${isIn ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                  {getMovementTypeLabel(m.movement_type)}
+                                </span>
+                                {isFirst && (
+                                  <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 font-medium">
+                                    📦 Initially Received
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> {formatDateTime(m.created_at)}
+                              </span>
+                            </div>
+                            
+                            {/* Job Number */}
+                            {m.job_number && (
+                              <p className="text-sm mt-2 flex items-center gap-1">
+                                <Briefcase className="w-4 h-4 text-blue-600" />
+                                <span className="font-semibold text-blue-600">{m.job_number}</span>
+                                {m.job_title && <span className="text-slate-500">- {m.job_title}</span>}
+                              </p>
+                            )}
+                            
+                            {/* Notes */}
+                            {m.notes && (
+                              <p className="text-xs text-slate-500 mt-1">{m.notes}</p>
+                            )}
+                            
+                            {/* User */}
+                            <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-medium">{m.performed_by_name || 'System'}</span>
+                            </div>
+                            
+                            {/* Running balance */}
+                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500">
+                              <span className="font-semibold">Stock after: </span>
+                              <span className="font-bold">{m.current_stock_after || 'N/A'}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Read-only notice */}
-                <div className="mt-4 p-3 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-center">
-                  <p className="text-xs text-slate-500 flex items-center justify-center gap-1">
-                    <Lock className="w-3 h-3" /> This audit trail is read-only. No edits allowed.
-                  </p>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -573,8 +608,8 @@ export default function StockInOut({ type = 'in' }) {
             {!trackerItem && !trackerLoading && (
               <div className="text-center py-12 neu-raised rounded-3xl">
                 <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 text-lg">Enter an item code to view its complete audit trail</p>
-                <p className="text-slate-400 text-sm mt-1">Shows: who used it, which job, when, and quantity</p>
+                <p className="text-slate-500 text-lg">Enter an item code to view its complete history</p>
+                <p className="text-slate-400 text-sm mt-1">Shows: when received, all movements, who did it, and job numbers</p>
               </div>
             )}
           </>
