@@ -46,7 +46,7 @@ function InvoiceTemplate({ invoice, job }) {
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: colors.dark, margin: '0' }}>NDANDULENI GROUP</h1>
             <p style={{ fontSize: '9px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457 | info@ndandulenigroup.co.za</p>
+            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -64,13 +64,12 @@ function InvoiceTemplate({ invoice, job }) {
           <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Bill To:</h3>
           <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
           {invoice?.client_email && <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice.client_email}</p>}
-          <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || ''}</p>
+          <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || job?.site_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Reference:</h3>
           <p style={{ fontSize: '12px', color: '#1e293b', margin: '0', fontWeight: '500' }}>Job: {job?.job_number || 'N/A'}</p>
           <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{job?.title || 'Cleaning Service'}</p>
-          <p style={{ fontSize: '8px', color: '#94a3b8', margin: '1px 0' }}>{job?.site_address || ''}</p>
         </div>
       </div>
 
@@ -164,47 +163,34 @@ export default function FinanceJobs() {
     setError(null)
     
     try {
-      // Step 1: Get completed jobs
-      const { data: completedJobs, error: jobsError } = await supabase
+      // Get ALL jobs (not just completed - show everything)
+      const { data: allJobs, error: jobsError } = await supabase
         .from('jobs')
         .select('*')
-        .eq('status', 'completed')
-        .order('actual_end_time', { ascending: false })
-        .limit(50)
+        .order('updated_at', { ascending: false })
+        .limit(100)
 
       if (jobsError) { setError(jobsError.message); setLoading(false); return }
 
-      if (!completedJobs || completedJobs.length === 0) {
+      if (!allJobs || allJobs.length === 0) {
         setJobs([]); setLoading(false); return
       }
 
-      // Step 2: Get ALL invoices linked to these jobs
-      const jobIds = completedJobs.map(j => j.id)
+      // Get ALL invoices
       const { data: allInvoices } = await supabase
         .from('invoices')
         .select('*')
-        .in('job_id', jobIds)
+        .order('created_at', { ascending: false })
+        .limit(200)
 
-      // Also check for invoices by invoice_id on job
-      const invoiceIds = completedJobs.filter(j => j.invoice_id).map(j => j.invoice_id)
-      let extraInvoices = []
-      if (invoiceIds.length > 0) {
-        const { data: invs } = await supabase.from('invoices').select('*').in('id', invoiceIds)
-        extraInvoices = invs || []
-      }
-
-      // Merge all invoices
-      const allInvoiceData = [...(allInvoices || []), ...extraInvoices]
-
-      // Step 3: Get client info for all jobs
-      const clientIds = [...new Set(completedJobs.map(j => j.client_id).filter(Boolean))]
+      // Get ALL clients
+      const clientIds = [...new Set(allJobs.map(j => j.client_id).filter(Boolean))]
       const { data: clients } = await supabase.from('clients').select('*').in('id', clientIds)
 
-      // Step 4: Merge everything
-      const jobsWithDetails = completedJobs.map(job => {
-        const invoice = allInvoiceData.find(i => i.job_id === job.id) || 
-                       allInvoiceData.find(i => i.id === job.invoice_id) || null
-        
+      // Merge: every job with its invoice if exists
+      const merged = allJobs.map(job => {
+        const invoice = (allInvoices || []).find(i => i.job_id === job.id) || 
+                       (allInvoices || []).find(i => i.id === job.invoice_id) || null
         return {
           ...job,
           clients: (clients || []).find(c => c.id === job.client_id) || null,
@@ -213,8 +199,8 @@ export default function FinanceJobs() {
         }
       })
 
-      setJobs(jobsWithDetails)
-      console.log(`📊 Loaded ${jobsWithDetails.length} completed jobs, ${jobsWithDetails.filter(j => j.hasInvoice).length} with invoices`)
+      setJobs(merged)
+      console.log(`✅ Loaded ${merged.length} jobs, ${merged.filter(j => j.hasInvoice).length} with invoices`)
     } catch (err) {
       console.error('Error:', err)
       setError(err.message)
@@ -233,18 +219,23 @@ export default function FinanceJobs() {
   }
 
   const generateInvoice = async (job) => {
-    if (!job.client_id) { toast.error('This job has no client assigned.'); return }
     setGeneratingInvoice(job.id)
 
     try {
-      const amount = parseFloat((job.quoted_amount || job.actual_cost || 0).toFixed(2))
+      const amount = parseFloat((job.quoted_amount || 0).toFixed(2))
+      if (amount <= 0) {
+        toast.error('This job has no quoted amount. Cannot generate invoice.')
+        setGeneratingInvoice(null)
+        return
+      }
+
       const taxAmount = parseFloat((amount * 0.15).toFixed(2))
       const totalAmount = parseFloat((amount + taxAmount).toFixed(2))
 
       const { data: invoice, error: iError } = await supabase.from('invoices').insert([{
         invoice_number: 'INV-' + Date.now().toString(36).toUpperCase().slice(-8),
         job_id: job.id,
-        client_id: job.client_id,
+        client_id: job.client_id || null,
         client_name: job.clients?.company_name || 'Client',
         client_email: job.clients?.email || '',
         client_phone: job.clients?.phone || '',
@@ -256,7 +247,7 @@ export default function FinanceJobs() {
         tax_amount: taxAmount,
         total_amount: totalAmount,
         status: 'sent',
-        notes: `Job: ${job.job_number} - ${job.title || 'Cleaning Service'}`
+        notes: `Job: ${job.job_number || 'N/A'} - ${job.title || 'Cleaning Service'}`
       }]).select().single()
       
       if (iError) throw iError
@@ -324,9 +315,19 @@ export default function FinanceJobs() {
            (job.site_address || '').toLowerCase().includes(s)
   })
 
-  const totalValue = jobs.reduce((sum, job) => sum + (job.quoted_amount || job.actual_cost || 0), 0)
+  const completedCount = jobs.filter(j => j.status === 'completed').length
+  const totalValue = jobs.reduce((sum, job) => sum + (job.quoted_amount || 0), 0)
   const invoicedCount = jobs.filter(j => j.hasInvoice).length
-  const readyToInvoice = jobs.filter(j => !j.hasInvoice).length
+
+  const getStatusBadge = (status) => {
+    if (!status) return 'bg-slate-100 text-slate-600'
+    if (status === 'completed') return 'bg-emerald-100 text-emerald-700'
+    if (status === 'in_progress') return 'bg-amber-100 text-amber-700'
+    if (status === 'pending') return 'bg-blue-100 text-blue-700'
+    if (status === 'scheduled') return 'bg-purple-100 text-purple-700'
+    if (status === 'cancelled') return 'bg-red-100 text-red-700'
+    return 'bg-slate-100 text-slate-600'
+  }
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -350,10 +351,10 @@ export default function FinanceJobs() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <Briefcase className="w-8 h-8 text-emerald-600" />
-              <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Completed Jobs - Invoices</h1>
+              <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Jobs & Invoice Generation</h1>
             </div>
             <p className="text-slate-500 dark:text-slate-400 ml-11">
-              {jobs.length} completed · {readyToInvoice} ready · {invoicedCount} invoiced · Total: <span className="font-bold text-emerald-600">{formatCurrency(totalValue)}</span>
+              {jobs.length} jobs · {completedCount} completed · {invoicedCount} invoiced · Total: <span className="font-bold text-emerald-600">{formatCurrency(totalValue)}</span>
             </p>
           </div>
           <button onClick={loadCompletedJobs} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white text-sm hover:bg-blue-700 flex items-center gap-2">
@@ -364,16 +365,16 @@ export default function FinanceJobs() {
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search jobs..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by job #, title, or client..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
-            { icon: Briefcase, label: 'Completed', value: jobs.length, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-            { icon: Receipt, label: 'Ready', value: readyToInvoice, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
-            { icon: CheckCircle2, label: 'Invoiced', value: invoicedCount, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-            { icon: DollarSign, label: 'Total Value', value: formatCurrency(totalValue), color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
+            { icon: Briefcase, label: 'All Jobs', value: jobs.length, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+            { icon: CheckCircle2, label: 'Completed', value: completedCount, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+            { icon: Receipt, label: 'Invoiced', value: invoicedCount, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
+            { icon: DollarSign, label: 'Total Value', value: formatCurrency(totalValue), color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
           ].map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }} className="neu-raised rounded-2xl p-4">
               <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}><s.icon className={`w-5 h-5 ${s.color}`} /></div>
@@ -394,7 +395,7 @@ export default function FinanceJobs() {
         {loading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-            <p className="text-slate-500">Loading completed jobs...</p>
+            <p className="text-slate-500">Loading jobs...</p>
           </div>
         )}
 
@@ -407,10 +408,9 @@ export default function FinanceJobs() {
                     <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                       <th className="text-left py-3 px-4 text-slate-500">Job #</th>
                       <th className="text-left py-3 px-4 text-slate-500">Title / Client</th>
-                      <th className="text-left py-3 px-4 text-slate-500">Location</th>
-                      <th className="text-left py-3 px-4 text-slate-500">Completed</th>
+                      <th className="text-left py-3 px-4 text-slate-500">Status</th>
                       <th className="text-right py-3 px-4 text-slate-500">Amount</th>
-                      <th className="text-center py-3 px-4 text-slate-500">Status</th>
+                      <th className="text-center py-3 px-4 text-slate-500">Invoice</th>
                       <th className="text-center py-3 px-4 text-slate-500">Actions</th>
                     </tr>
                   </thead>
@@ -422,27 +422,26 @@ export default function FinanceJobs() {
                           <p className="font-medium text-slate-800 dark:text-white">{job.title || 'Untitled'}</p>
                           <p className="text-xs text-slate-500">{job.clients?.company_name || 'No client'}</p>
                         </td>
-                        <td className="py-3 px-4 text-xs text-slate-500">
-                          <div className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.site_address?.slice(0, 25) || 'N/A'}</div>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(job.status)}`}>
+                            {job.status?.replace(/_/g, ' ')}
+                          </span>
                         </td>
-                        <td className="py-3 px-4 text-xs text-slate-500">
-                          <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDate(job.actual_end_time)}</div>
-                        </td>
-                        <td className="py-3 px-4 text-right font-semibold">{formatCurrency(job.quoted_amount || job.actual_cost)}</td>
+                        <td className="py-3 px-4 text-right font-semibold">{formatCurrency(job.quoted_amount)}</td>
                         <td className="py-3 px-4 text-center">
                           {job.hasInvoice ? (
-                            <span className="px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700 inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> {job.invoice?.invoice_number || 'Invoiced'}
+                            <span className="px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700">
+                              {job.invoice?.invoice_number}
                             </span>
                           ) : (
-                            <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">Ready</span>
+                            <span className="px-2 py-1 rounded-full text-xs bg-slate-100 text-slate-500">No Invoice</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
                             {job.hasInvoice ? (
                               <>
-                                <button onClick={() => handleViewInvoice(job)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Invoice">
+                                <button onClick={() => handleViewInvoice(job)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
                                   <Eye className="w-4 h-4" />
                                 </button>
                                 <button onClick={() => handleDownloadInvoice(job)} disabled={downloadingInvoice === job.id}
@@ -455,8 +454,9 @@ export default function FinanceJobs() {
                                 </button>
                               </>
                             ) : (
-                              <button onClick={() => generateInvoice(job)} disabled={generatingInvoice === job.id}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1">
+                              <button onClick={() => generateInvoice(job)} disabled={generatingInvoice === job.id || !job.quoted_amount}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                title={!job.quoted_amount ? 'No quoted amount - add one in Operations' : 'Generate Invoice'}>
                                 {generatingInvoice === job.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                                 ) : (
@@ -474,9 +474,9 @@ export default function FinanceJobs() {
               </div>
             ) : (
               <div className="text-center py-16">
-                <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
-                <p className="text-slate-500 text-lg mb-2">No completed jobs found</p>
-                <p className="text-slate-400 text-sm">Jobs will appear here once marked as completed.</p>
+                <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg mb-2">No jobs found</p>
+                <p className="text-slate-400 text-sm">Create jobs in Operations and they will appear here.</p>
               </div>
             )}
           </div>
