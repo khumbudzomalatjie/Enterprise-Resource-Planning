@@ -13,7 +13,7 @@ import {
   Eye, Download, X
 } from 'lucide-react'
 
-// A4 Invoice Template Component
+// A4 Invoice Template Component - COMPACT SINGLE PAGE
 function InvoiceTemplate({ invoice, job }) {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -33,109 +33,104 @@ function InvoiceTemplate({ invoice, job }) {
 
   return (
     <div style={{
-      width: '210mm', height: '297mm', padding: '15mm 20mm',
-      backgroundColor: 'white', fontFamily: 'Inter, Arial, sans-serif',
-      color: '#1e293b', boxSizing: 'border-box', overflow: 'hidden'
+      width: '794px',
+      height: '1123px',
+      padding: '35px 45px',
+      backgroundColor: 'white',
+      fontFamily: 'Inter, Arial, sans-serif',
+      color: '#1e293b',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px', borderBottom: `3px solid ${colors.main}`, paddingBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '65px', height: '65px', borderRadius: '50%', backgroundColor: colors.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${colors.lightBorder}` }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `3px solid ${colors.main}`, paddingBottom: '10px', marginBottom: '15px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '55px', height: '55px', borderRadius: '50%', backgroundColor: colors.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${colors.lightBorder}` }}>
             <img src="/logo.png" alt="Logo" style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:22px;font-weight:bold;color:${colors.main}">NG</span>` }} />
+              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:20px;font-weight:bold;color:${colors.main}">NG</span>` }} />
           </div>
           <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: colors.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '9px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457</p>
+            <h1 style={{ fontSize: '16px', fontWeight: 'bold', color: colors.dark, margin: '0' }}>NDANDULENI GROUP</h1>
+            <p style={{ fontSize: '8px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
+            <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '26px', fontWeight: 'bold', color: colors.dark, margin: '0', letterSpacing: '2px' }}>INVOICE</h2>
-          <p style={{ fontSize: '15px', color: colors.main, margin: '2px 0', fontWeight: 'bold' }}>#{invoice?.invoice_number || 'N/A'}</p>
-          <div style={{ marginTop: '6px', fontSize: '9px', color: '#64748b' }}>
-            <p style={{ margin: '1px 0' }}>Date: {formatDate(invoice?.invoice_date)}</p>
-            <p style={{ margin: '1px 0' }}>Due: {formatDate(invoice?.due_date)}</p>
-          </div>
+          <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: colors.dark, margin: '0', letterSpacing: '2px' }}>INVOICE</h2>
+          <p style={{ fontSize: '13px', color: colors.main, margin: '2px 0', fontWeight: 'bold' }}>#{invoice?.invoice_number || 'N/A'}</p>
+          <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>Date: {formatDate(invoice?.invoice_date)}</p>
+          <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>Due: {formatDate(invoice?.due_date)}</p>
         </div>
       </div>
 
-      <div style={{ marginBottom: '18px', display: 'flex', gap: '30px' }}>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Bill To:</h3>
-          <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
-          {invoice?.client_email && <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice.client_email}</p>}
-          <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || job?.site_address || ''}</p>
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Reference:</h3>
-          <p style={{ fontSize: '12px', color: '#1e293b', margin: '0', fontWeight: '500' }}>Job: {job?.job_number || 'N/A'}</p>
-          <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{job?.title || 'Cleaning Service'}</p>
-        </div>
+      {/* Bill To */}
+      <div style={{ marginBottom: '15px', flexShrink: 0 }}>
+        <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Bill To:</h3>
+        <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
+        {invoice?.client_email && <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>{invoice.client_email}</p>}
+        <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || job?.site_address || ''}</p>
+        <p style={{ fontSize: '8px', color: '#64748b', margin: '3px 0 0 0' }}>
+          <strong>Job:</strong> {job?.job_number || 'N/A'} - {job?.title || 'Service'}
+        </p>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px' }}>
+      {/* Table */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px', flexShrink: 0 }}>
         <thead>
           <tr style={{ backgroundColor: colors.main, color: 'white' }}>
-            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold' }}>#</th>
-            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '7px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold' }}>Qty</th>
-            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold' }}>Unit Price</th>
-            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold' }}>Total</th>
+            <th style={{ padding: '5px 8px', textAlign: 'left', fontSize: '8px', fontWeight: 'bold' }}>Description</th>
+            <th style={{ padding: '5px 8px', textAlign: 'center', fontSize: '8px', fontWeight: 'bold' }}>Qty</th>
+            <th style={{ padding: '5px 8px', textAlign: 'right', fontSize: '8px', fontWeight: 'bold' }}>Unit Price</th>
+            <th style={{ padding: '5px 8px', textAlign: 'right', fontSize: '8px', fontWeight: 'bold' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-            <td style={{ padding: '7px 10px', fontSize: '9px', color: '#64748b' }}>1</td>
-            <td style={{ padding: '7px 10px', fontSize: '9px', color: '#1e293b', fontWeight: '500' }}>
-              {job?.title || 'Cleaning Service'}
-              <div style={{ fontSize: '7px', color: '#94a3b8' }}>Job: {job?.job_number || 'N/A'}</div>
-            </td>
-            <td style={{ padding: '7px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'center' }}>1</td>
-            <td style={{ padding: '7px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
-            <td style={{ padding: '7px 10px', fontSize: '9px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
+            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', fontWeight: '500' }}>{job?.title || 'Cleaning Service'}</td>
+            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'center' }}>1</td>
+            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
+            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal || job?.quoted_amount)}</td>
           </tr>
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '18px' }}>
-        <div style={{ width: '260px', border: '1px solid #e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid #e2e8f0', fontSize: '9px', backgroundColor: '#f8fafc' }}>
+      {/* Totals */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px', flexShrink: 0 }}>
+        <div style={{ width: '220px', border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '8px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>Subtotal:</span>
-            <span style={{ color: '#1e293b', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal)}</span>
+            <span style={{ color: '#1e293b' }}>{formatCurrency(invoice?.subtotal)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid #e2e8f0', fontSize: '9px', backgroundColor: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '8px', backgroundColor: '#f8fafc' }}>
             <span style={{ color: '#64748b' }}>VAT (15%):</span>
             <span style={{ color: '#1e293b' }}>{formatCurrency(invoice?.tax_amount)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', fontSize: '13px', fontWeight: 'bold', backgroundColor: colors.totalBg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', fontSize: '11px', fontWeight: 'bold', backgroundColor: colors.totalBg }}>
             <span style={{ color: colors.dark }}>TOTAL DUE:</span>
-            <span style={{ color: colors.dark, fontSize: '15px' }}>{formatCurrency(invoice?.total_amount)}</span>
+            <span style={{ color: colors.dark }}>{formatCurrency(invoice?.total_amount)}</span>
           </div>
         </div>
       </div>
 
-      <div style={{ marginBottom: '15px', padding: '8px 14px', backgroundColor: '#f8fafc', borderRadius: '5px', border: '1px solid #e2e8f0' }}>
-        <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: colors.dark, marginBottom: '4px', textTransform: 'uppercase' }}>Payment Information</h3>
-        <div style={{ display: 'flex', gap: '25px', fontSize: '8px', color: '#64748b' }}>
-          <div>
-            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> Capitec Business</p>
-            <p style={{ margin: '1px 0' }}><strong>Account:</strong> 1054498946</p>
-          </div>
-          <div>
-            <p style={{ margin: '1px 0' }}><strong>Branch:</strong> 450105</p>
-            <p style={{ margin: '1px 0' }}><strong>Terms:</strong> 30 Days</p>
-          </div>
-          <div>
-            <p style={{ margin: '1px 0' }}><strong>Ref:</strong> {invoice?.invoice_number || job?.job_number}</p>
-          </div>
+      {/* Payment Info */}
+      <div style={{ padding: '6px 12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '20px', fontSize: '7px', color: '#64748b', flexWrap: 'wrap' }}>
+          <span><strong>Bank:</strong> Capitec Business</span>
+          <span><strong>Account:</strong> 1054498946</span>
+          <span><strong>Branch:</strong> 450105</span>
+          <span><strong>Terms:</strong> 30 Days</span>
+          <span><strong>Ref:</strong> {invoice?.invoice_number || job?.job_number}</span>
         </div>
       </div>
 
-      <div style={{ borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center' }}>
-        <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>
+      {/* Footer - pushed to bottom */}
+      <div style={{ marginTop: 'auto', borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center', flexShrink: 0 }}>
+        <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | 2220 Manthata Street, Midrand | Tel: 070 419 9457
         </p>
-        <p style={{ fontSize: '11px', color: colors.main, margin: '6px 0 0 0', fontWeight: 'bold' }}>
+        <p style={{ fontSize: '10px', color: colors.main, margin: '4px 0 0 0', fontWeight: 'bold' }}>
           Thank you for your business!
         </p>
       </div>
@@ -163,7 +158,6 @@ export default function FinanceJobs() {
     setError(null)
     
     try {
-      // Get ALL jobs (not just completed - show everything)
       const { data: allJobs, error: jobsError } = await supabase
         .from('jobs')
         .select('*')
@@ -176,18 +170,15 @@ export default function FinanceJobs() {
         setJobs([]); setLoading(false); return
       }
 
-      // Get ALL invoices
       const { data: allInvoices } = await supabase
         .from('invoices')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200)
 
-      // Get ALL clients
       const clientIds = [...new Set(allJobs.map(j => j.client_id).filter(Boolean))]
       const { data: clients } = await supabase.from('clients').select('*').in('id', clientIds)
 
-      // Merge: every job with its invoice if exists
       const merged = allJobs.map(job => {
         const invoice = (allInvoices || []).find(i => i.job_id === job.id) || 
                        (allInvoices || []).find(i => i.id === job.invoice_id) || null
@@ -200,9 +191,7 @@ export default function FinanceJobs() {
       })
 
       setJobs(merged)
-      console.log(`✅ Loaded ${merged.length} jobs, ${merged.filter(j => j.hasInvoice).length} with invoices`)
     } catch (err) {
-      console.error('Error:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -211,11 +200,6 @@ export default function FinanceJobs() {
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
-  }
-
-  const formatDate = (date) => {
-    if (!date) return 'N/A'
-    return new Date(date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
   }
 
   const generateInvoice = async (job) => {
@@ -238,7 +222,6 @@ export default function FinanceJobs() {
         client_id: job.client_id || null,
         client_name: job.clients?.company_name || 'Client',
         client_email: job.clients?.email || '',
-        client_phone: job.clients?.phone || '',
         client_address: job.clients?.address_line1 || job.site_address || '',
         invoice_date: new Date().toISOString().split('T')[0],
         due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -252,10 +235,8 @@ export default function FinanceJobs() {
       
       if (iError) throw iError
 
-      // Link invoice to job
       await supabase.from('jobs').update({ invoice_id: invoice.id }).eq('id', job.id)
 
-      // Insert invoice item
       await supabase.from('invoice_items').insert([{
         invoice_id: invoice.id,
         item_number: 1,
@@ -456,7 +437,7 @@ export default function FinanceJobs() {
                             ) : (
                               <button onClick={() => generateInvoice(job)} disabled={generatingInvoice === job.id || !job.quoted_amount}
                                 className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                                title={!job.quoted_amount ? 'No quoted amount - add one in Operations' : 'Generate Invoice'}>
+                                title={!job.quoted_amount ? 'No quoted amount' : 'Generate Invoice'}>
                                 {generatingInvoice === job.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                                 ) : (
