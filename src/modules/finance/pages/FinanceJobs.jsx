@@ -13,7 +13,7 @@ import {
   Eye, Download, X
 } from 'lucide-react'
 
-// A4 Invoice Template Component - STEEL BLUE THEME
+// A4 Invoice Template Component
 function InvoiceTemplate({ invoice, job }) {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
@@ -23,62 +23,30 @@ function InvoiceTemplate({ invoice, job }) {
     return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
   }
 
-  // Steel Blue Color Palette
   const colors = {
-    main: '#1B5080',        // Main steel blue
-    dark: '#0D2D4A',        // Darker navy
-    light: '#2B6FA8',       // Lighter highlight blue
-    lightBg: '#e8f0f8',     // Light background for logo circle
-    lightBorder: '#c5d5e8', // Light border
-    tableHeader: '#1B5080', // Table header bg
-    totalBg: '#eaf1f8',     // Total section background
-    accent: '#1B5080',      // Accent color
-    footerBorder: '#1B5080' // Footer border
+    main: '#1B5080',
+    dark: '#0D2D4A',
+    lightBg: '#e8f0f8',
+    lightBorder: '#c5d5e8',
+    totalBg: '#eaf1f8'
   }
 
   return (
     <div style={{
-      width: '210mm',
-      height: '297mm',
-      padding: '15mm 20mm',
-      backgroundColor: 'white',
-      fontFamily: 'Inter, Arial, sans-serif',
-      color: '#1e293b',
-      boxSizing: 'border-box',
-      overflow: 'hidden'
+      width: '210mm', height: '297mm', padding: '15mm 20mm',
+      backgroundColor: 'white', fontFamily: 'Inter, Arial, sans-serif',
+      color: '#1e293b', boxSizing: 'border-box', overflow: 'hidden'
     }}>
-      {/* Header with Logo */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '18px', borderBottom: `3px solid ${colors.main}`, paddingBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ 
-            width: '65px', 
-            height: '65px', 
-            borderRadius: '50%', 
-            backgroundColor: colors.lightBg, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            flexShrink: 0, 
-            overflow: 'hidden',
-            border: `2px solid ${colors.lightBorder}`
-          }}>
-            <img 
-              src="/logo.png" 
-              alt="Ndanduleni Group Logo" 
-              style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-              onError={(e) => {
-                e.target.style.display = 'none'
-                const parent = e.target.parentElement
-                if (parent) {
-                  parent.innerHTML = `<span style="font-size:22px;font-weight:bold;color:${colors.main}">NG</span>`
-                }
-              }}
-            />
+          <div style={{ width: '65px', height: '65px', borderRadius: '50%', backgroundColor: colors.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${colors.lightBorder}` }}>
+            <img src="/logo.png" alt="Logo" style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:22px;font-weight:bold;color:${colors.main}">NG</span>` }} />
           </div>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: colors.dark, margin: '0' }}>NDANDULENI GROUP</h1>
             <p style={{ fontSize: '9px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>123 Main Street, Johannesburg | Tel: +27 11 234 5678 | info@ndanduleni.co.za</p>
+            <p style={{ fontSize: '8px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457 | info@ndandulenigroup.co.za</p>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -91,31 +59,29 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Bill To & Job Reference */}
       <div style={{ marginBottom: '18px', display: 'flex', gap: '30px' }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '1px' }}>Bill To:</h3>
+          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Bill To:</h3>
           <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
           {invoice?.client_email && <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice.client_email}</p>}
           <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || ''}</p>
         </div>
         <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '1px' }}>Reference:</h3>
+          <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Reference:</h3>
           <p style={{ fontSize: '12px', color: '#1e293b', margin: '0', fontWeight: '500' }}>Job: {job?.job_number || 'N/A'}</p>
           <p style={{ fontSize: '9px', color: '#64748b', margin: '1px 0' }}>{job?.title || 'Cleaning Service'}</p>
           <p style={{ fontSize: '8px', color: '#94a3b8', margin: '1px 0' }}>{job?.site_address || ''}</p>
         </div>
       </div>
 
-      {/* Items Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px' }}>
         <thead>
-          <tr style={{ backgroundColor: colors.tableHeader, color: 'white' }}>
-            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>#</th>
-            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>Description</th>
-            <th style={{ padding: '7px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>Qty</th>
-            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>Unit Price</th>
-            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase' }}>Total</th>
+          <tr style={{ backgroundColor: colors.main, color: 'white' }}>
+            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold' }}>#</th>
+            <th style={{ padding: '7px 10px', textAlign: 'left', fontSize: '9px', fontWeight: 'bold' }}>Description</th>
+            <th style={{ padding: '7px 10px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold' }}>Qty</th>
+            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold' }}>Unit Price</th>
+            <th style={{ padding: '7px 10px', textAlign: 'right', fontSize: '9px', fontWeight: 'bold' }}>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -132,7 +98,6 @@ function InvoiceTemplate({ invoice, job }) {
         </tbody>
       </table>
 
-      {/* Totals */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '18px' }}>
         <div style={{ width: '260px', border: '1px solid #e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid #e2e8f0', fontSize: '9px', backgroundColor: '#f8fafc' }}>
@@ -150,16 +115,15 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Payment Info */}
       <div style={{ marginBottom: '15px', padding: '8px 14px', backgroundColor: '#f8fafc', borderRadius: '5px', border: '1px solid #e2e8f0' }}>
         <h3 style={{ fontSize: '9px', fontWeight: 'bold', color: colors.dark, marginBottom: '4px', textTransform: 'uppercase' }}>Payment Information</h3>
         <div style={{ display: 'flex', gap: '25px', fontSize: '8px', color: '#64748b' }}>
           <div>
-            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> FNB</p>
-            <p style={{ margin: '1px 0' }}><strong>Account:</strong> 6277 123 45678</p>
+            <p style={{ margin: '1px 0' }}><strong>Bank:</strong> Capitec Business</p>
+            <p style={{ margin: '1px 0' }}><strong>Account:</strong> 1054498946</p>
           </div>
           <div>
-            <p style={{ margin: '1px 0' }}><strong>Branch:</strong> 250655</p>
+            <p style={{ margin: '1px 0' }}><strong>Branch:</strong> 450105</p>
             <p style={{ margin: '1px 0' }}><strong>Terms:</strong> 30 Days</p>
           </div>
           <div>
@@ -168,10 +132,9 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={{ borderTop: `2px solid ${colors.footerBorder}`, paddingTop: '8px', textAlign: 'center' }}>
+      <div style={{ borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center' }}>
         <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>
-          Ndanduleni Group (Pty) Ltd | Reg: 2020/123456/07 | VAT: 4567890123 | 123 Main Street, Johannesburg, 2000
+          Ndanduleni Group (Pty) Ltd | 2220 Manthata Street, Midrand | Tel: 070 419 9457
         </p>
         <p style={{ fontSize: '11px', color: colors.main, margin: '6px 0 0 0', fontWeight: 'bold' }}>
           Thank you for your business!
@@ -201,6 +164,7 @@ export default function FinanceJobs() {
     setError(null)
     
     try {
+      // Step 1: Get completed jobs
       const { data: completedJobs, error: jobsError } = await supabase
         .from('jobs')
         .select('*')
@@ -214,37 +178,45 @@ export default function FinanceJobs() {
         setJobs([]); setLoading(false); return
       }
 
-      const jobsWithDetails = await Promise.all(
-        completedJobs.map(async (job) => {
-          let clientInfo = null, categoryInfo = null, invoiceInfo = null
+      // Step 2: Get ALL invoices linked to these jobs
+      const jobIds = completedJobs.map(j => j.id)
+      const { data: allInvoices } = await supabase
+        .from('invoices')
+        .select('*')
+        .in('job_id', jobIds)
 
-          if (job.client_id) {
-            try {
-              const { data: client } = await supabase.from('clients').select('company_name, email, phone, address_line1, city, postal_code').eq('id', job.client_id).single()
-              clientInfo = client
-            } catch (e) {}
-          }
+      // Also check for invoices by invoice_id on job
+      const invoiceIds = completedJobs.filter(j => j.invoice_id).map(j => j.invoice_id)
+      let extraInvoices = []
+      if (invoiceIds.length > 0) {
+        const { data: invs } = await supabase.from('invoices').select('*').in('id', invoiceIds)
+        extraInvoices = invs || []
+      }
 
-          if (job.job_category_id) {
-            try {
-              const { data: category } = await supabase.from('job_categories').select('name').eq('id', job.job_category_id).single()
-              categoryInfo = category
-            } catch (e) {}
-          }
+      // Merge all invoices
+      const allInvoiceData = [...(allInvoices || []), ...extraInvoices]
 
-          if (job.quotation_id) {
-            try {
-              const { data: invoice } = await supabase.from('invoices').select('*').eq('quotation_id', job.quotation_id).single()
-              invoiceInfo = invoice
-            } catch (e) {}
-          }
+      // Step 3: Get client info for all jobs
+      const clientIds = [...new Set(completedJobs.map(j => j.client_id).filter(Boolean))]
+      const { data: clients } = await supabase.from('clients').select('*').in('id', clientIds)
 
-          return { ...job, clients: clientInfo, job_categories: categoryInfo, invoice: invoiceInfo }
-        })
-      )
+      // Step 4: Merge everything
+      const jobsWithDetails = completedJobs.map(job => {
+        const invoice = allInvoiceData.find(i => i.job_id === job.id) || 
+                       allInvoiceData.find(i => i.id === job.invoice_id) || null
+        
+        return {
+          ...job,
+          clients: (clients || []).find(c => c.id === job.client_id) || null,
+          invoice: invoice,
+          hasInvoice: !!invoice
+        }
+      })
 
       setJobs(jobsWithDetails)
+      console.log(`📊 Loaded ${jobsWithDetails.length} completed jobs, ${jobsWithDetails.filter(j => j.hasInvoice).length} with invoices`)
     } catch (err) {
+      console.error('Error:', err)
       setError(err.message)
     } finally {
       setLoading(false)
@@ -265,51 +237,48 @@ export default function FinanceJobs() {
     setGeneratingInvoice(job.id)
 
     try {
-      const quotationNumber = 'Q-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-      const quotationAmount = job.quoted_amount || job.actual_cost || 500
-      
-      const { data: quotation, error: qError } = await supabase.from('quotations').insert([{
-        quotation_number: quotationNumber, client_id: job.client_id,
+      const amount = parseFloat((job.quoted_amount || job.actual_cost || 0).toFixed(2))
+      const taxAmount = parseFloat((amount * 0.15).toFixed(2))
+      const totalAmount = parseFloat((amount + taxAmount).toFixed(2))
+
+      const { data: invoice, error: iError } = await supabase.from('invoices').insert([{
+        invoice_number: 'INV-' + Date.now().toString(36).toUpperCase().slice(-8),
+        job_id: job.id,
+        client_id: job.client_id,
         client_name: job.clients?.company_name || 'Client',
         client_email: job.clients?.email || '',
-        client_address: [job.clients?.address_line1, job.clients?.city, job.clients?.postal_code].filter(Boolean).join(', ') || '',
-        quotation_date: new Date().toISOString().split('T')[0],
-        valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        subtotal: quotationAmount, tax_rate: 15, tax_amount: quotationAmount * 0.15, total_amount: quotationAmount * 1.15,
-        status: 'accepted', notes: `Generated from completed job: ${job.job_number} - ${job.title}`, payment_terms: '30 Days'
-      }]).select().single()
-      if (qError) throw qError
-
-      await supabase.from('quotation_items').insert([{
-        quotation_id: quotation.id, item_number: 1,
-        description: `${job.title || 'Cleaning Service'} - ${job.job_categories?.name || 'Service'}`,
-        quantity: 1, unit: 'service', unit_price: quotationAmount, tax_percent: 15
-      }])
-
-      const invoiceNumber = 'INV-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-      const totalAmount = quotationAmount * 1.15
-      
-      const { data: invoice, error: iError } = await supabase.from('invoices').insert([{
-        invoice_number: invoiceNumber, quotation_id: quotation.id, client_id: job.client_id,
-        client_name: job.clients?.company_name || 'Client', client_email: job.clients?.email || '',
-        client_address: [job.clients?.address_line1, job.clients?.city].filter(Boolean).join(', ') || '',
+        client_phone: job.clients?.phone || '',
+        client_address: job.clients?.address_line1 || job.site_address || '',
         invoice_date: new Date().toISOString().split('T')[0],
         due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        subtotal: quotationAmount, tax_rate: 15, tax_amount: quotationAmount * 0.15, total_amount: totalAmount,
-        status: 'sent', notes: `Invoice for job: ${job.job_number} - ${job.title}`
+        subtotal: amount,
+        tax_rate: 15,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        status: 'sent',
+        notes: `Job: ${job.job_number} - ${job.title || 'Cleaning Service'}`
       }]).select().single()
+      
       if (iError) throw iError
 
+      // Link invoice to job
+      await supabase.from('jobs').update({ invoice_id: invoice.id }).eq('id', job.id)
+
+      // Insert invoice item
       await supabase.from('invoice_items').insert([{
-        invoice_id: invoice.id, item_number: 1,
-        description: `${job.title || 'Cleaning Service'} - ${job.job_categories?.name || 'Service'}`,
-        quantity: 1, unit: 'service', unit_price: quotationAmount, tax_percent: 15
+        invoice_id: invoice.id,
+        item_number: 1,
+        description: `${job.title || 'Cleaning Service'}`,
+        quantity: 1,
+        unit: 'service',
+        unit_price: amount,
+        tax_percent: 15
       }])
 
-      await supabase.from('jobs').update({ quotation_id: quotation.id }).eq('id', job.id)
-      toast.success(`Invoice ${invoiceNumber} generated! ✅`)
+      toast.success(`Invoice ${invoice.invoice_number} generated! ✅`)
       loadCompletedJobs()
     } catch (error) {
+      console.error('Generate error:', error)
       toast.error('Failed to generate invoice: ' + (error.message || 'Unknown error'))
     } finally {
       setGeneratingInvoice(null)
@@ -333,19 +302,10 @@ export default function FinanceJobs() {
         image: { type: 'jpeg', quality: 1 },
         html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794, windowHeight: 1123 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        pagesplit: false
+        pagebreak: { mode: ['avoid-all'] }
       }
 
-      await html2pdf().set(opt).from(element).toPdf().get('pdf').then(function(pdf) {
-        if (pdf.internal.getNumberOfPages() > 1) {
-          for (let i = pdf.internal.getNumberOfPages(); i > 1; i--) {
-            pdf.deletePage(i)
-          }
-        }
-        pdf.save(opt.filename)
-      })
-      
+      await html2pdf().set(opt).from(element).save()
       toast.success('Invoice downloaded! 📄')
     } catch (error) {
       console.error('Download error:', error)
@@ -365,8 +325,8 @@ export default function FinanceJobs() {
   })
 
   const totalValue = jobs.reduce((sum, job) => sum + (job.quoted_amount || job.actual_cost || 0), 0)
-  const invoicedCount = jobs.filter(j => j.quotation_id).length
-  const readyToInvoice = jobs.filter(j => !j.quotation_id).length
+  const invoicedCount = jobs.filter(j => j.hasInvoice).length
+  const readyToInvoice = jobs.filter(j => !j.hasInvoice).length
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -390,7 +350,7 @@ export default function FinanceJobs() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <Briefcase className="w-8 h-8 text-emerald-600" />
-              <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Completed Jobs - Invoice Generation</h1>
+              <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Completed Jobs - Invoices</h1>
             </div>
             <p className="text-slate-500 dark:text-slate-400 ml-11">
               {jobs.length} completed · {readyToInvoice} ready · {invoicedCount} invoiced · Total: <span className="font-bold text-emerald-600">{formatCurrency(totalValue)}</span>
@@ -470,9 +430,9 @@ export default function FinanceJobs() {
                         </td>
                         <td className="py-3 px-4 text-right font-semibold">{formatCurrency(job.quoted_amount || job.actual_cost)}</td>
                         <td className="py-3 px-4 text-center">
-                          {job.quotation_id ? (
+                          {job.hasInvoice ? (
                             <span className="px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-700 inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Invoiced
+                              <CheckCircle2 className="w-3 h-3" /> {job.invoice?.invoice_number || 'Invoiced'}
                             </span>
                           ) : (
                             <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">Ready</span>
@@ -480,13 +440,13 @@ export default function FinanceJobs() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
-                            {job.quotation_id ? (
+                            {job.hasInvoice ? (
                               <>
                                 <button onClick={() => handleViewInvoice(job)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Invoice">
                                   <Eye className="w-4 h-4" />
                                 </button>
                                 <button onClick={() => handleDownloadInvoice(job)} disabled={downloadingInvoice === job.id}
-                                  className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600 disabled:opacity-50" title="Download A4 PDF">
+                                  className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600 disabled:opacity-50" title="Download PDF">
                                   {downloadingInvoice === job.id ? (
                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
                                   ) : (
@@ -528,10 +488,10 @@ export default function FinanceJobs() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setViewingInvoice(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
-              <h3 className="font-bold text-lg">Invoice Preview - {viewingInvoice.invoice?.invoice_number}</h3>
+              <h3 className="font-bold text-lg">Invoice - {viewingInvoice.invoice?.invoice_number}</h3>
               <div className="flex gap-2">
                 <button onClick={() => handleDownloadInvoice(viewingInvoice)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-blue-700">
-                  <Download className="w-4 h-4" /> Download PDF
+                  <Download className="w-4 h-4" /> PDF
                 </button>
                 <button onClick={() => setViewingInvoice(null)} className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300">
                   <X className="w-5 h-5" />
@@ -549,7 +509,7 @@ export default function FinanceJobs() {
 
       {/* Hidden invoice templates for download */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-        {jobs.filter(j => j.quotation_id).map(job => (
+        {jobs.filter(j => j.hasInvoice).map(job => (
           <div key={`hidden-${job.id}`} id={`invoice-preview-${job.id}`}>
             <InvoiceTemplate invoice={job.invoice} job={job} />
           </div>
