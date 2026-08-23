@@ -6,6 +6,7 @@ import StockList from '../pages/StockList'
 import StockDetail from '../pages/StockDetail'
 import StockMovements from '../pages/StockMovements'
 import AddItem from '../pages/AddItem'
+import StockInOut from '../pages/StockInOut'
 import ServiceList from '../pages/ServiceList'
 import ServiceForm from '../pages/ServiceForm'
 import ProductList from '../pages/ProductList'
@@ -29,6 +30,25 @@ export default function InventoryRoutes() {
       } />
       
       {/* ============================================ */}
+      {/* STOCK IN / STOCK OUT                         */}
+      {/* ============================================ */}
+      <Route path="/stock-in" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <StockInOut type="in" />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/stock-out" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <StockInOut type="out" />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ============================================ */}
       {/* STOCK / ITEMS                                */}
       {/* ============================================ */}
       <Route path="/items" element={
@@ -39,7 +59,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
       
-      {/* ✅ NEW: Add Item Page */}
+      {/* Add Item Page */}
       <Route path="/items/new" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -48,7 +68,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ NEW: Stock Detail Page */}
+      {/* Stock Detail Page */}
       <Route path="/items/:id" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -57,7 +77,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ NEW: Edit Item Page */}
+      {/* Edit Item Page */}
       <Route path="/items/:id/edit" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -66,7 +86,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ NEW: Stock Movements Page */}
+      {/* Stock Movements Page */}
       <Route path="/movements" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
