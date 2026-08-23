@@ -10,13 +10,13 @@ import {
   Package, ArrowLeft, Sun, Moon, Sparkles,
   MoveRight, MoveLeft, RefreshCw, Save, Search, History,
   Clock, Truck, Briefcase, Plus, Barcode, Lock, User,
-  TrendingUp, TrendingDown, Calendar, FileText
+  TrendingUp, TrendingDown
 } from 'lucide-react'
 
 export default function StockInOut({ type = 'in' }) {
   const isStockIn = type === 'in'
   const navigate = useNavigate()
-  const { fetchItems, createStockMovement, fetchStockMovements } = useInventoryStore()
+  const { fetchItems, createStockMovement } = useInventoryStore()
   const { isDark, toggleTheme } = useThemeStore()
   
   // STOCK OUT (TRACKER) STATE
@@ -53,7 +53,7 @@ export default function StockInOut({ type = 'in' }) {
     setTrackerItem(null)
     setTrackerHistory([])
 
-    // Step 1: Find the item
+    // Find item
     const { data: item, error: itemError } = await supabase
       .from('inventory_items')
       .select('*')
@@ -67,26 +67,22 @@ export default function StockInOut({ type = 'in' }) {
     }
 
     setTrackerItem(item)
-    console.log('📦 Item found:', item.name, 'ID:', item.id)
 
-    // Step 2: Get ALL stock movements for this item since creation
-    const { data: movements, error: movementError } = await supabase
+    // Get ALL movements in chronological order (oldest first)
+    const { data: movements } = await supabase
       .from('stock_movements')
       .select('*')
       .eq('item_id', item.id)
-      .order('created_at', { ascending: true }) // Oldest first = since received
+      .order('created_at', { ascending: true })
 
-    if (movementError) {
-      console.error('Movement error:', movementError)
-      toast.error('Failed to load history')
+    if (!movements || movements.length === 0) {
+      setTrackerHistory([])
       setTrackerLoading(false)
       return
     }
 
-    console.log(`📊 Found ${movements?.length || 0} movements`)
-
-    // Step 3: Get user names for all performed_by
-    const userIds = [...new Set((movements || []).map(m => m.performed_by).filter(Boolean))]
+    // Get user names
+    const userIds = [...new Set(movements.map(m => m.performed_by).filter(Boolean))]
     let userMap = {}
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
@@ -97,8 +93,8 @@ export default function StockInOut({ type = 'in' }) {
       ;(profiles || []).forEach(p => { userMap[p.id] = p.full_name || p.email || 'Unknown' })
     }
 
-    // Step 4: Get job numbers for all movements
-    const jobIds = [...new Set((movements || []).map(m => m.job_id).filter(Boolean))]
+    // Get job numbers
+    const jobIds = [...new Set(movements.map(m => m.job_id).filter(Boolean))]
     let jobMap = {}
     if (jobIds.length > 0) {
       const { data: jobs } = await supabase
@@ -109,14 +105,18 @@ export default function StockInOut({ type = 'in' }) {
       ;(jobs || []).forEach(j => { jobMap[j.id] = j })
     }
 
-    // Step 5: Enrich movements with user names and job info
-    const enrichedMovements = (movements || []).map(m => {
+    // ✅ CALCULATE RUNNING BALANCE CORRECTLY
+    // Starting from 0, add each quantity cumulatively
+    let runningBalance = 0
+    const enrichedMovements = movements.map(m => {
+      runningBalance += Number(m.quantity || 0)
       const job = m.job_id ? jobMap[m.job_id] : null
       return {
         ...m,
-        performed_by_name: userMap[m.performed_by] || m.performed_by || 'System',
+        performed_by_name: userMap[m.performed_by] || 'System',
         job_number: job?.job_number || m.reference_number || null,
-        job_title: job?.title || null
+        job_title: job?.title || null,
+        running_balance: runningBalance
       }
     })
 
@@ -155,7 +155,7 @@ export default function StockInOut({ type = 'in' }) {
       setIssueQty(1)
       setIssueReason('')
       setIssueJob('')
-      handleTrackItem() // Refresh full history
+      handleTrackItem()
     } else {
       toast.error(result.error || 'Failed to issue')
     }
@@ -184,15 +184,12 @@ export default function StockInOut({ type = 'in' }) {
   const addNewItem = () => {
     setStockInItems([...stockInItems, {
       item_id: null,
-      name: '',
-      item_code: '',
-      barcode: '',
-      unit: 'each',
-      quantity: 1,
       isNew: true,
       newName: '',
       newCode: '',
       newBarcode: '',
+      unit: 'each',
+      quantity: 1,
       unit_cost: 0
     }])
   }
@@ -216,7 +213,7 @@ export default function StockInOut({ type = 'in' }) {
 
       if (item.isNew) {
         if (!item.newName) { toast.error('New item name required'); setSavingStockIn(false); return }
-        if (!item.newBarcode) { toast.error('Barcode required for new item'); setSavingStockIn(false); return }
+        if (!item.newBarcode) { toast.error('Barcode required'); setSavingStockIn(false); return }
 
         const { data: newItem, error: newItemError } = await supabase
           .from('inventory_items')
@@ -235,7 +232,7 @@ export default function StockInOut({ type = 'in' }) {
           .single()
 
         if (newItemError) {
-          toast.error(`Failed to create item: ${newItemError.message}`)
+          toast.error(`Failed: ${newItemError.message}`)
           setSavingStockIn(false)
           return
         }
@@ -260,7 +257,7 @@ export default function StockInOut({ type = 'in' }) {
     }
 
     setSavingStockIn(false)
-    toast.success(`✅ Stock In complete! ${stockInItems.length} items added.`)
+    toast.success(`✅ Stock In complete!`)
     setStockInItems([])
     setSupplier('')
     setInvoiceNumber('')
@@ -307,9 +304,7 @@ export default function StockInOut({ type = 'in' }) {
         </Link>
 
         {isStockIn ? (
-          /* ═══════════════════════════════════════
-             STOCK IN - ADD NEW STOCK
-             ═══════════════════════════════════════ */
+          /* STOCK IN */
           <>
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-3xl p-6 text-white mb-6">
               <div className="flex items-center gap-4">
@@ -436,9 +431,7 @@ export default function StockInOut({ type = 'in' }) {
             )}
           </>
         ) : (
-          /* ═══════════════════════════════════════
-             STOCK OUT - FULL HISTORY TRACKER
-             ═══════════════════════════════════════ */
+          /* STOCK OUT - HISTORY TRACKER */
           <>
             <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-3xl p-6 text-white mb-6">
               <div className="flex items-center gap-4">
@@ -516,7 +509,7 @@ export default function StockInOut({ type = 'in' }) {
               </div>
             )}
 
-            {/* FULL HISTORY - READ ONLY */}
+            {/* FULL HISTORY WITH CORRECT RUNNING BALANCE */}
             {trackerHistory.length > 0 && (
               <div className="neu-raised rounded-3xl p-6">
                 <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
@@ -524,12 +517,10 @@ export default function StockInOut({ type = 'in' }) {
                   Complete Movement History
                 </h2>
                 <p className="text-sm text-slate-500 mb-4 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Read-only • {trackerHistory.length} movements since first received
+                  <Lock className="w-3 h-3" /> Read-only • {trackerHistory.length} movements
                 </p>
                 
-                {/* Timeline */}
                 <div className="relative">
-                  {/* Vertical line */}
                   <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
                   
                   <div className="space-y-4">
@@ -539,14 +530,12 @@ export default function StockInOut({ type = 'in' }) {
                       
                       return (
                         <div key={m.id || index} className="relative pl-14">
-                          {/* Timeline dot */}
                           <div className={`absolute left-3 top-2 w-5 h-5 rounded-full border-2 border-white dark:border-slate-800 flex items-center justify-center ${
                             isIn ? 'bg-emerald-500' : 'bg-red-500'
                           }`}>
                             {isIn ? <TrendingUp className="w-3 h-3 text-white" /> : <TrendingDown className="w-3 h-3 text-white" />}
                           </div>
                           
-                          {/* Card */}
                           <div className={`p-4 rounded-xl border ${
                             isIn 
                               ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-700/30' 
@@ -571,7 +560,6 @@ export default function StockInOut({ type = 'in' }) {
                               </span>
                             </div>
                             
-                            {/* Job Number */}
                             {m.job_number && (
                               <p className="text-sm mt-2 flex items-center gap-1">
                                 <Briefcase className="w-4 h-4 text-blue-600" />
@@ -580,21 +568,21 @@ export default function StockInOut({ type = 'in' }) {
                               </p>
                             )}
                             
-                            {/* Notes */}
                             {m.notes && (
                               <p className="text-xs text-slate-500 mt-1">{m.notes}</p>
                             )}
                             
-                            {/* User */}
                             <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
                               <User className="w-3.5 h-3.5 text-slate-400" />
                               <span className="font-medium">{m.performed_by_name || 'System'}</span>
                             </div>
                             
-                            {/* Running balance */}
-                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500">
-                              <span className="font-semibold">Stock after: </span>
-                              <span className="font-bold">{m.current_stock_after || 'N/A'}</span>
+                            {/* ✅ CORRECT RUNNING BALANCE */}
+                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                              <span className="text-xs text-slate-500 font-semibold">Stock Balance:</span>
+                              <span className={`font-bold ${m.running_balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {m.running_balance} {trackerItem?.unit || ''}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -609,7 +597,7 @@ export default function StockInOut({ type = 'in' }) {
               <div className="text-center py-12 neu-raised rounded-3xl">
                 <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 text-lg">Enter an item code to view its complete history</p>
-                <p className="text-slate-400 text-sm mt-1">Shows: when received, all movements, who did it, and job numbers</p>
+                <p className="text-slate-400 text-sm mt-1">Shows: when received, all movements, who did it, and running balance</p>
               </div>
             )}
           </>
