@@ -44,7 +44,6 @@ function InvoiceTemplate({ invoice, job }) {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `3px solid ${colors.main}`, paddingBottom: '10px', marginBottom: '15px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '55px', height: '55px', borderRadius: '50%', backgroundColor: colors.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${colors.lightBorder}` }}>
@@ -65,7 +64,6 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Bill To */}
       <div style={{ marginBottom: '15px', flexShrink: 0 }}>
         <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Bill To:</h3>
         <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || job?.clients?.company_name || 'Client'}</p>
@@ -76,7 +74,6 @@ function InvoiceTemplate({ invoice, job }) {
         </p>
       </div>
 
-      {/* Table */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px', flexShrink: 0 }}>
         <thead>
           <tr style={{ backgroundColor: colors.main, color: 'white' }}>
@@ -96,7 +93,6 @@ function InvoiceTemplate({ invoice, job }) {
         </tbody>
       </table>
 
-      {/* Totals */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px', flexShrink: 0 }}>
         <div style={{ width: '220px', border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '8px', backgroundColor: '#f8fafc' }}>
@@ -114,7 +110,6 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Payment Info */}
       <div style={{ padding: '6px 12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '20px', fontSize: '7px', color: '#64748b', flexWrap: 'wrap' }}>
           <span><strong>Bank:</strong> Capitec Business</span>
@@ -125,7 +120,6 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Footer */}
       <div style={{ marginTop: 'auto', borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center', flexShrink: 0 }}>
         <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | 2220 Manthata Street, Midrand | Tel: 070 419 9457
@@ -148,21 +142,30 @@ export default function FinanceJobs() {
   const [error, setError] = useState(null)
   const [viewingInvoice, setViewingInvoice] = useState(null)
   const [downloadingInvoice, setDownloadingInvoice] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
 
   useEffect(() => {
     loadCompletedJobs()
-  }, [])
+  }, [statusFilter])
 
   const loadCompletedJobs = async () => {
     setLoading(true)
     setError(null)
     
     try {
-      const { data: allJobs, error: jobsError } = await supabase
+      // ✅ EXCLUDE cancelled jobs completely
+      let query = supabase
         .from('jobs')
         .select('*')
+        .not('status', 'eq', 'cancelled')
         .order('updated_at', { ascending: false })
         .limit(100)
+
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter)
+      }
+
+      const { data: allJobs, error: jobsError } = await query
 
       if (jobsError) { setError(jobsError.message); setLoading(false); return }
 
@@ -202,21 +205,17 @@ export default function FinanceJobs() {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   }
 
-  // ✅ FIXED: Blocks cancelled jobs, duplicate invoices, and zero amounts
   const generateInvoice = async (job) => {
-    // Block cancelled jobs
     if (job.status === 'cancelled') {
       toast.error('Cannot generate invoice for a cancelled job.')
       return
     }
 
-    // Block zero amount
     if (!job.quoted_amount || job.quoted_amount <= 0) {
       toast.error('This job has no quoted amount. Cannot generate invoice.')
       return
     }
 
-    // Block duplicate
     if (job.hasInvoice) {
       toast.error('Invoice already exists for this job.')
       return
@@ -356,6 +355,29 @@ export default function FinanceJobs() {
           </button>
         </motion.div>
 
+        {/* Status Filter Buttons */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {[
+            { value: 'all', label: 'All Jobs' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'in_progress', label: 'In Progress' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'scheduled', label: 'Scheduled' },
+          ].map(s => (
+            <button
+              key={s.value}
+              onClick={() => setStatusFilter(s.value)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                statusFilter === s.value 
+                  ? 'bg-emerald-600 text-white' 
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -450,25 +472,16 @@ export default function FinanceJobs() {
                             ) : (
                               <button 
                                 onClick={() => generateInvoice(job)} 
-                                disabled={generatingInvoice === job.id || !job.quoted_amount || job.status === 'cancelled' || job.hasInvoice}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 disabled:opacity-50 ${
-                                  job.status === 'cancelled' 
-                                    ? 'bg-red-100 text-red-500 cursor-not-allowed' 
-                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                }`}
-                                title={
-                                  job.status === 'cancelled' ? 'Cannot invoice cancelled job' :
-                                  !job.quoted_amount ? 'No quoted amount' : 
-                                  job.hasInvoice ? 'Already invoiced' : 
-                                  'Generate Invoice'
-                                }
+                                disabled={generatingInvoice === job.id || !job.quoted_amount || job.hasInvoice}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                title={!job.quoted_amount ? 'No quoted amount' : job.hasInvoice ? 'Already invoiced' : 'Generate Invoice'}
                               >
                                 {generatingInvoice === job.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                                 ) : (
                                   <Receipt className="w-3 h-3" />
                                 )}
-                                {job.status === 'cancelled' ? 'Cancelled' : 'Generate'}
+                                Generate
                               </button>
                             )}
                           </div>
