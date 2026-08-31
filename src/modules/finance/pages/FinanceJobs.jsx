@@ -125,7 +125,7 @@ function InvoiceTemplate({ invoice, job }) {
         </div>
       </div>
 
-      {/* Footer - pushed to bottom */}
+      {/* Footer */}
       <div style={{ marginTop: 'auto', borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center', flexShrink: 0 }}>
         <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>
           Ndanduleni Group (Pty) Ltd | 2220 Manthata Street, Midrand | Tel: 070 419 9457
@@ -202,17 +202,30 @@ export default function FinanceJobs() {
     return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   }
 
+  // ✅ FIXED: Blocks cancelled jobs, duplicate invoices, and zero amounts
   const generateInvoice = async (job) => {
+    // Block cancelled jobs
+    if (job.status === 'cancelled') {
+      toast.error('Cannot generate invoice for a cancelled job.')
+      return
+    }
+
+    // Block zero amount
+    if (!job.quoted_amount || job.quoted_amount <= 0) {
+      toast.error('This job has no quoted amount. Cannot generate invoice.')
+      return
+    }
+
+    // Block duplicate
+    if (job.hasInvoice) {
+      toast.error('Invoice already exists for this job.')
+      return
+    }
+
     setGeneratingInvoice(job.id)
 
     try {
       const amount = parseFloat((job.quoted_amount || 0).toFixed(2))
-      if (amount <= 0) {
-        toast.error('This job has no quoted amount. Cannot generate invoice.')
-        setGeneratingInvoice(null)
-        return
-      }
-
       const taxAmount = parseFloat((amount * 0.15).toFixed(2))
       const totalAmount = parseFloat((amount + taxAmount).toFixed(2))
 
@@ -435,15 +448,27 @@ export default function FinanceJobs() {
                                 </button>
                               </>
                             ) : (
-                              <button onClick={() => generateInvoice(job)} disabled={generatingInvoice === job.id || !job.quoted_amount}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                                title={!job.quoted_amount ? 'No quoted amount' : 'Generate Invoice'}>
+                              <button 
+                                onClick={() => generateInvoice(job)} 
+                                disabled={generatingInvoice === job.id || !job.quoted_amount || job.status === 'cancelled' || job.hasInvoice}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 disabled:opacity-50 ${
+                                  job.status === 'cancelled' 
+                                    ? 'bg-red-100 text-red-500 cursor-not-allowed' 
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                }`}
+                                title={
+                                  job.status === 'cancelled' ? 'Cannot invoice cancelled job' :
+                                  !job.quoted_amount ? 'No quoted amount' : 
+                                  job.hasInvoice ? 'Already invoiced' : 
+                                  'Generate Invoice'
+                                }
+                              >
                                 {generatingInvoice === job.id ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                                 ) : (
                                   <Receipt className="w-3 h-3" />
                                 )}
-                                Generate
+                                {job.status === 'cancelled' ? 'Cancelled' : 'Generate'}
                               </button>
                             )}
                           </div>
