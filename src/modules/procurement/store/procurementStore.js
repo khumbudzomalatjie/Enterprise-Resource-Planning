@@ -50,7 +50,7 @@ const useProcurementStore = create((set, get) => ({
     return { success: true, data }
   },
 
-  // ✅ NEW: Hard delete vendor (permanently removes record)
+  // ✅ Hard delete vendor (permanently removes record)
   deleteVendor: async (id) => {
     set({ loading: true, error: null })
     const { error } = await procurementApi.deleteVendor(id)
