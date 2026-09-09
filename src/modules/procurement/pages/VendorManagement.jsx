@@ -7,16 +7,24 @@ import useThemeStore from '../../../store/themeStore'
 import toast from 'react-hot-toast'
 import { 
   Search, Users, Plus, Eye, Edit, Trash2, Star, 
-  ChevronRight, Sun, Moon, Sparkles, Mail, Phone, MapPin 
+  ChevronRight, Sun, Moon, Sparkles, Mail, Phone, MapPin,
+  Ban, CheckCircle2
 } from 'lucide-react'
 
 export default function VendorManagement() {
-  const { vendors, fetchVendors, updateVendor, loading } = useProcurementStore()
+  const { 
+    vendors, fetchVendors, updateVendor, deleteVendor, loading 
+  } = useProcurementStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
+
+  // Modal states
+  const [vendorToDelete, setVendorToDelete] = useState(null)
+  const [vendorToDeactivate, setVendorToDeactivate] = useState(null)
+  const [processing, setProcessing] = useState(null)
 
   useEffect(() => { loadData() }, [statusFilter, categoryFilter])
 
@@ -27,28 +35,71 @@ export default function VendorManagement() {
     await fetchVendors(filters)
   }
 
-  const handleDelete = async (id, e) => {
+  // ─── Deactivate (soft) ─────────────────────────────
+  const handleDeactivate = (vendor, e) => {
     e.stopPropagation()
-    if (window.confirm('Are you sure you want to deactivate this vendor?')) {
-      const result = await updateVendor(id, { status: 'inactive' })
-      if (result.success) {
-        toast.success('Vendor deactivated')
-        loadData()
-      } else {
-        toast.error('Failed to deactivate vendor')
-      }
+    setVendorToDeactivate(vendor)
+  }
+
+  const confirmDeactivate = async () => {
+    if (!vendorToDeactivate) return
+    setProcessing(vendorToDeactivate.id)
+    const result = await updateVendor(vendorToDeactivate.id, { status: 'inactive' })
+    setProcessing(null)
+    if (result.success) {
+      toast.success(`${vendorToDeactivate.company_name} marked as inactive`)
+      setVendorToDeactivate(null)
+      loadData()
+    } else {
+      toast.error(result.error || 'Failed to deactivate vendor')
     }
   }
 
+  // ─── Activate ──────────────────────────────────────
+  const handleActivate = async (vendor, e) => {
+    e.stopPropagation()
+    setProcessing(vendor.id)
+    const result = await updateVendor(vendor.id, { status: 'active' })
+    setProcessing(null)
+    if (result.success) {
+      toast.success(`${vendor.company_name} activated`)
+      loadData()
+    } else {
+      toast.error(result.error || 'Failed to activate vendor')
+    }
+  }
+
+  // ─── Delete (hard) ─────────────────────────────────
+  const handleDelete = (vendor, e) => {
+    e.stopPropagation()
+    setVendorToDelete(vendor)
+  }
+
+  const confirmDelete = async () => {
+    if (!vendorToDelete) return
+    setProcessing(vendorToDelete.id)
+    const result = await deleteVendor(vendorToDelete.id)
+    setProcessing(null)
+    if (result.success) {
+      toast.success(`Vendor "${vendorToDelete.company_name}" deleted permanently!`)
+      setVendorToDelete(null)
+      loadData()
+    } else {
+      toast.error(result.error || 'Failed to delete vendor')
+    }
+  }
+
+  // ─── Navigation ────────────────────────────────────
   const handleEdit = (id, e) => {
     e.stopPropagation()
-    navigate(`/procurement/vendors/${id}`)
+    navigate(`/procurement/vendors/${id}/edit`)
   }
 
   const handleView = (id) => {
     navigate(`/procurement/vendors/${id}`)
   }
 
+  // ─── Filtering & helpers (unchanged from previous) ──
   const filteredVendors = (vendors || []).filter(v => {
     if (!search) return true
     return v.company_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -122,15 +173,13 @@ export default function VendorManagement() {
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">{(vendors || []).length} vendors total</p>
           </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => navigate('/procurement/vendors/new')} 
-              className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add Vendor</span>
-            </button>
-          </div>
+          <button 
+            onClick={() => navigate('/procurement/vendors/new')} 
+            className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Vendor</span>
+          </button>
         </motion.div>
 
         {/* Filters */}
@@ -278,15 +327,38 @@ export default function VendorManagement() {
                     >
                       <Edit className="w-4 h-4" />
                     </button>
+
+                    {/* Deactivate / Activate toggle */}
                     {vendor.status === 'active' && (
                       <button 
-                        onClick={(e) => handleDelete(vendor.id, e)}
-                        className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                        onClick={(e) => handleDeactivate(vendor, e)}
+                        className="p-2 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                         title="Deactivate Vendor"
+                        disabled={processing === vendor.id}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {processing === vendor.id ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Ban className="w-4 h-4" />}
                       </button>
                     )}
+                    {vendor.status === 'inactive' && (
+                      <button 
+                        onClick={(e) => handleActivate(vendor, e)}
+                        className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                        title="Activate Vendor"
+                        disabled={processing === vendor.id}
+                      >
+                        {processing === vendor.id ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      </button>
+                    )}
+
+                    {/* Hard Delete */}
+                    <button 
+                      onClick={(e) => handleDelete(vendor, e)}
+                      className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      title="Delete Permanently"
+                      disabled={processing === vendor.id}
+                    >
+                      {processing === vendor.id ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
               </motion.div>
@@ -319,34 +391,49 @@ export default function VendorManagement() {
             )}
           </motion.div>
         )}
-
-        {/* Stats Summary */}
-        {!loading && filteredVendors.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ delay: 0.3 }}
-            className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4"
-          >
-            <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Total Vendors</p>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">{vendors.length}</p>
-            </div>
-            <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Active</p>
-              <p className="text-2xl font-bold text-emerald-600">{vendors.filter(v => v.status === 'active').length}</p>
-            </div>
-            <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Preferred</p>
-              <p className="text-2xl font-bold text-purple-600">{vendors.filter(v => v.is_preferred).length}</p>
-            </div>
-            <div className="neu-raised rounded-2xl p-4 text-center">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Pending</p>
-              <p className="text-2xl font-bold text-amber-600">{vendors.filter(v => v.status === 'pending_approval').length}</p>
-            </div>
-          </motion.div>
-        )}
       </main>
+
+      {/* Deactivate Confirmation Modal */}
+      {vendorToDeactivate && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <div className="text-center">
+              <Ban className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Deactivate Vendor?</h3>
+              <p className="text-slate-500 mb-1">Mark as inactive:</p>
+              <p className="font-semibold text-lg text-slate-800 dark:text-white">{vendorToDeactivate.company_name}</p>
+              <p className="text-xs text-slate-400 mt-2 mb-4">The vendor will no longer appear in active lists but can be reactivated later.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setVendorToDeactivate(null)} className="flex-1 py-3 rounded-xl bg-slate-300 dark:bg-slate-600 font-semibold">Cancel</button>
+                <button onClick={confirmDeactivate} disabled={processing === vendorToDeactivate.id} className="flex-1 py-3 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-700 disabled:opacity-50">
+                  {processing === vendorToDeactivate.id ? 'Processing...' : 'Deactivate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {vendorToDelete && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <div className="text-center">
+              <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Vendor?</h3>
+              <p className="text-slate-500 mb-1">You are about to permanently delete:</p>
+              <p className="font-semibold text-lg text-slate-800 dark:text-white">{vendorToDelete.company_name}</p>
+              <p className="text-xs text-slate-400 mt-2 mb-4">This action cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setVendorToDelete(null)} className="flex-1 py-3 rounded-xl bg-slate-300 dark:bg-slate-600 font-semibold">Cancel</button>
+                <button onClick={confirmDelete} disabled={processing === vendorToDelete.id} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50">
+                  {processing === vendorToDelete.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
