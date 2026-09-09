@@ -37,10 +37,11 @@ export const procurementApi = {
     return { data, error }
   },
 
+  // ✅ FIXED: Hard delete (permanently removes the vendor row)
   async deleteVendor(id) {
     const { error } = await supabase
       .from('vendors')
-      .update({ status: 'inactive', updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', id)
     return { error }
   },
@@ -53,7 +54,7 @@ export const procurementApi = {
   },
 
   // ============================================
-  // PURCHASE REQUISITIONS - Stored in public.purchase_requisitions
+  // PURCHASE REQUISITIONS
   // ============================================
   async getPurchaseRequisitions(filters = {}) {
     let query = supabase.from('purchase_requisitions')
@@ -74,15 +75,11 @@ export const procurementApi = {
   },
 
   async createPurchaseRequisition(prData, items) {
-    // Insert PR header
     const { data: pr, error: prError } = await supabase
       .from('purchase_requisitions')
       .insert([prData])
       .select().single()
-    
     if (prError) return { error: prError }
-    
-    // Insert PR line items
     if (items?.length) {
       const itemsWithPR = items.map((item, i) => ({
         ...item,
@@ -91,7 +88,6 @@ export const procurementApi = {
       }))
       await supabase.from('purchase_requisition_items').insert(itemsWithPR)
     }
-    
     return { data: pr }
   },
 
@@ -119,13 +115,13 @@ export const procurementApi = {
   async deletePurchaseRequisition(id) {
     const { error } = await supabase
       .from('purchase_requisitions')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', id)
     return { error }
   },
 
   // ============================================
-  // RFQs - Stored in public.rfqs table
+  // RFQs
   // ============================================
   async getRFQs(filters = {}) {
     let query = supabase.from('rfqs')
@@ -149,7 +145,6 @@ export const procurementApi = {
       .from('rfqs')
       .insert([rfqData]).select().single()
     if (error) return { error }
-    
     if (items?.length) {
       await supabase.from('rfq_items').insert(
         items.map((item, i) => ({ ...item, rfq_id: rfq.id, item_number: i + 1 }))
@@ -169,7 +164,7 @@ export const procurementApi = {
   async deleteRFQ(id) {
     const { error } = await supabase
       .from('rfqs')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', id)
     return { error }
   },
@@ -179,7 +174,6 @@ export const procurementApi = {
       .from('rfq_responses')
       .insert([responseData]).select().single()
     if (error) return { error }
-    
     if (items?.length) {
       await supabase.from('rfq_response_items').insert(
         items.map(item => ({ ...item, response_id: response.id }))
@@ -196,7 +190,7 @@ export const procurementApi = {
   },
 
   // ============================================
-  // PURCHASE ORDERS - Stored in public.purchase_orders
+  // PURCHASE ORDERS
   // ============================================
   async getPurchaseOrders(filters = {}) {
     let query = supabase.from('purchase_orders')
@@ -213,7 +207,6 @@ export const procurementApi = {
       .from('purchase_orders')
       .insert([poData]).select().single()
     if (poError) return { error: poError }
-    
     if (items?.length) {
       await supabase.from('purchase_order_items').insert(
         items.map(item => ({ ...item, purchase_order_id: po.id }))
@@ -233,7 +226,6 @@ export const procurementApi = {
   async convertPRToPO(prId) {
     const { data: pr } = await procurementApi.getPurchaseRequisition(prId)
     if (!pr) return { error: 'PR not found' }
-
     const poData = {
       pr_id: pr.id,
       supplier_id: pr.purchase_requisition_items?.[0]?.suggested_vendor_id,
@@ -241,25 +233,21 @@ export const procurementApi = {
       status: 'draft',
       notes: `Created from PR ${pr.pr_number}`
     }
-
     const items = pr.purchase_requisition_items.map(item => ({
       item_id: item.item_id,
       description: item.description,
       quantity_ordered: item.quantity,
       unit_price: item.estimated_unit_price || 0
     }))
-
     const { data: po, error } = await supabase
       .from('purchase_orders')
       .insert([poData]).select().single()
     if (error) return { error }
-
     if (items.length) {
       await supabase.from('purchase_order_items').insert(
         items.map(item => ({ ...item, purchase_order_id: po.id }))
       )
     }
-
     await procurementApi.updatePRStatus(prId, 'converted_to_po')
     return { data: po }
   },
@@ -269,9 +257,7 @@ export const procurementApi = {
       .from('purchase_orders')
       .select('*, purchase_order_items(*)')
       .eq('id', poId).single()
-
     if (po) {
-      // Create stock movements for each item
       for (const item of po.purchase_order_items) {
         await supabase.from('stock_movements').insert([{
           item_id: item.item_id,
@@ -285,7 +271,6 @@ export const procurementApi = {
           notes: 'Purchase order received'
         }])
       }
-      
       await supabase.from('purchase_orders')
         .update({ 
           status: 'received', 
@@ -298,7 +283,7 @@ export const procurementApi = {
   },
 
   // ============================================
-  // GOODS RECEIPTS - Stored in public.goods_receipts
+  // GOODS RECEIPTS
   // ============================================
   async getGoodsReceipts(filters = {}) {
     let query = supabase.from('goods_receipts')
@@ -315,7 +300,6 @@ export const procurementApi = {
       .from('goods_receipts')
       .insert([grData]).select().single()
     if (error) return { error }
-    
     if (items?.length) {
       await supabase.from('goods_receipt_items').insert(
         items.map(item => ({ ...item, goods_receipt_id: gr.id }))
@@ -325,7 +309,7 @@ export const procurementApi = {
   },
 
   // ============================================
-  // VENDOR EVALUATIONS - Stored in public.vendor_evaluations
+  // VENDOR EVALUATIONS
   // ============================================
   async getVendorEvaluations(vendorId = null) {
     let query = supabase.from('vendor_evaluations')
@@ -344,7 +328,7 @@ export const procurementApi = {
   },
 
   // ============================================
-  // BUDGETS - Stored in public.procurement_budgets
+  // BUDGETS
   // ============================================
   async getBudgets() {
     const { data, error } = await supabase
