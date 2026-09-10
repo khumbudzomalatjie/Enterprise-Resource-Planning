@@ -7,12 +7,12 @@ import { documentsApi } from '../api/documentsApi'
 import toast from 'react-hot-toast'
 import { 
   FolderOpen, FileText, Upload, FileCheck, Shield, 
-  BookOpen, Clock, Plus, Search, ArrowLeft, X,
+  BookOpen, Search, ArrowLeft, X,
   Sparkles, Sun, Moon, Download, Trash2, Edit, Eye,
   ChevronRight, ChevronLeft, FolderPlus,
-  File, FileSpreadsheet, Lock, Unlock,
+  File, Image, FileSpreadsheet, Lock, Unlock,
   FileImage, FileVideo, FileAudio, ZoomIn, ZoomOut,
-  Maximize2, Loader2, ExternalLink, RefreshCw
+  Maximize2, Loader2, ExternalLink
 } from 'lucide-react'
 
 export default function DocumentsDashboard() {
@@ -36,9 +36,11 @@ export default function DocumentsDashboard() {
   // Preview modal state
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewBlob, setPreviewBlob] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState(null)
   const [zoom, setZoom] = useState(1)
+  const [downloadLoading, setDownloadLoading] = useState(false)
 
   const [newFolder, setNewFolder] = useState({ folder_name: '', folder_type: 'general', description: '' })
   const [editDocData, setEditDocData] = useState({ document_name: '', description: '', document_type: 'other', tags: '', folder_id: '' })
@@ -137,43 +139,36 @@ export default function DocumentsDashboard() {
   const goBack = () => setCurrentFolder(null)
 
   // ═══════════════════════════════════════════
-  // VIEW FUNCTION - Opens preview in modal
+  // VIEW - Opens preview modal
   // ═══════════════════════════════════════════
   const handleViewDocument = async (doc) => {
-    console.log('👁 Viewing:', doc.document_name, 'Encrypted:', doc.is_encrypted)
-    
     setPreviewDoc(doc)
     setPreviewUrl(null)
+    setPreviewBlob(null)
     setPreviewError(null)
     setPreviewLoading(true)
     setZoom(1)
 
     try {
       if (doc.is_encrypted) {
-        console.log('🔐 Decrypting...')
         const result = await documentsApi.getDecryptedDocument(doc.id)
         
         if (result.error) {
-          console.error('❌ Decrypt error:', result.error)
           setPreviewError(result.error)
           setPreviewLoading(false)
           return
         }
         
         if (result.decryptedUrl) {
-          console.log('✅ Decrypted')
           setPreviewUrl(result.decryptedUrl)
+          setPreviewBlob(result.decryptedBlob)
         } else if (result.data?.file_url) {
           setPreviewUrl(result.data.file_url)
-        } else {
-          setPreviewError('No preview URL available')
         }
       } else {
-        console.log('📄 Plain URL:', doc.file_url)
         setPreviewUrl(doc.file_url)
       }
     } catch (err) {
-      console.error('❌ Preview error:', err)
       setPreviewError(err.message || 'Failed to load preview')
     } finally {
       setPreviewLoading(false)
@@ -181,9 +176,10 @@ export default function DocumentsDashboard() {
   }
 
   // ═══════════════════════════════════════════
-  // DOWNLOAD FUNCTION - Forces download
+  // DOWNLOAD - Forces download as PDF
   // ═══════════════════════════════════════════
   const handleDownloadDocument = async (doc) => {
+    setDownloadLoading(true)
     try {
       toast.loading('Preparing download...', { id: 'download' })
       
@@ -195,6 +191,7 @@ export default function DocumentsDashboard() {
         if (result.error) {
           toast.dismiss('download')
           toast.error('Cannot download: ' + result.error)
+          setDownloadLoading(false)
           return
         }
         if (result.decryptedUrl) {
@@ -202,29 +199,29 @@ export default function DocumentsDashboard() {
         }
       }
 
-      // Ensure proper file extension
-      const fileType = (doc.file_type || '').toLowerCase()
-      const nameLC = fileName.toLowerCase()
-      
-      if (!nameLC.includes('.')) {
-        if (fileType.includes('pdf')) fileName += '.pdf'
-        else if (fileType.includes('image/png')) fileName += '.png'
-        else if (fileType.includes('image/jpeg') || fileType.includes('image/jpg')) fileName += '.jpg'
-        else if (fileType.includes('image')) fileName += '.png'
-        else if (fileType.includes('word')) fileName += '.docx'
-        else if (fileType.includes('excel') || fileType.includes('spreadsheet')) fileName += '.xlsx'
-        else if (fileType.includes('text')) fileName += '.txt'
-        else fileName += '.pdf'
-      }
-
       const response = await fetch(downloadUrl)
       if (!response.ok) throw new Error('Failed to fetch file')
       
       const blob = await response.blob()
+      
+      // Ensure proper extension
+      let downloadName = fileName
+      const fileType = (doc.file_type || '').toLowerCase()
+      const nameLC = fileName.toLowerCase()
+      
+      if (!nameLC.includes('.')) {
+        if (fileType.includes('pdf')) downloadName += '.pdf'
+        else if (fileType.includes('png')) downloadName += '.png'
+        else if (fileType.includes('jpeg') || fileType.includes('jpg')) downloadName += '.jpg'
+        else if (fileType.includes('word')) downloadName += '.docx'
+        else if (fileType.includes('excel') || fileType.includes('spreadsheet')) downloadName += '.xlsx'
+        else downloadName += '.pdf'
+      }
+
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = fileName
+      link.download = downloadName
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -235,7 +232,9 @@ export default function DocumentsDashboard() {
     } catch (err) {
       console.error('Download error:', err)
       toast.dismiss('download')
-      toast.error('Download failed')
+      toast.error('Download failed: ' + err.message)
+    } finally {
+      setDownloadLoading(false)
     }
   }
 
@@ -245,18 +244,18 @@ export default function DocumentsDashboard() {
     }
     setPreviewDoc(null)
     setPreviewUrl(null)
+    setPreviewBlob(null)
     setPreviewError(null)
     setZoom(1)
   }
 
   const getFileIcon = (fileType) => {
     if (!fileType) return File
-    const ft = fileType.toLowerCase()
-    if (ft.includes('image')) return FileImage
-    if (ft.includes('spreadsheet') || ft.includes('excel') || ft.includes('csv')) return FileSpreadsheet
-    if (ft.includes('pdf')) return FileText
-    if (ft.includes('video')) return FileVideo
-    if (ft.includes('audio')) return FileAudio
+    if (fileType.includes('image')) return FileImage
+    if (fileType.includes('spreadsheet') || fileType.includes('excel') || fileType.includes('csv')) return FileSpreadsheet
+    if (fileType.includes('pdf')) return FileText
+    if (fileType.includes('video')) return FileVideo
+    if (fileType.includes('audio')) return FileAudio
     return File
   }
 
@@ -269,7 +268,6 @@ export default function DocumentsDashboard() {
     if (ft.includes('video') || /\.(mp4|webm|ogg|mov)$/i.test(fn)) return 'video'
     if (ft.includes('audio') || /\.(mp3|wav|ogg|m4a)$/i.test(fn)) return 'audio'
     if (ft.includes('text') || /\.(txt|md|json|xml|log)$/i.test(fn)) return 'text'
-    if (ft.includes('csv') || fn.endsWith('.csv')) return 'csv'
     return 'other'
   }
 
@@ -293,10 +291,6 @@ export default function DocumentsDashboard() {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-
-  const canPreview = (fileType, fileName) => {
-    return getPreviewType(fileType, fileName) !== 'other'
   }
 
   return (
@@ -326,9 +320,6 @@ export default function DocumentsDashboard() {
             <p className="text-slate-500 dark:text-slate-400 ml-11">Contracts, policies, SOPs, and secure encrypted document storage</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={loadData} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2">
-              <RefreshCw className="w-5 h-5" />
-            </button>
             <button onClick={() => setShowAddFolder(true)} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2">
               <FolderPlus className="w-5 h-5" /><span>New Folder</span>
             </button>
@@ -485,8 +476,17 @@ export default function DocumentsDashboard() {
                                 <button onClick={() => handleViewDocument(doc)} className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" title="View">
                                   <Eye className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDownloadDocument(doc)} className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" title="Download">
-                                  <Download className="w-4 h-4" />
+                                <button 
+                                  onClick={() => handleDownloadDocument(doc)} 
+                                  disabled={downloadLoading}
+                                  className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors disabled:opacity-50" 
+                                  title="Download"
+                                >
+                                  {downloadLoading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
+                                  ) : (
+                                    <Download className="w-4 h-4" />
+                                  )}
                                 </button>
                                 <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600 transition-colors" title="Edit">
                                   <Edit className="w-4 h-4" />
@@ -508,7 +508,7 @@ export default function DocumentsDashboard() {
         )}
       </main>
 
-      {/* PREVIEW MODAL */}
+      {/* PREVIEW MODAL - Uses native browser viewers */}
       <AnimatePresence>
         {previewDoc && (
           <motion.div 
@@ -524,7 +524,10 @@ export default function DocumentsDashboard() {
               {/* Modal Header */}
               <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-5 h-5 text-emerald-600 flex-shrink-0">📄</div>
+                  {(() => {
+                    const Icon = getFileIcon(previewDoc.file_type)
+                    return <Icon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  })()}
                   <div className="min-w-0">
                     <h3 className="font-bold text-slate-800 dark:text-white truncate">{previewDoc.document_name}</h3>
                     <p className="text-xs text-slate-500">
@@ -548,16 +551,24 @@ export default function DocumentsDashboard() {
                       </button>
                     </>
                   )}
-
-                  {/* Open in new tab */}
+                  {/* Open in new tab (best for PDFs) */}
                   {previewUrl && (
                     <button onClick={() => window.open(previewUrl, '_blank')} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Open in New Tab">
                       <ExternalLink className="w-4 h-4" />
                     </button>
                   )}
-
-                  <button onClick={() => handleDownloadDocument(previewDoc)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700" title="Download">
-                    <Download className="w-4 h-4" /> Download
+                  <button 
+                    onClick={() => handleDownloadDocument(previewDoc)} 
+                    disabled={downloadLoading}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50" 
+                    title="Download"
+                  >
+                    {downloadLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Download PDF
                   </button>
                   <button onClick={closePreview} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Close">
                     <X className="w-5 h-5" />
@@ -581,10 +592,173 @@ export default function DocumentsDashboard() {
                       <p className="text-red-600 font-semibold mb-2">Cannot preview this file</p>
                       <p className="text-slate-500 text-sm mb-4">{previewError}</p>
                       <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
-                        <Download className="w-4 h-4" /> Download File
+                        <Download className="w-4 h-4" /> Download PDF
                       </button>
                     </div>
                   </div>
                 ) : previewUrl ? (
-                  <div className="flex items-start justify-center min-h-full">
-                   
+                  <div className="flex items-start justify-center min-h-full w-full">
+                    {(() => {
+                      const pType = getPreviewType(previewDoc.file_type, previewDoc.document_name)
+                      
+                      // ✅ PDF - Uses browser's native PDF viewer via iframe/embed
+                      if (pType === 'pdf') {
+                        return (
+                          <iframe 
+                            src={`${previewUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+                            title={previewDoc.document_name}
+                            className="w-full rounded-lg shadow-lg bg-white border-0"
+                            style={{ height: '75vh', minHeight: '600px' }}
+                          />
+                        )
+                      }
+                      
+                      // IMAGE
+                      if (pType === 'image') {
+                        return (
+                          <img 
+                            src={previewUrl} 
+                            alt={previewDoc.document_name}
+                            style={{ transform: `scale(${zoom})`, transition: 'transform 0.2s' }}
+                            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                          />
+                        )
+                      }
+                      
+                      // VIDEO
+                      if (pType === 'video') {
+                        return (
+                          <video controls className="max-w-full max-h-[70vh] rounded-lg shadow-lg">
+                            <source src={previewUrl} />
+                            Your browser does not support video playback.
+                          </video>
+                        )
+                      }
+                      
+                      // AUDIO
+                      if (pType === 'audio') {
+                        return (
+                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg">
+                            <FileAudio className="w-20 h-20 text-emerald-600 mx-auto mb-4" />
+                            <p className="text-center text-slate-700 dark:text-slate-300 font-medium mb-4">{previewDoc.document_name}</p>
+                            <audio controls className="w-full">
+                              <source src={previewUrl} />
+                              Your browser does not support audio playback.
+                            </audio>
+                          </div>
+                        )
+                      }
+                      
+                      // TEXT / CSV
+                      if (pType === 'text') {
+                        return (
+                          <iframe 
+                            src={previewUrl} 
+                            title={previewDoc.document_name}
+                            className="w-full rounded-lg shadow-lg border-0 bg-white"
+                            style={{ height: '70vh', minHeight: '500px' }}
+                          />
+                        )
+                      }
+                      
+                      // OTHER - Force download
+                      return (
+                        <div className="text-center max-w-md">
+                          <FileText className="w-20 h-20 text-slate-400 mx-auto mb-4" />
+                          <p className="text-slate-700 dark:text-slate-300 font-semibold mb-2">Preview not available</p>
+                          <p className="text-slate-500 text-sm mb-4">This file type cannot be previewed in the browser.</p>
+                          <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
+                            <Download className="w-4 h-4" /> Download File
+                          </button>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-slate-500">No preview available</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ADD FOLDER MODAL */}
+      <AnimatePresence>
+        {showAddFolder && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddFolder(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Create New Folder</h3>
+                <button onClick={() => setShowAddFolder(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="space-y-4">
+                <input type="text" value={newFolder.folder_name} onChange={e => setNewFolder({...newFolder, folder_name: e.target.value})} placeholder="Folder Name *" className="w-full p-3 neu-inset rounded-xl" />
+                <select value={newFolder.folder_type} onChange={e => setNewFolder({...newFolder, folder_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
+                  <option value="general">General (No Encryption)</option>
+                  <option value="contracts">🔐 Contracts (Encrypted)</option>
+                  <option value="finance">🔐 Financial (Encrypted)</option>
+                  <option value="hr">🔐 HR Documents (Encrypted)</option>
+                  <option value="policies">Policies (No Encryption)</option>
+                  <option value="sops">SOPs (No Encryption)</option>
+                  <option value="operations">Operations (No Encryption)</option>
+                </select>
+                <textarea value={newFolder.description} onChange={e => setNewFolder({...newFolder, description: e.target.value})} rows={2} placeholder="Description..." className="w-full p-3 neu-inset rounded-xl" />
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setShowAddFolder(false)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
+                  <button onClick={handleCreateFolder} className="px-4 py-2 rounded-xl bg-emerald-600 text-white">Create</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* EDIT DOCUMENT MODAL */}
+      <AnimatePresence>
+        {showEditDoc && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowEditDoc(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-4">Edit Document</h3>
+              <div className="space-y-3">
+                <input type="text" value={editDocData.document_name} onChange={e => setEditDocData({...editDocData, document_name: e.target.value})} className="w-full p-3 neu-inset rounded-xl" />
+                <select value={editDocData.document_type} onChange={e => setEditDocData({...editDocData, document_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
+                  <option value="contract">Contract</option><option value="policy">Policy</option><option value="sop">SOP</option>
+                  <option value="form">Form</option><option value="report">Report</option><option value="other">Other</option>
+                </select>
+                <select value={editDocData.folder_id} onChange={e => setEditDocData({...editDocData, folder_id: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
+                  <option value="">No Folder</option>
+                  {folders.map(f => <option key={f.id} value={f.id}>{f.folder_name}{f.is_encrypted ? ' 🔐' : ''}</option>)}
+                </select>
+                <textarea value={editDocData.description} onChange={e => setEditDocData({...editDocData, description: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl" />
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setShowEditDoc(null)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
+                  <button onClick={handleSaveEdit} className="px-4 py-2 rounded-xl bg-emerald-600 text-white">Save</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE CONFIRM */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+              <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-bold mb-2">Delete Document?</h3>
+              <p className="text-slate-500 text-sm mb-4">"{showDeleteConfirm.document_name}"</p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
+                <button onClick={handleDeleteDocument} className="px-4 py-2 rounded-xl bg-red-600 text-white">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
