@@ -33,7 +33,7 @@ export default function DocumentsDashboard() {
   const [showEditDoc, setShowEditDoc] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
 
-  // ✅ NEW: Preview modal state
+  // Preview modal state
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewBlob, setPreviewBlob] = useState(null)
@@ -137,7 +137,7 @@ export default function DocumentsDashboard() {
   const openFolder = (folder) => setCurrentFolder(folder)
   const goBack = () => setCurrentFolder(null)
 
-  // ✅ NEW: VIEW FUNCTION - Opens preview in modal
+  // ✅ VIEW FUNCTION
   const handleViewDocument = async (doc) => {
     setPreviewDoc(doc)
     setPreviewUrl(null)
@@ -146,25 +146,29 @@ export default function DocumentsDashboard() {
     setPreviewLoading(true)
     setZoom(1)
 
+    console.log('📄 Viewing document:', doc.document_name, '| encrypted:', doc.is_encrypted, '| URL:', doc.file_url)
+
     try {
-      const isEncrypted = doc.is_encrypted
-      
-      if (isEncrypted) {
-        // For encrypted files, use the decrypt API
+      if (doc.is_encrypted) {
         const result = await documentsApi.getDecryptedDocument(doc.id)
+        
         if (result.error) {
+          console.error('Decrypt error:', result.error)
           setPreviewError(result.error)
           setPreviewLoading(false)
           return
         }
-        if (result.decrypted && result.decryptedUrl) {
+        
+        if (result.decryptedUrl) {
           setPreviewUrl(result.decryptedUrl)
           setPreviewBlob(result.decryptedBlob)
-        } else if (result.data?.file_url) {
-          setPreviewUrl(result.data.file_url)
+          if (result.warning) {
+            toast(result.warning, { icon: '⚠️' })
+          }
+        } else {
+          setPreviewError('Unable to generate preview URL')
         }
       } else {
-        // For non-encrypted files, use the file_url directly
         setPreviewUrl(doc.file_url)
       }
     } catch (err) {
@@ -175,29 +179,33 @@ export default function DocumentsDashboard() {
     }
   }
 
-  // ✅ NEW: DOWNLOAD FUNCTION - Forces download
+  // ✅ DOWNLOAD FUNCTION
   const handleDownloadDocument = async (doc) => {
     try {
       toast.loading('Preparing download...', { id: 'download' })
       
       let downloadUrl = doc.file_url
       let fileName = doc.document_name || 'document'
+      let shouldRevokeUrl = false
 
-      // If encrypted, decrypt first
       if (doc.is_encrypted) {
         const result = await documentsApi.getDecryptedDocument(doc.id)
+        
         if (result.error) {
           toast.dismiss('download')
           toast.error('Cannot download: ' + result.error)
           return
         }
+        
         if (result.decryptedUrl) {
           downloadUrl = result.decryptedUrl
+          shouldRevokeUrl = true
         }
       }
 
-      // Fetch the file as blob then trigger download
       const response = await fetch(downloadUrl)
+      if (!response.ok) throw new Error('Failed to fetch file')
+      
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -206,14 +214,20 @@ export default function DocumentsDashboard() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+        if (shouldRevokeUrl && downloadUrl) {
+          window.URL.revokeObjectURL(downloadUrl)
+        }
+      }, 1000)
 
       toast.dismiss('download')
       toast.success('Download started! 📥')
     } catch (err) {
       console.error('Download error:', err)
       toast.dismiss('download')
-      toast.error('Download failed')
+      toast.error('Download failed: ' + (err.message || 'Unknown error'))
     }
   }
 
@@ -466,16 +480,14 @@ export default function DocumentsDashboard() {
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex items-center justify-end gap-1">
-                                {/* ✅ VIEW BUTTON - Opens preview modal */}
                                 <button 
                                   onClick={() => handleViewDocument(doc)} 
                                   className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" 
-                                  title={canPrev ? "View Document" : "View (download only)"}
+                                  title={canPrev ? "View Document" : "View"}
                                 >
                                   <Eye className="w-4 h-4" />
                                 </button>
                                 
-                                {/* ✅ DOWNLOAD BUTTON - Forces download */}
                                 <button 
                                   onClick={() => handleDownloadDocument(doc)} 
                                   className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" 
@@ -504,7 +516,7 @@ export default function DocumentsDashboard() {
         )}
       </main>
 
-      {/* ✅ PREVIEW MODAL */}
+      {/* PREVIEW MODAL */}
       <AnimatePresence>
         {previewDoc && (
           <motion.div 
@@ -520,7 +532,7 @@ export default function DocumentsDashboard() {
               {/* Modal Header */}
               <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <FileIcon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <FileText className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div className="min-w-0">
                     <h3 className="font-bold text-slate-800 dark:text-white truncate">{previewDoc.document_name}</h3>
                     <p className="text-xs text-slate-500">
