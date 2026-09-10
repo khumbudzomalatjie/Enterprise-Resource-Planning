@@ -4,7 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { documentsApi } from '../api/documentsApi'
+import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
+import { Document, Page, pdfjs } from 'react-pdf'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
 import { 
   FolderOpen, FileText, Upload, FileCheck, Shield, 
   BookOpen, Clock, Plus, Search, ArrowLeft, X,
@@ -14,6 +18,9 @@ import {
   FileImage, FileVideo, FileAudio, ZoomIn, ZoomOut,
   Maximize2, Loader2
 } from 'lucide-react'
+
+// ✅ Setup PDF.js worker for react-pdf
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
 
 export default function DocumentsDashboard() {
   const { isDark, toggleTheme } = useThemeStore()
@@ -40,6 +47,11 @@ export default function DocumentsDashboard() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState(null)
   const [zoom, setZoom] = useState(1)
+
+  // ✅ PDF viewer state
+  const [numPages, setNumPages] = useState(null)
+  const [pageNumber, setPageNumber] = useState(1)
+  const [pdfScale, setPdfScale] = useState(1.2)
 
   const [newFolder, setNewFolder] = useState({ folder_name: '', folder_type: 'general', description: '' })
   const [editDocData, setEditDocData] = useState({ document_name: '', description: '', document_type: 'other', tags: '', folder_id: '' })
@@ -137,75 +149,75 @@ export default function DocumentsDashboard() {
   const openFolder = (folder) => setCurrentFolder(folder)
   const goBack = () => setCurrentFolder(null)
 
-  // ✅ VIEW FUNCTION
+  // ═══════════════════════════════════════════
+  // ✅ VIEW FUNCTION - Opens preview in modal
+  // ═══════════════════════════════════════════
   const handleViewDocument = async (doc) => {
+    console.log('👁 Viewing document:', doc.document_name, 'Encrypted:', doc.is_encrypted)
+    
     setPreviewDoc(doc)
     setPreviewUrl(null)
     setPreviewBlob(null)
     setPreviewError(null)
     setPreviewLoading(true)
     setZoom(1)
-
-    console.log('📄 Viewing document:', doc.document_name, '| encrypted:', doc.is_encrypted, '| URL:', doc.file_url)
+    setPageNumber(1)
+    setNumPages(null)
 
     try {
       if (doc.is_encrypted) {
+        console.log('🔐 Encrypted file - decrypting...')
         const result = await documentsApi.getDecryptedDocument(doc.id)
         
         if (result.error) {
-          console.error('Decrypt error:', result.error)
+          console.error('❌ Decrypt error:', result.error)
           setPreviewError(result.error)
           setPreviewLoading(false)
           return
         }
         
         if (result.decryptedUrl) {
+          console.log('✅ Decrypted successfully')
           setPreviewUrl(result.decryptedUrl)
           setPreviewBlob(result.decryptedBlob)
-          if (result.warning) {
-            toast(result.warning, { icon: '⚠️' })
-          }
-        } else {
-          setPreviewError('Unable to generate preview URL')
+        } else if (result.data?.file_url) {
+          setPreviewUrl(result.data.file_url)
         }
       } else {
+        console.log('📄 Plain file - using direct URL')
         setPreviewUrl(doc.file_url)
       }
     } catch (err) {
-      console.error('Preview error:', err)
+      console.error('❌ Preview error:', err)
       setPreviewError(err.message || 'Failed to load preview')
     } finally {
       setPreviewLoading(false)
     }
   }
 
+  // ═══════════════════════════════════════════
   // ✅ DOWNLOAD FUNCTION
+  // ═══════════════════════════════════════════
   const handleDownloadDocument = async (doc) => {
     try {
       toast.loading('Preparing download...', { id: 'download' })
       
       let downloadUrl = doc.file_url
       let fileName = doc.document_name || 'document'
-      let shouldRevokeUrl = false
 
       if (doc.is_encrypted) {
         const result = await documentsApi.getDecryptedDocument(doc.id)
-        
         if (result.error) {
           toast.dismiss('download')
           toast.error('Cannot download: ' + result.error)
           return
         }
-        
         if (result.decryptedUrl) {
           downloadUrl = result.decryptedUrl
-          shouldRevokeUrl = true
         }
       }
 
       const response = await fetch(downloadUrl)
-      if (!response.ok) throw new Error('Failed to fetch file')
-      
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -214,20 +226,14 @@ export default function DocumentsDashboard() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url)
-        if (shouldRevokeUrl && downloadUrl) {
-          window.URL.revokeObjectURL(downloadUrl)
-        }
-      }, 1000)
+      window.URL.revokeObjectURL(url)
 
       toast.dismiss('download')
       toast.success('Download started! 📥')
     } catch (err) {
       console.error('Download error:', err)
       toast.dismiss('download')
-      toast.error('Download failed: ' + (err.message || 'Unknown error'))
+      toast.error('Download failed')
     }
   }
 
@@ -240,6 +246,8 @@ export default function DocumentsDashboard() {
     setPreviewBlob(null)
     setPreviewError(null)
     setZoom(1)
+    setNumPages(null)
+    setPageNumber(1)
   }
 
   const getFileIcon = (fileType) => {
@@ -265,6 +273,17 @@ export default function DocumentsDashboard() {
     return 'other'
   }
 
+  // ✅ PDF Loading handlers
+  const onDocumentLoadSuccess = ({ numPages }) => {
+    setNumPages(numPages)
+    setPageNumber(1)
+  }
+
+  const onDocumentLoadError = (error) => {
+    console.error('PDF load error:', error)
+    setPreviewError('Failed to load PDF: ' + error.message)
+  }
+
   const folderIcons = {
     contracts: FileCheck, policies: Shield, sops: BookOpen,
     hr: FileText, finance: FileText, operations: FileText, general: FolderOpen,
@@ -288,8 +307,7 @@ export default function DocumentsDashboard() {
   }
 
   const canPreview = (fileType, fileName) => {
-    const t = getPreviewType(fileType, fileName)
-    return t !== 'other'
+    return getPreviewType(fileType, fileName) !== 'other'
   }
 
   return (
@@ -310,7 +328,6 @@ export default function DocumentsDashboard() {
           <ArrowLeft className="w-4 h-4 mr-1" /><span className="text-sm">Back to Main Dashboard</span>
         </Link>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -331,7 +348,6 @@ export default function DocumentsDashboard() {
           </div>
         </motion.div>
 
-        {/* Breadcrumb */}
         {currentFolder && (
           <div className="flex items-center gap-2 mb-4 text-sm">
             <button onClick={goBack} className="text-slate-500 hover:text-emerald-600 flex items-center gap-1">
@@ -347,7 +363,6 @@ export default function DocumentsDashboard() {
           </div>
         )}
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           {[
             { icon: FileText, label: 'Total Docs', value: stats.totalDocs || 0, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
@@ -364,7 +379,6 @@ export default function DocumentsDashboard() {
           ))}
         </div>
 
-        {/* Search */}
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -384,11 +398,9 @@ export default function DocumentsDashboard() {
           <button onClick={loadData} className="neu-raised neu-btn px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Search</button>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
         ) : !currentFolder ? (
-          /* FOLDERS */
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-emerald-600" />Folders ({folders.length})
@@ -423,7 +435,6 @@ export default function DocumentsDashboard() {
             </div>
           </motion.div>
         ) : (
-          /* DOCUMENTS */
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <FileText className="w-5 h-5 text-emerald-600" />Documents ({documents.length})
@@ -480,22 +491,12 @@ export default function DocumentsDashboard() {
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <button 
-                                  onClick={() => handleViewDocument(doc)} 
-                                  className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" 
-                                  title={canPrev ? "View Document" : "View"}
-                                >
+                                <button onClick={() => handleViewDocument(doc)} className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" title={canPrev ? "View" : "View (download only)"}>
                                   <Eye className="w-4 h-4" />
                                 </button>
-                                
-                                <button 
-                                  onClick={() => handleDownloadDocument(doc)} 
-                                  className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" 
-                                  title="Download Document"
-                                >
+                                <button onClick={() => handleDownloadDocument(doc)} className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" title="Download">
                                   <Download className="w-4 h-4" />
                                 </button>
-                                
                                 <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600 transition-colors" title="Edit">
                                   <Edit className="w-4 h-4" />
                                 </button>
@@ -516,7 +517,9 @@ export default function DocumentsDashboard() {
         )}
       </main>
 
-      {/* PREVIEW MODAL */}
+      {/* ═══════════════════════════════════════════ */}
+      {/* PREVIEW MODAL WITH PDF VIEWER                */}
+      {/* ═══════════════════════════════════════════ */}
       <AnimatePresence>
         {previewDoc && (
           <motion.div 
@@ -526,13 +529,13 @@ export default function DocumentsDashboard() {
           >
             <motion.div 
               initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col" 
+              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-6xl max-h-[95vh] flex flex-col" 
               onClick={e => e.stopPropagation()}
             >
               {/* Modal Header */}
               <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <FileText className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <FileIcon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div className="min-w-0">
                     <h3 className="font-bold text-slate-800 dark:text-white truncate">{previewDoc.document_name}</h3>
                     <p className="text-xs text-slate-500">
@@ -542,6 +545,55 @@ export default function DocumentsDashboard() {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
+                  {/* ✅ PDF Controls */}
+                  {getPreviewType(previewDoc.file_type, previewDoc.document_name) === 'pdf' && numPages && (
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-xl px-2">
+                      <button 
+                        onClick={() => setPageNumber(p => Math.max(1, p - 1))} 
+                        disabled={pageNumber <= 1}
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-30 text-slate-600 dark:text-slate-300"
+                        title="Previous Page"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm text-slate-600 dark:text-slate-300 px-1">
+                        {pageNumber} / {numPages}
+                      </span>
+                      <button 
+                        onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} 
+                        disabled={pageNumber >= numPages}
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-30 text-slate-600 dark:text-slate-300"
+                        title="Next Page"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ✅ PDF Zoom Controls */}
+                  {getPreviewType(previewDoc.file_type, previewDoc.document_name) === 'pdf' && (
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-xl px-2">
+                      <button 
+                        onClick={() => setPdfScale(s => Math.max(0.5, s - 0.2))} 
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300"
+                        title="Zoom Out"
+                      >
+                        <ZoomOut className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs text-slate-600 dark:text-slate-300 px-1 min-w-[40px] text-center">
+                        {Math.round(pdfScale * 100)}%
+                      </span>
+                      <button 
+                        onClick={() => setPdfScale(s => Math.min(3, s + 0.2))} 
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300"
+                        title="Zoom In"
+                      >
+                        <ZoomIn className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ✅ Image Zoom Controls */}
                   {getPreviewType(previewDoc.file_type, previewDoc.document_name) === 'image' && (
                     <>
                       <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Zoom Out">
@@ -555,6 +607,7 @@ export default function DocumentsDashboard() {
                       </button>
                     </>
                   )}
+
                   <button onClick={() => handleDownloadDocument(previewDoc)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700" title="Download">
                     <Download className="w-4 h-4" /> Download
                   </button>
@@ -565,7 +618,7 @@ export default function DocumentsDashboard() {
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-4 min-h-[400px]">
+              <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-4 min-h-[500px]">
                 {previewLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
@@ -585,9 +638,48 @@ export default function DocumentsDashboard() {
                     </div>
                   </div>
                 ) : previewUrl ? (
-                  <div className="flex items-center justify-center min-h-full">
+                  <div className="flex items-start justify-center min-h-full">
                     {(() => {
                       const pType = getPreviewType(previewDoc.file_type, previewDoc.document_name)
+                      
+                      // ✅ PDF VIEWER
+                      if (pType === 'pdf') {
+                        return (
+                          <div className="flex flex-col items-center">
+                            <Document
+                              file={previewUrl}
+                              onLoadSuccess={onDocumentLoadSuccess}
+                              onLoadError={onDocumentLoadError}
+                              loading={
+                                <div className="text-center py-12">
+                                  <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mx-auto mb-3" />
+                                  <p className="text-slate-500">Loading PDF...</p>
+                                </div>
+                              }
+                              error={
+                                <div className="text-center py-12">
+                                  <X className="w-12 h-12 text-red-400 mx-auto mb-3" />
+                                  <p className="text-red-600">Failed to load PDF</p>
+                                  <button onClick={() => handleDownloadDocument(previewDoc)} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm">
+                                    Download instead
+                                  </button>
+                                </div>
+                              }
+                              className="shadow-lg bg-white rounded-lg"
+                            >
+                              <Page 
+                                pageNumber={pageNumber} 
+                                scale={pdfScale}
+                                renderTextLayer={true}
+                                renderAnnotationLayer={true}
+                                className="rounded-lg"
+                              />
+                            </Document>
+                          </div>
+                        )
+                      }
+                      
+                      // IMAGE VIEWER
                       if (pType === 'image') {
                         return (
                           <img 
@@ -598,15 +690,8 @@ export default function DocumentsDashboard() {
                           />
                         )
                       }
-                      if (pType === 'pdf') {
-                        return (
-                          <iframe 
-                            src={previewUrl} 
-                            title={previewDoc.document_name}
-                            className="w-full h-[70vh] rounded-lg shadow-lg border-0 bg-white"
-                          />
-                        )
-                      }
+                      
+                      // VIDEO VIEWER
                       if (pType === 'video') {
                         return (
                           <video controls className="max-w-full max-h-[70vh] rounded-lg shadow-lg">
@@ -615,6 +700,8 @@ export default function DocumentsDashboard() {
                           </video>
                         )
                       }
+                      
+                      // AUDIO VIEWER
                       if (pType === 'audio') {
                         return (
                           <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg">
@@ -627,6 +714,8 @@ export default function DocumentsDashboard() {
                           </div>
                         )
                       }
+                      
+                      // TEXT VIEWER
                       if (pType === 'text' || pType === 'csv') {
                         return (
                           <iframe 
@@ -636,11 +725,12 @@ export default function DocumentsDashboard() {
                           />
                         )
                       }
+                      
                       return (
                         <div className="text-center max-w-md">
                           <FileText className="w-20 h-20 text-slate-400 mx-auto mb-4" />
                           <p className="text-slate-700 dark:text-slate-300 font-semibold mb-2">Preview not available</p>
-                          <p className="text-slate-500 text-sm mb-4">This file type cannot be previewed in the browser. Please download to view.</p>
+                          <p className="text-slate-500 text-sm mb-4">This file type cannot be previewed in the browser.</p>
                           <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
                             <Download className="w-4 h-4" /> Download File
                           </button>
