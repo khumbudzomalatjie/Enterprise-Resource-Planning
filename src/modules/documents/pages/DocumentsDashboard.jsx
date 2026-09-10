@@ -10,7 +10,9 @@ import {
   BookOpen, Clock, Plus, Search, ArrowLeft, X,
   Sparkles, Sun, Moon, Download, Trash2, Edit, Eye,
   ChevronRight, ChevronLeft, FolderPlus,
-  File, Image, FileSpreadsheet, Lock, Unlock
+  File, Image, FileSpreadsheet, Lock, Unlock,
+  FileImage, FileVideo, FileAudio, ZoomIn, ZoomOut,
+  Maximize2, Loader2
 } from 'lucide-react'
 
 export default function DocumentsDashboard() {
@@ -30,6 +32,14 @@ export default function DocumentsDashboard() {
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [showEditDoc, setShowEditDoc] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+
+  // ✅ NEW: Preview modal state
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewBlob, setPreviewBlob] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState(null)
+  const [zoom, setZoom] = useState(1)
 
   const [newFolder, setNewFolder] = useState({ folder_name: '', folder_type: 'general', description: '' })
   const [editDocData, setEditDocData] = useState({ document_name: '', description: '', document_type: 'other', tags: '', folder_id: '' })
@@ -127,12 +137,118 @@ export default function DocumentsDashboard() {
   const openFolder = (folder) => setCurrentFolder(folder)
   const goBack = () => setCurrentFolder(null)
 
+  // ✅ NEW: VIEW FUNCTION - Opens preview in modal
+  const handleViewDocument = async (doc) => {
+    setPreviewDoc(doc)
+    setPreviewUrl(null)
+    setPreviewBlob(null)
+    setPreviewError(null)
+    setPreviewLoading(true)
+    setZoom(1)
+
+    try {
+      const isEncrypted = doc.is_encrypted
+      
+      if (isEncrypted) {
+        // For encrypted files, use the decrypt API
+        const result = await documentsApi.getDecryptedDocument(doc.id)
+        if (result.error) {
+          setPreviewError(result.error)
+          setPreviewLoading(false)
+          return
+        }
+        if (result.decrypted && result.decryptedUrl) {
+          setPreviewUrl(result.decryptedUrl)
+          setPreviewBlob(result.decryptedBlob)
+        } else if (result.data?.file_url) {
+          setPreviewUrl(result.data.file_url)
+        }
+      } else {
+        // For non-encrypted files, use the file_url directly
+        setPreviewUrl(doc.file_url)
+      }
+    } catch (err) {
+      console.error('Preview error:', err)
+      setPreviewError(err.message || 'Failed to load preview')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  // ✅ NEW: DOWNLOAD FUNCTION - Forces download
+  const handleDownloadDocument = async (doc) => {
+    try {
+      toast.loading('Preparing download...', { id: 'download' })
+      
+      let downloadUrl = doc.file_url
+      let fileName = doc.document_name || 'document'
+
+      // If encrypted, decrypt first
+      if (doc.is_encrypted) {
+        const result = await documentsApi.getDecryptedDocument(doc.id)
+        if (result.error) {
+          toast.dismiss('download')
+          toast.error('Cannot download: ' + result.error)
+          return
+        }
+        if (result.decryptedUrl) {
+          downloadUrl = result.decryptedUrl
+        }
+      }
+
+      // Fetch the file as blob then trigger download
+      const response = await fetch(downloadUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast.dismiss('download')
+      toast.success('Download started! 📥')
+    } catch (err) {
+      console.error('Download error:', err)
+      toast.dismiss('download')
+      toast.error('Download failed')
+    }
+  }
+
+  const closePreview = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      window.URL.revokeObjectURL(previewUrl)
+    }
+    setPreviewDoc(null)
+    setPreviewUrl(null)
+    setPreviewBlob(null)
+    setPreviewError(null)
+    setZoom(1)
+  }
+
   const getFileIcon = (fileType) => {
     if (!fileType) return File
-    if (fileType.includes('image')) return Image
+    if (fileType.includes('image')) return FileImage
     if (fileType.includes('spreadsheet') || fileType.includes('excel') || fileType.includes('csv')) return FileSpreadsheet
     if (fileType.includes('pdf')) return FileText
+    if (fileType.includes('video')) return FileVideo
+    if (fileType.includes('audio')) return FileAudio
     return File
+  }
+
+  const getPreviewType = (fileType, fileName) => {
+    const ft = (fileType || '').toLowerCase()
+    const fn = (fileName || '').toLowerCase()
+    
+    if (ft.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(fn)) return 'image'
+    if (ft.includes('pdf') || fn.endsWith('.pdf')) return 'pdf'
+    if (ft.includes('video') || /\.(mp4|webm|ogg|mov)$/i.test(fn)) return 'video'
+    if (ft.includes('audio') || /\.(mp3|wav|ogg|m4a)$/i.test(fn)) return 'audio'
+    if (ft.includes('text') || /\.(txt|md|json|xml|log)$/i.test(fn)) return 'text'
+    if (ft.includes('csv') || fn.endsWith('.csv')) return 'csv'
+    return 'other'
   }
 
   const folderIcons = {
@@ -155,6 +271,11 @@ export default function DocumentsDashboard() {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  const canPreview = (fileType, fileName) => {
+    const t = getPreviewType(fileType, fileName)
+    return t !== 'other'
   }
 
   return (
@@ -315,6 +436,7 @@ export default function DocumentsDashboard() {
                     <tbody>
                       {documents.map(doc => {
                         const FileIcon = getFileIcon(doc.file_type)
+                        const canPrev = canPreview(doc.file_type, doc.document_name)
                         return (
                           <tr key={doc.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                             <td className="py-3 px-4">
@@ -344,9 +466,30 @@ export default function DocumentsDashboard() {
                             </td>
                             <td className="py-3 px-4 text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <button onClick={() => window.open(doc.file_url, '_blank')} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View"><Eye className="w-4 h-4" /></button>
-                                <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Edit"><Edit className="w-4 h-4" /></button>
-                                <button onClick={() => setShowDeleteConfirm(doc)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                {/* ✅ VIEW BUTTON - Opens preview modal */}
+                                <button 
+                                  onClick={() => handleViewDocument(doc)} 
+                                  className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" 
+                                  title={canPrev ? "View Document" : "View (download only)"}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                
+                                {/* ✅ DOWNLOAD BUTTON - Forces download */}
+                                <button 
+                                  onClick={() => handleDownloadDocument(doc)} 
+                                  className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors" 
+                                  title="Download Document"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                
+                                <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600 transition-colors" title="Edit">
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setShowDeleteConfirm(doc)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors" title="Delete">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -361,6 +504,149 @@ export default function DocumentsDashboard() {
         )}
       </main>
 
+      {/* ✅ PREVIEW MODAL */}
+      <AnimatePresence>
+        {previewDoc && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" 
+            onClick={closePreview}
+          >
+            <motion.div 
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col" 
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <FileIcon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-slate-800 dark:text-white truncate">{previewDoc.document_name}</h3>
+                    <p className="text-xs text-slate-500">
+                      {formatFileSize(previewDoc.file_size)} · {previewDoc.document_type}
+                      {previewDoc.is_encrypted && <span className="ml-2 text-amber-600">🔐 Encrypted</span>}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  {getPreviewType(previewDoc.file_type, previewDoc.document_name) === 'image' && (
+                    <>
+                      <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Zoom Out">
+                        <ZoomOut className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Zoom In">
+                        <ZoomIn className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setZoom(1)} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Reset Zoom">
+                        <Maximize2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => handleDownloadDocument(previewDoc)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700" title="Download">
+                    <Download className="w-4 h-4" /> Download
+                  </button>
+                  <button onClick={closePreview} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Close">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-4 min-h-[400px]">
+                {previewLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Loader2 className="w-12 h-12 animate-spin text-emerald-600 mx-auto mb-3" />
+                      <p className="text-slate-500">Loading preview...</p>
+                    </div>
+                  </div>
+                ) : previewError ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center max-w-md">
+                      <X className="w-16 h-16 text-red-400 mx-auto mb-4" />
+                      <p className="text-red-600 font-semibold mb-2">Cannot preview this file</p>
+                      <p className="text-slate-500 text-sm mb-4">{previewError}</p>
+                      <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
+                        <Download className="w-4 h-4" /> Download File
+                      </button>
+                    </div>
+                  </div>
+                ) : previewUrl ? (
+                  <div className="flex items-center justify-center min-h-full">
+                    {(() => {
+                      const pType = getPreviewType(previewDoc.file_type, previewDoc.document_name)
+                      if (pType === 'image') {
+                        return (
+                          <img 
+                            src={previewUrl} 
+                            alt={previewDoc.document_name}
+                            style={{ transform: `scale(${zoom})`, transition: 'transform 0.2s' }}
+                            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                          />
+                        )
+                      }
+                      if (pType === 'pdf') {
+                        return (
+                          <iframe 
+                            src={previewUrl} 
+                            title={previewDoc.document_name}
+                            className="w-full h-[70vh] rounded-lg shadow-lg border-0 bg-white"
+                          />
+                        )
+                      }
+                      if (pType === 'video') {
+                        return (
+                          <video controls className="max-w-full max-h-[70vh] rounded-lg shadow-lg">
+                            <source src={previewUrl} />
+                            Your browser does not support video playback.
+                          </video>
+                        )
+                      }
+                      if (pType === 'audio') {
+                        return (
+                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg">
+                            <FileAudio className="w-20 h-20 text-emerald-600 mx-auto mb-4" />
+                            <p className="text-center text-slate-700 dark:text-slate-300 font-medium mb-4">{previewDoc.document_name}</p>
+                            <audio controls className="w-full">
+                              <source src={previewUrl} />
+                              Your browser does not support audio playback.
+                            </audio>
+                          </div>
+                        )
+                      }
+                      if (pType === 'text' || pType === 'csv') {
+                        return (
+                          <iframe 
+                            src={previewUrl} 
+                            title={previewDoc.document_name}
+                            className="w-full h-[70vh] rounded-lg shadow-lg border-0 bg-white"
+                          />
+                        )
+                      }
+                      return (
+                        <div className="text-center max-w-md">
+                          <FileText className="w-20 h-20 text-slate-400 mx-auto mb-4" />
+                          <p className="text-slate-700 dark:text-slate-300 font-semibold mb-2">Preview not available</p>
+                          <p className="text-slate-500 text-sm mb-4">This file type cannot be previewed in the browser. Please download to view.</p>
+                          <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
+                            <Download className="w-4 h-4" /> Download File
+                          </button>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-slate-500">No preview available</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ADD FOLDER MODAL */}
       <AnimatePresence>
         {showAddFolder && (
@@ -368,7 +654,7 @@ export default function DocumentsDashboard() {
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-white">Create New Folder</h3>
-                <button onClick={() => setShowAddFolder(false)} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
+                <button onClick={() => setShowAddFolder(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
               </div>
               <div className="space-y-4">
                 <input type="text" value={newFolder.folder_name} onChange={e => setNewFolder({...newFolder, folder_name: e.target.value})} placeholder="Folder Name *" className="w-full p-3 neu-inset rounded-xl" />
