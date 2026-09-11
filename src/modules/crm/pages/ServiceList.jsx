@@ -9,13 +9,13 @@ import toast from 'react-hot-toast'
 import { 
   Briefcase, Plus, Search, ChevronRight,
   Sun, Moon, Sparkles, X, Check, Building2,
-  DollarSign, Package, ClipboardList
+  Package, ClipboardList
 } from 'lucide-react'
 
 export default function ServiceList() {
   const { serviceTypes, clientServices, fetchServiceTypes, fetchClientServices, clients, fetchClients, loading } = useCRMStore()
   const { isDark, toggleTheme } = useThemeStore()
-  const [activeTab, setActiveTab] = useState('services') // 'services' or 'types'
+  const [activeTab, setActiveTab] = useState('services')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
@@ -156,19 +156,17 @@ export default function ServiceList() {
           )}
         </motion.div>
 
-        {/* Tabs */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-6">
           <div className="inline-flex gap-2 p-1 neu-inset rounded-2xl">
-            <button onClick={() => setActiveTab('services')} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeTab === 'services' ? 'bg-emerald-600 text-white' : 'text-slate-600'}`}>
+            <button onClick={() => setActiveTab('services')} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeTab === 'services' ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-400'}`}>
               <ClipboardList className="w-4 h-4" /> Client Services ({clientServices?.length || 0})
             </button>
-            <button onClick={() => setActiveTab('types')} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeTab === 'types' ? 'bg-emerald-600 text-white' : 'text-slate-600'}`}>
+            <button onClick={() => setActiveTab('types')} className={`px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeTab === 'types' ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-400'}`}>
               <Package className="w-4 h-4" /> Service Types ({serviceTypes?.length || 0})
             </button>
           </div>
         </motion.div>
 
-        {/* Search */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="neu-raised rounded-2xl p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -179,7 +177,6 @@ export default function ServiceList() {
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
         ) : activeTab === 'types' ? (
-          /* SERVICE TYPES */
           filteredTypes.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTypes.map((type, i) => (
@@ -208,7 +205,6 @@ export default function ServiceList() {
             </div>
           )
         ) : (
-          /* CLIENT SERVICES */
           filteredServices.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredServices.map((service, i) => (
@@ -249,7 +245,6 @@ export default function ServiceList() {
         )}
       </main>
 
-      {/* Add Service Modal */}
       <AnimatePresence>
         {showForm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
