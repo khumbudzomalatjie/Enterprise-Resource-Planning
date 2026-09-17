@@ -3,20 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
+import useAuthStore from '../../../store/authStore'
 import { documentsApi } from '../api/documentsApi'
+import DocumentViewer from '../components/DocumentViewer'
 import toast from 'react-hot-toast'
 import { 
   FolderOpen, FileText, Upload, FileCheck, Shield, 
-  BookOpen, Search, ArrowLeft, X,
+  BookOpen, Clock, Plus, Search, ArrowLeft, X,
   Sparkles, Sun, Moon, Download, Trash2, Edit, Eye,
-  ChevronRight, ChevronLeft, FolderPlus,
-  File, Image, FileSpreadsheet, Lock, Unlock,
-  FileImage, FileVideo, FileAudio, ZoomIn, ZoomOut,
-  Maximize2, Loader2, ExternalLink
+  ChevronRight, ChevronLeft, FolderPlus, Lock, Unlock,
+  File, Image, FileSpreadsheet
 } from 'lucide-react'
 
 export default function DocumentsDashboard() {
   const { isDark, toggleTheme } = useThemeStore()
+  const { profile } = useAuthStore()
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   
@@ -28,22 +29,15 @@ export default function DocumentsDashboard() {
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [viewingDoc, setViewingDoc] = useState(null)
 
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [showEditDoc, setShowEditDoc] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
-
-  // Preview modal state
-  const [previewDoc, setPreviewDoc] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [previewBlob, setPreviewBlob] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState(null)
-  const [zoom, setZoom] = useState(1)
-  const [downloadLoading, setDownloadLoading] = useState(false)
-
   const [newFolder, setNewFolder] = useState({ folder_name: '', folder_type: 'general', description: '' })
   const [editDocData, setEditDocData] = useState({ document_name: '', description: '', document_type: 'other', tags: '', folder_id: '' })
+
+  const userRole = profile?.role
 
   useEffect(() => {
     loadData()
@@ -67,8 +61,8 @@ export default function DocumentsDashboard() {
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolder.folder_name.trim()) { toast.error('Folder name is required'); return }
-    const { data, error } = await documentsApi.createFolder(newFolder)
+    if (!newFolder.folder_name.trim()) { toast.error('Folder name required'); return }
+    const { error } = await documentsApi.createFolder(newFolder)
     if (error) { toast.error('Failed to create folder'); return }
     toast.success('Folder created!')
     setShowAddFolder(false)
@@ -80,7 +74,6 @@ export default function DocumentsDashboard() {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 20 * 1024 * 1024) { toast.error('File must be less than 20MB'); return }
-
     setUploading(true)
     try {
       const result = await documentsApi.uploadDocument(file, {
@@ -88,10 +81,13 @@ export default function DocumentsDashboard() {
         folder_id: currentFolder?.id || null,
         document_type: 'other'
       })
-      if (result.error) { toast.error(result.error) }
-      else { toast.success('Document uploaded successfully!'); loadData() }
+      if (result.error) toast.error(result.error)
+      else {
+        toast.success('Uploaded!')
+        loadData()
+      }
     } catch (error) {
-      toast.error('Failed to upload document')
+      toast.error('Upload failed')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -121,7 +117,7 @@ export default function DocumentsDashboard() {
     }
     const { error } = await documentsApi.updateDocument(showEditDoc.id, updates)
     if (error) { toast.error('Failed to update'); return }
-    toast.success('Document updated!')
+    toast.success('Updated!')
     setShowEditDoc(null)
     loadData()
   }
@@ -130,150 +126,42 @@ export default function DocumentsDashboard() {
     if (!showDeleteConfirm) return
     const { error } = await documentsApi.deleteDocument(showDeleteConfirm.id)
     if (error) { toast.error('Failed to delete'); return }
-    toast.success('Document moved to archive')
+    toast.success('Archived')
     setShowDeleteConfirm(null)
     loadData()
+  }
+
+  const handleQuickDownloadPdf = async (doc, e) => {
+    e.stopPropagation()
+    toast.loading('Generating PDF...', { id: 'pdf-dl' })
+    const result = await documentsApi.downloadAsPdf(doc, userRole)
+    toast.dismiss('pdf-dl')
+    if (result.error) toast.error(result.error)
+    else if (result.note) toast.success(result.note, { duration: 5000 })
+    else toast.success('PDF downloaded!')
+  }
+
+  const handleQuickDownloadOriginal = async (doc, e) => {
+    e.stopPropagation()
+    const result = await documentsApi.downloadDocument(doc, userRole)
+    if (result.error) toast.error(result.error)
+    else toast.success('Downloaded!')
   }
 
   const openFolder = (folder) => setCurrentFolder(folder)
   const goBack = () => setCurrentFolder(null)
 
-  // ═══════════════════════════════════════════
-  // VIEW - Opens preview modal
-  // ═══════════════════════════════════════════
-  const handleViewDocument = async (doc) => {
-    setPreviewDoc(doc)
-    setPreviewUrl(null)
-    setPreviewBlob(null)
-    setPreviewError(null)
-    setPreviewLoading(true)
-    setZoom(1)
-
-    try {
-      if (doc.is_encrypted) {
-        const result = await documentsApi.getDecryptedDocument(doc.id)
-        
-        if (result.error) {
-          setPreviewError(result.error)
-          setPreviewLoading(false)
-          return
-        }
-        
-        if (result.decryptedUrl) {
-          setPreviewUrl(result.decryptedUrl)
-          setPreviewBlob(result.decryptedBlob)
-        } else if (result.data?.file_url) {
-          setPreviewUrl(result.data.file_url)
-        }
-      } else {
-        setPreviewUrl(doc.file_url)
-      }
-    } catch (err) {
-      setPreviewError(err.message || 'Failed to load preview')
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  // ═══════════════════════════════════════════
-  // DOWNLOAD - Forces download as PDF
-  // ═══════════════════════════════════════════
-  const handleDownloadDocument = async (doc) => {
-    setDownloadLoading(true)
-    try {
-      toast.loading('Preparing download...', { id: 'download' })
-      
-      let downloadUrl = doc.file_url
-      let fileName = doc.document_name || 'document'
-
-      if (doc.is_encrypted) {
-        const result = await documentsApi.getDecryptedDocument(doc.id)
-        if (result.error) {
-          toast.dismiss('download')
-          toast.error('Cannot download: ' + result.error)
-          setDownloadLoading(false)
-          return
-        }
-        if (result.decryptedUrl) {
-          downloadUrl = result.decryptedUrl
-        }
-      }
-
-      const response = await fetch(downloadUrl)
-      if (!response.ok) throw new Error('Failed to fetch file')
-      
-      const blob = await response.blob()
-      
-      // Ensure proper extension
-      let downloadName = fileName
-      const fileType = (doc.file_type || '').toLowerCase()
-      const nameLC = fileName.toLowerCase()
-      
-      if (!nameLC.includes('.')) {
-        if (fileType.includes('pdf')) downloadName += '.pdf'
-        else if (fileType.includes('png')) downloadName += '.png'
-        else if (fileType.includes('jpeg') || fileType.includes('jpg')) downloadName += '.jpg'
-        else if (fileType.includes('word')) downloadName += '.docx'
-        else if (fileType.includes('excel') || fileType.includes('spreadsheet')) downloadName += '.xlsx'
-        else downloadName += '.pdf'
-      }
-
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = downloadName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-
-      toast.dismiss('download')
-      toast.success('Download started! 📥')
-    } catch (err) {
-      console.error('Download error:', err)
-      toast.dismiss('download')
-      toast.error('Download failed: ' + err.message)
-    } finally {
-      setDownloadLoading(false)
-    }
-  }
-
-  const closePreview = () => {
-    if (previewUrl && previewUrl.startsWith('blob:')) {
-      window.URL.revokeObjectURL(previewUrl)
-    }
-    setPreviewDoc(null)
-    setPreviewUrl(null)
-    setPreviewBlob(null)
-    setPreviewError(null)
-    setZoom(1)
-  }
-
   const getFileIcon = (fileType) => {
     if (!fileType) return File
-    if (fileType.includes('image')) return FileImage
+    if (fileType.includes('image')) return Image
     if (fileType.includes('spreadsheet') || fileType.includes('excel') || fileType.includes('csv')) return FileSpreadsheet
     if (fileType.includes('pdf')) return FileText
-    if (fileType.includes('video')) return FileVideo
-    if (fileType.includes('audio')) return FileAudio
     return File
   }
 
-  const getPreviewType = (fileType, fileName) => {
-    const ft = (fileType || '').toLowerCase()
-    const fn = (fileName || '').toLowerCase()
-    
-    if (ft.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(fn)) return 'image'
-    if (ft.includes('pdf') || fn.endsWith('.pdf')) return 'pdf'
-    if (ft.includes('video') || /\.(mp4|webm|ogg|mov)$/i.test(fn)) return 'video'
-    if (ft.includes('audio') || /\.(mp3|wav|ogg|m4a)$/i.test(fn)) return 'audio'
-    if (ft.includes('text') || /\.(txt|md|json|xml|log)$/i.test(fn)) return 'text'
-    return 'other'
-  }
-
   const folderIcons = {
-    contracts: FileCheck, policies: Shield, sops: BookOpen,
-    hr: FileText, finance: FileText, operations: FileText, general: FolderOpen,
+    contracts: FileCheck, policies: Shield, sops: BookOpen, hr: FileText,
+    finance: FileText, operations: FileText, general: FolderOpen,
   }
 
   const folderColors = {
@@ -317,7 +205,7 @@ export default function DocumentsDashboard() {
               <FolderOpen className="w-8 h-8 text-emerald-600" />
               <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Document Management</h1>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 ml-11">Contracts, policies, SOPs, and secure encrypted document storage</p>
+            <p className="text-slate-500 dark:text-slate-400 ml-11">Contracts, policies, SOPs, and secure document storage</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowAddFolder(true)} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2">
@@ -346,9 +234,10 @@ export default function DocumentsDashboard() {
           </div>
         )}
 
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           {[
-            { icon: FileText, label: 'Total Docs', value: stats.totalDocs || 0, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+            { icon: FileText, label: 'Total Documents', value: stats.totalDocs || 0, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
             { icon: FileCheck, label: 'Contracts', value: stats.contracts || 0, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
             { icon: Shield, label: 'Policies', value: stats.policies || 0, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
             { icon: BookOpen, label: 'SOPs', value: stats.sops || 0, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
@@ -362,6 +251,7 @@ export default function DocumentsDashboard() {
           ))}
         </div>
 
+        {/* Search & Filter */}
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -381,9 +271,14 @@ export default function DocumentsDashboard() {
           <button onClick={loadData} className="neu-raised neu-btn px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Search</button>
         </div>
 
+        {/* Content */}
         {loading ? (
-          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div><p className="text-slate-500">Loading...</p></div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+            <p className="text-slate-500">Loading...</p>
+          </div>
         ) : !currentFolder ? (
+          /* FOLDERS */
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-emerald-600" />Folders ({folders.length})
@@ -392,17 +287,15 @@ export default function DocumentsDashboard() {
               {folders.map((folder, i) => {
                 const Icon = folderIcons[folder.folder_type] || FolderOpen
                 return (
-                  <motion.div key={folder.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                    whileHover={{ scale: 1.03 }} onClick={() => openFolder(folder)}
-                    className={`neu-raised rounded-2xl p-5 cursor-pointer hover:shadow-lg transition-all ${folder.is_encrypted ? 'border-l-4 border-amber-500' : ''}`}>
-                    <div className="flex justify-between items-start mb-3">
-                      <div className={`w-14 h-14 rounded-xl ${folderColors[folder.folder_type]} flex items-center justify-center`}>
-                        <Icon className="w-7 h-7" />
-                      </div>
+                  <motion.div key={folder.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} whileHover={{ scale: 1.03 }}
+                    onClick={() => openFolder(folder)}
+                    className="neu-raised rounded-2xl p-5 cursor-pointer hover:shadow-lg transition-all">
+                    <div className={`w-14 h-14 rounded-xl ${folderColors[folder.folder_type]} flex items-center justify-center mb-4 relative`}>
+                      <Icon className="w-7 h-7" />
                       {folder.is_encrypted && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
-                          <Lock className="w-3 h-3" /> Encrypted
-                        </span>
+                        <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
+                          <Lock className="w-3 h-3 text-white" />
+                        </div>
                       )}
                     </div>
                     <h3 className="font-semibold text-slate-800 dark:text-white text-lg">{folder.folder_name}</h3>
@@ -416,16 +309,24 @@ export default function DocumentsDashboard() {
                 )
               })}
             </div>
+            {folders.length === 0 && (
+              <div className="text-center py-12 neu-raised rounded-3xl">
+                <FolderOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg">No folders yet</p>
+                <button onClick={() => setShowAddFolder(true)} className="mt-4 neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white">Create First Folder</button>
+              </div>
+            )}
           </motion.div>
         ) : (
+          /* DOCUMENTS */
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <FileText className="w-5 h-5 text-emerald-600" />Documents ({documents.length})
             </h2>
             {documents.length === 0 ? (
               <div className="text-center py-12 neu-raised rounded-3xl">
-                <FileText className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-500 text-lg">No documents in this folder</p>
+                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg mb-2">No documents in this folder</p>
               </div>
             ) : (
               <div className="neu-raised rounded-3xl overflow-hidden">
@@ -437,7 +338,7 @@ export default function DocumentsDashboard() {
                         <th className="text-left py-3 px-4 text-slate-500 font-medium">Type</th>
                         <th className="text-left py-3 px-4 text-slate-500 font-medium">Size</th>
                         <th className="text-left py-3 px-4 text-slate-500 font-medium">Security</th>
-                        <th className="text-left py-3 px-4 text-slate-500 font-medium">Status</th>
+                        <th className="text-left py-3 px-4 text-slate-500 font-medium">Modified</th>
                         <th className="text-right py-3 px-4 text-slate-500 font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -445,53 +346,45 @@ export default function DocumentsDashboard() {
                       {documents.map(doc => {
                         const FileIcon = getFileIcon(doc.file_type)
                         return (
-                          <tr key={doc.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                          <tr key={doc.id} 
+                            onClick={() => setViewingDoc(doc)}
+                            className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer">
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
                                 <FileIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium text-slate-800 dark:text-white">{doc.document_name}</p>
-                                  {doc.description && <p className="text-xs text-slate-500">{doc.description}</p>}
+                                <div className="min-w-0">
+                                  <p className="font-medium text-slate-800 dark:text-white truncate">{doc.document_name}</p>
+                                  {doc.description && <p className="text-xs text-slate-500 truncate">{doc.description}</p>}
                                 </div>
                               </div>
                             </td>
-                            <td className="py-3 px-4"><span className="px-2 py-1 rounded-full text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 capitalize">{doc.document_type}</span></td>
-                            <td className="py-3 px-4 text-slate-600">{formatFileSize(doc.file_size)}</td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-1 rounded-full text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 capitalize">{doc.document_type}</span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{formatFileSize(doc.file_size)}</td>
                             <td className="py-3 px-4">
                               {doc.is_encrypted ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-                                  <Lock className="w-3 h-3" /> AES-256
-                                </span>
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-600"><Lock className="w-3 h-3" /> Encrypted</span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                                  <Unlock className="w-3 h-3" /> Plain
-                                </span>
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-400"><Unlock className="w-3 h-3" /> Plain</span>
                               )}
                             </td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs ${doc.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{doc.status}</span>
-                            </td>
+                            <td className="py-3 px-4 text-slate-500 text-xs">{new Date(doc.updated_at || doc.created_at).toLocaleDateString()}</td>
                             <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button onClick={() => handleViewDocument(doc)} className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-400 hover:text-blue-600 transition-colors" title="View">
+                              <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setViewingDoc(doc)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
                                   <Eye className="w-4 h-4" />
                                 </button>
-                                <button 
-                                  onClick={() => handleDownloadDocument(doc)} 
-                                  disabled={downloadLoading}
-                                  className="p-2 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors disabled:opacity-50" 
-                                  title="Download"
-                                >
-                                  {downloadLoading ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
-                                  ) : (
-                                    <Download className="w-4 h-4" />
-                                  )}
+                                <button onClick={(e) => handleQuickDownloadPdf(doc, e)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Download as PDF">
+                                  <FileText className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 text-slate-400 hover:text-purple-600 transition-colors" title="Edit">
+                                <button onClick={(e) => handleQuickDownloadOriginal(doc, e)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Download Original">
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleEditDocument(doc)} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Edit">
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => setShowDeleteConfirm(doc)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors" title="Delete">
+                                <button onClick={() => setShowDeleteConfirm(doc)} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -508,207 +401,53 @@ export default function DocumentsDashboard() {
         )}
       </main>
 
-      {/* PREVIEW MODAL - Uses native browser viewers */}
-      <AnimatePresence>
-        {previewDoc && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" 
-            onClick={closePreview}
-          >
-            <motion.div 
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-6xl max-h-[95vh] flex flex-col" 
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {(() => {
-                    const Icon = getFileIcon(previewDoc.file_type)
-                    return <Icon className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  })()}
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-slate-800 dark:text-white truncate">{previewDoc.document_name}</h3>
-                    <p className="text-xs text-slate-500">
-                      {formatFileSize(previewDoc.file_size)} · {previewDoc.document_type}
-                      {previewDoc.is_encrypted && <span className="ml-2 text-amber-600">🔐 Encrypted</span>}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  {/* Image zoom controls */}
-                  {getPreviewType(previewDoc.file_type, previewDoc.document_name) === 'image' && (
-                    <>
-                      <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Zoom Out">
-                        <ZoomOut className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Zoom In">
-                        <ZoomIn className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setZoom(1)} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Reset">
-                        <Maximize2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                  {/* Open in new tab (best for PDFs) */}
-                  {previewUrl && (
-                    <button onClick={() => window.open(previewUrl, '_blank')} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Open in New Tab">
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => handleDownloadDocument(previewDoc)} 
-                    disabled={downloadLoading}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50" 
-                    title="Download"
-                  >
-                    {downloadLoading ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    Download PDF
-                  </button>
-                  <button onClick={closePreview} className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-600 dark:text-slate-300" title="Close">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Modal Body */}
-              <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-4 min-h-[500px]">
-                {previewLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <Loader2 className="w-12 h-12 animate-spin text-emerald-600 mx-auto mb-3" />
-                      <p className="text-slate-500">Loading preview...</p>
-                    </div>
-                  </div>
-                ) : previewError ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center max-w-md">
-                      <X className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                      <p className="text-red-600 font-semibold mb-2">Cannot preview this file</p>
-                      <p className="text-slate-500 text-sm mb-4">{previewError}</p>
-                      <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
-                        <Download className="w-4 h-4" /> Download PDF
-                      </button>
-                    </div>
-                  </div>
-                ) : previewUrl ? (
-                  <div className="flex items-start justify-center min-h-full w-full">
-                    {(() => {
-                      const pType = getPreviewType(previewDoc.file_type, previewDoc.document_name)
-                      
-                      // ✅ PDF - Uses browser's native PDF viewer via iframe/embed
-                      if (pType === 'pdf') {
-                        return (
-                          <iframe 
-                            src={`${previewUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-                            title={previewDoc.document_name}
-                            className="w-full rounded-lg shadow-lg bg-white border-0"
-                            style={{ height: '75vh', minHeight: '600px' }}
-                          />
-                        )
-                      }
-                      
-                      // IMAGE
-                      if (pType === 'image') {
-                        return (
-                          <img 
-                            src={previewUrl} 
-                            alt={previewDoc.document_name}
-                            style={{ transform: `scale(${zoom})`, transition: 'transform 0.2s' }}
-                            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
-                          />
-                        )
-                      }
-                      
-                      // VIDEO
-                      if (pType === 'video') {
-                        return (
-                          <video controls className="max-w-full max-h-[70vh] rounded-lg shadow-lg">
-                            <source src={previewUrl} />
-                            Your browser does not support video playback.
-                          </video>
-                        )
-                      }
-                      
-                      // AUDIO
-                      if (pType === 'audio') {
-                        return (
-                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg">
-                            <FileAudio className="w-20 h-20 text-emerald-600 mx-auto mb-4" />
-                            <p className="text-center text-slate-700 dark:text-slate-300 font-medium mb-4">{previewDoc.document_name}</p>
-                            <audio controls className="w-full">
-                              <source src={previewUrl} />
-                              Your browser does not support audio playback.
-                            </audio>
-                          </div>
-                        )
-                      }
-                      
-                      // TEXT / CSV
-                      if (pType === 'text') {
-                        return (
-                          <iframe 
-                            src={previewUrl} 
-                            title={previewDoc.document_name}
-                            className="w-full rounded-lg shadow-lg border-0 bg-white"
-                            style={{ height: '70vh', minHeight: '500px' }}
-                          />
-                        )
-                      }
-                      
-                      // OTHER - Force download
-                      return (
-                        <div className="text-center max-w-md">
-                          <FileText className="w-20 h-20 text-slate-400 mx-auto mb-4" />
-                          <p className="text-slate-700 dark:text-slate-300 font-semibold mb-2">Preview not available</p>
-                          <p className="text-slate-500 text-sm mb-4">This file type cannot be previewed in the browser.</p>
-                          <button onClick={() => handleDownloadDocument(previewDoc)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-emerald-700 mx-auto">
-                            <Download className="w-4 h-4" /> Download File
-                          </button>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-slate-500">No preview available</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* DOCUMENT VIEWER */}
+      {viewingDoc && (
+        <DocumentViewer 
+          document={viewingDoc} 
+          userRole={userRole}
+          onClose={() => setViewingDoc(null)} 
+        />
+      )}
 
       {/* ADD FOLDER MODAL */}
       <AnimatePresence>
         {showAddFolder && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddFolder(false)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-white">Create New Folder</h3>
                 <button onClick={() => setShowAddFolder(false)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
               </div>
               <div className="space-y-4">
-                <input type="text" value={newFolder.folder_name} onChange={e => setNewFolder({...newFolder, folder_name: e.target.value})} placeholder="Folder Name *" className="w-full p-3 neu-inset rounded-xl" />
-                <select value={newFolder.folder_type} onChange={e => setNewFolder({...newFolder, folder_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
-                  <option value="general">General (No Encryption)</option>
-                  <option value="contracts">🔐 Contracts (Encrypted)</option>
-                  <option value="finance">🔐 Financial (Encrypted)</option>
-                  <option value="hr">🔐 HR Documents (Encrypted)</option>
-                  <option value="policies">Policies (No Encryption)</option>
-                  <option value="sops">SOPs (No Encryption)</option>
-                  <option value="operations">Operations (No Encryption)</option>
-                </select>
-                <textarea value={newFolder.description} onChange={e => setNewFolder({...newFolder, description: e.target.value})} rows={2} placeholder="Description..." className="w-full p-3 neu-inset rounded-xl" />
+                <div>
+                  <label className="text-sm text-slate-500">Folder Name *</label>
+                  <input type="text" value={newFolder.folder_name} onChange={e => setNewFolder({...newFolder, folder_name: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" placeholder="e.g., Client Contracts 2025" />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">Type</label>
+                  <select value={newFolder.folder_type} onChange={e => setNewFolder({...newFolder, folder_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1">
+                    <option value="general">General</option>
+                    <option value="contracts">Contracts (🔒 Encrypted)</option>
+                    <option value="policies">Policies</option>
+                    <option value="sops">SOPs</option>
+                    <option value="hr">HR Documents (🔒 Encrypted)</option>
+                    <option value="finance">Financial (🔒 Encrypted)</option>
+                    <option value="operations">Operations</option>
+                  </select>
+                  {['contracts', 'hr', 'finance'].includes(newFolder.folder_type) && (
+                    <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> This folder will be encrypted with AES-256-GCM
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm text-slate-500">Description</label>
+                  <textarea value={newFolder.description} onChange={e => setNewFolder({...newFolder, description: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl mt-1" placeholder="Optional description..." />
+                </div>
                 <div className="flex gap-3 justify-end">
-                  <button onClick={() => setShowAddFolder(false)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
-                  <button onClick={handleCreateFolder} className="px-4 py-2 rounded-xl bg-emerald-600 text-white">Create</button>
+                  <button onClick={() => setShowAddFolder(false)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-300 dark:bg-slate-600">Cancel</button>
+                  <button onClick={handleCreateFolder} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white">Create</button>
                 </div>
               </div>
             </motion.div>
@@ -719,23 +458,21 @@ export default function DocumentsDashboard() {
       {/* EDIT DOCUMENT MODAL */}
       <AnimatePresence>
         {showEditDoc && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowEditDoc(null)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-4">Edit Document</h3>
-              <div className="space-y-3">
-                <input type="text" value={editDocData.document_name} onChange={e => setEditDocData({...editDocData, document_name: e.target.value})} className="w-full p-3 neu-inset rounded-xl" />
-                <select value={editDocData.document_type} onChange={e => setEditDocData({...editDocData, document_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
-                  <option value="contract">Contract</option><option value="policy">Policy</option><option value="sop">SOP</option>
-                  <option value="form">Form</option><option value="report">Report</option><option value="other">Other</option>
-                </select>
-                <select value={editDocData.folder_id} onChange={e => setEditDocData({...editDocData, folder_id: e.target.value})} className="w-full p-3 neu-inset rounded-xl">
-                  <option value="">No Folder</option>
-                  {folders.map(f => <option key={f.id} value={f.id}>{f.folder_name}{f.is_encrypted ? ' 🔐' : ''}</option>)}
-                </select>
-                <textarea value={editDocData.description} onChange={e => setEditDocData({...editDocData, description: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl" />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Edit Document</h3>
+                <button onClick={() => setShowEditDoc(null)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="space-y-4">
+                <div><label className="text-sm text-slate-500">Document Name</label><input type="text" value={editDocData.document_name} onChange={e => setEditDocData({...editDocData, document_name: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" /></div>
+                <div><label className="text-sm text-slate-500">Type</label><select value={editDocData.document_type} onChange={e => setEditDocData({...editDocData, document_type: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1"><option value="contract">Contract</option><option value="policy">Policy</option><option value="sop">SOP</option><option value="form">Form</option><option value="report">Report</option><option value="manual">Manual</option><option value="certificate">Certificate</option><option value="other">Other</option></select></div>
+                <div><label className="text-sm text-slate-500">Folder</label><select value={editDocData.folder_id} onChange={e => setEditDocData({...editDocData, folder_id: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1"><option value="">No Folder</option>{folders.map(f => <option key={f.id} value={f.id}>{f.folder_name}</option>)}</select></div>
+                <div><label className="text-sm text-slate-500">Description</label><textarea value={editDocData.description} onChange={e => setEditDocData({...editDocData, description: e.target.value})} rows={2} className="w-full p-3 neu-inset rounded-xl mt-1" /></div>
+                <div><label className="text-sm text-slate-500">Tags (comma separated)</label><input type="text" value={editDocData.tags} onChange={e => setEditDocData({...editDocData, tags: e.target.value})} className="w-full p-3 neu-inset rounded-xl mt-1" placeholder="cleaning, contract, 2025" /></div>
                 <div className="flex gap-3 justify-end">
-                  <button onClick={() => setShowEditDoc(null)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
-                  <button onClick={handleSaveEdit} className="px-4 py-2 rounded-xl bg-emerald-600 text-white">Save</button>
+                  <button onClick={() => setShowEditDoc(null)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-300 dark:bg-slate-600">Cancel</button>
+                  <button onClick={handleSaveEdit} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white">Save</button>
                 </div>
               </div>
             </motion.div>
@@ -746,14 +483,17 @@ export default function DocumentsDashboard() {
       {/* DELETE CONFIRM */}
       <AnimatePresence>
         {showDeleteConfirm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(null)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
-              <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              <h3 className="text-lg font-bold mb-2">Delete Document?</h3>
-              <p className="text-slate-500 text-sm mb-4">"{showDeleteConfirm.document_name}"</p>
-              <div className="flex gap-3 justify-center">
-                <button onClick={() => setShowDeleteConfirm(null)} className="px-4 py-2 rounded-xl bg-slate-300">Cancel</button>
-                <button onClick={handleDeleteDocument} className="px-4 py-2 rounded-xl bg-red-600 text-white">Delete</button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-xl">
+              <div className="text-center">
+                <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Delete Document?</h3>
+                <p className="text-slate-500 text-sm mb-2">"{showDeleteConfirm.document_name}"</p>
+                <p className="text-slate-400 text-xs mb-4">The document will be archived.</p>
+                <div className="flex gap-3 justify-center">
+                  <button onClick={() => setShowDeleteConfirm(null)} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-300 dark:bg-slate-600">Cancel</button>
+                  <button onClick={handleDeleteDocument} className="neu-raised neu-btn px-4 py-2 rounded-xl bg-red-600 text-white">Delete</button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
