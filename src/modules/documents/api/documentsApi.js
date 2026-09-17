@@ -3,51 +3,39 @@ import { supabase } from '../../../lib/supabaseClient'
 // ============================================
 // ENCRYPTION HELPERS
 // ============================================
-
 async function encryptFile(file, password) {
-  try {
-    const arrayBuffer = await file.arrayBuffer()
-    const fileBytes = new Uint8Array(arrayBuffer)
-
-    const enc = new TextEncoder()
-    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
-    const salt = crypto.getRandomValues(new Uint8Array(16))
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-
-    const key = await crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
-      keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
-    )
-
-    const encryptedContent = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, fileBytes)
-    return new Blob([salt, iv, new Uint8Array(encryptedContent)], { type: 'application/octet-stream' })
-  } catch (error) {
-    console.error('Encryption failed:', error)
-    throw error
-  }
+  const arrayBuffer = await file.arrayBuffer()
+  const fileBytes = new Uint8Array(arrayBuffer)
+  const enc = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false, ['encrypt']
+  )
+  const encryptedContent = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, fileBytes)
+  return new Blob([salt, iv, new Uint8Array(encryptedContent)], { type: 'application/octet-stream' })
 }
 
-async function decryptFile(encryptedBlob, password) {
-  try {
-    const arrayBuffer = await encryptedBlob.arrayBuffer()
-    const fullBytes = new Uint8Array(arrayBuffer)
-    const salt = fullBytes.slice(0, 16)
-    const iv = fullBytes.slice(16, 28)
-    const encryptedData = fullBytes.slice(28)
-
-    const enc = new TextEncoder()
-    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
-    const key = await crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
-      keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
-    )
-
-    const decryptedContent = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, encryptedData)
-    return new Blob([decryptedContent])
-  } catch (error) {
-    console.error('Decryption failed:', error)
-    throw error
-  }
+async function decryptBlob(encryptedBlob, password) {
+  const arrayBuffer = await encryptedBlob.arrayBuffer()
+  const fullBytes = new Uint8Array(arrayBuffer)
+  const salt = fullBytes.slice(0, 16)
+  const iv = fullBytes.slice(16, 28)
+  const encryptedData = fullBytes.slice(28)
+  const enc = new TextEncoder()
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false, ['decrypt']
+  )
+  const decryptedContent = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedData)
+  return new Blob([decryptedContent])
 }
 
 function getEncryptionPassword(folderType) {
@@ -63,139 +51,36 @@ function requiresEncryption(folderType) {
   return ['contracts', 'finance', 'hr'].includes(folderType)
 }
 
-// ✅ NEW: Extract storage path from URL
-function extractStoragePath(fileUrl) {
-  if (!fileUrl) return null
-  
-  try {
-    // Handle full URLs like: https://xxx.supabase.co/storage/v1/object/public/documents/docs/123-file.enc
-    if (fileUrl.startsWith('http')) {
-      const url = new URL(fileUrl)
-      const pathParts = url.pathname.split('/')
-      // Find 'documents' in path (bucket name) and get everything after
-      const bucketIndex = pathParts.indexOf('documents')
-      if (bucketIndex !== -1) {
-        return pathParts.slice(bucketIndex + 1).join('/')
-      }
-      // Fallback: return last 2 parts
-      return pathParts.slice(-2).join('/')
-    }
-    return fileUrl
-  } catch (err) {
-    console.error('Path extraction error:', err)
-    return null
-  }
-}
-
-// ✅ NEW: Try all passwords if unknown folder type
-async function tryAllPasswords(encryptedBlob) {
-  const passwords = [
-    'NDANDULENI_CONTRACTS_2025_SECURE',
-    'NDANDULENI_FINANCE_2025_SECURE',
-    'NDANDULENI_HR_2025_SECURE',
-  ]
-  
-  for (const pwd of passwords) {
-    try {
-      const blob = await decryptFile(encryptedBlob, pwd)
-      if (blob) return { blob, password: pwd }
-    } catch (e) {
-      continue
-    }
-  }
-  return null
-}
-
-// ============================================
-// ACCESS CONTROL RULES
-// ONLY SUPER ADMIN CAN ACCESS ENCRYPTED FOLDERS
-// ============================================
-const ENCRYPTED_FOLDER_ACCESS = {
-  contracts: ['super_admin'],
-  finance: ['super_admin'],
-  hr: ['super_admin']
+// Extract storage path from public URL
+function getStoragePathFromUrl(url) {
+  if (!url) return null
+  // URL format: https://xxx.supabase.co/storage/v1/object/public/documents/docs/filename
+  const match = url.match(/\/documents\/(.+)$/)
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 export const documentsApi = {
-  // ============================================
-  // GET CURRENT USER ROLE
-  // ============================================
-  async getCurrentUserRole() {
-    try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData?.user?.id) return null
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userData.user.id)
-        .single()
-
-      return profile?.role || null
-    } catch (err) {
-      console.error('Role fetch error:', err)
-      return null
-    }
-  },
-
-  canAccessEncryptedFolder(userRole, folderType) {
-    if (!userRole) return false
-    if (userRole === 'super_admin') return true
-    return false
-  },
-
-  // ============================================
-  // GET FOLDERS - Filtered by user role
-  // ============================================
+  // Folders
   async getFolders() {
-    const { data, error } = await supabase
-      .from('document_folders')
-      .select('*')
-      .order('folder_name')
-
-    if (error) return { data: [], error }
-
-    const userRole = await this.getCurrentUserRole()
-    
-    const filteredFolders = (data || []).filter(folder => {
-      if (!folder.is_encrypted) return true
-      return userRole === 'super_admin'
-    })
-
-    return { data: filteredFolders, error: null }
-  },
-
-  async createFolder(folderData) {
-    const userRole = await this.getCurrentUserRole()
-    const isEncrypted = requiresEncryption(folderData.folder_type)
-    
-    if (isEncrypted && userRole !== 'super_admin') {
-      return { error: 'Access denied: Only Super Admin can create encrypted folders.' }
-    }
-
-    const folderWithEncryption = {
-      ...folderData,
-      is_encrypted: isEncrypted,
-      encryption_method: isEncrypted ? 'AES-256-GCM' : null
-    }
-    
-    const { data, error } = await supabase
-      .from('document_folders')
-      .insert([folderWithEncryption])
-      .select()
-      .single()
+    const { data, error } = await supabase.from('document_folders').select('*').order('folder_name')
     return { data, error }
   },
 
-  // ============================================
-  // GET DOCUMENTS - Filtered by user role
-  // ============================================
-  async getDocuments(folderId = null, filters = {}) {
-    const userRole = await this.getCurrentUserRole()
+  async createFolder(folderData) {
+    const folderWithEncryption = {
+      ...folderData,
+      is_encrypted: requiresEncryption(folderData.folder_type),
+      encryption_method: requiresEncryption(folderData.folder_type) ? 'AES-256-GCM' : null
+    }
+    const { data, error } = await supabase.from('document_folders').insert([folderWithEncryption]).select().single()
+    return { data, error }
+  },
 
+  // Documents
+  async getDocuments(folderId = null, filters = {}) {
     let query = supabase
       .from('managed_documents')
-      .select('*')
+      .select('*, document_folders(folder_name, folder_type, is_encrypted)')
       .neq('status', 'archived')
       .order('updated_at', { ascending: false })
     
@@ -204,48 +89,14 @@ export const documentsApi = {
     if (filters.search) {
       query = query.or(`document_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
     }
-
+    
     const { data, error } = await query
-    if (error) return { data: [], error }
-
-    // Get folder info
-    const folderIds = [...new Set((data || []).map(d => d.folder_id).filter(Boolean))]
-    let folders = []
-    if (folderIds.length > 0) {
-      const { data: f } = await supabase.from('document_folders').select('*').in('id', folderIds)
-      folders = f || []
-    }
-
-    const filteredDocs = (data || []).filter(doc => {
-      if (!doc.is_encrypted) return true
-      return userRole === 'super_admin'
-    }).map(doc => ({
-      ...doc,
-      document_folders: folders.find(f => f.id === doc.folder_id) || null
-    }))
-
-    return { data: filteredDocs, error: null }
+    return { data, error }
   },
 
-  // ============================================
-  // UPLOAD DOCUMENT
-  // ============================================
   async uploadDocument(file, metadata) {
     try {
       if (!file) return { error: 'No file provided' }
-
-      if (metadata.folder_id) {
-        const userRole = await this.getCurrentUserRole()
-        const { data: folder } = await supabase
-          .from('document_folders')
-          .select('folder_type, is_encrypted')
-          .eq('id', metadata.folder_id)
-          .single()
-
-        if (folder?.is_encrypted && userRole !== 'super_admin') {
-          return { error: 'Access denied: Only Super Admin can upload to encrypted folders.' }
-        }
-      }
 
       let isEncrypted = false
       let encryptionPassword = null
@@ -290,14 +141,15 @@ export const documentsApi = {
         })
 
       if (uploadError) {
-        if (uploadError.message?.includes('not found')) {
-          return { error: 'Storage bucket not configured. Run setup SQL.' }
+        if (uploadError.message?.includes('not found') || uploadError.message?.includes('bucket')) {
+          return { error: 'Storage bucket not configured. Please run the setup SQL in Supabase.' }
         }
-        return { error: uploadError.message }
+        return { error: uploadError.message || 'Upload failed' }
       }
 
       const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath)
       const publicUrl = urlData?.publicUrl
+      if (!publicUrl) return { error: 'Failed to get public URL' }
 
       const { data: docData, error: dbError } = await supabase
         .from('managed_documents')
@@ -317,126 +169,290 @@ export const documentsApi = {
         .select()
         .single()
 
-      if (dbError) return { error: dbError.message }
+      if (dbError) return { error: dbError.message || 'Failed to save document record' }
       return { data: docData }
     } catch (error) {
-      return { error: error.message }
+      return { error: error.message || 'An unexpected error occurred' }
     }
   },
 
   // ============================================
-  // GET DECRYPTED DOCUMENT (For view/download)
+  // ✅ NEW: Get signed URL (secure, time-limited)
   // ============================================
-  async getDecryptedDocument(docId, password = null) {
+  async getSignedUrl(fileUrl, expiresIn = 3600) {
     try {
-      // Get document
-      const { data: doc, error: docError } = await supabase
-        .from('managed_documents')
-        .select('*')
-        .eq('id', docId)
-        .single()
+      const path = getStoragePathFromUrl(fileUrl)
+      if (!path) return { error: 'Invalid file URL' }
 
-      if (docError) {
-        console.error('Doc fetch error:', docError)
-        return { error: 'Document not found: ' + docError.message }
-      }
-
-      if (!doc) return { error: 'Document not found' }
-
-      // Not encrypted - return as is
-      if (!doc.is_encrypted) {
-        return { data: doc, decrypted: false, decryptedUrl: doc.file_url }
-      }
-
-      // Check access - user must be super_admin
-      const userRole = await this.getCurrentUserRole()
-      if (userRole !== 'super_admin') {
-        return { error: `Access denied: Only Super Admin can access encrypted documents. Your role: ${userRole}` }
-      }
-
-      // Determine password
-      let decryptionPassword = password
-      
-      if (!decryptionPassword && doc.folder_id) {
-        const { data: folder } = await supabase
-          .from('document_folders')
-          .select('folder_type')
-          .eq('id', doc.folder_id)
-          .single()
-        decryptionPassword = getEncryptionPassword(folder?.folder_type)
-      }
-
-      // Extract storage path
-      const storagePath = extractStoragePath(doc.file_url)
-      if (!storagePath) {
-        return { error: 'Invalid file URL' }
-      }
-
-      console.log('📥 Downloading from storage:', storagePath)
-
-      // Download encrypted file
-      const { data: fileData, error: downloadError } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from('documents')
-        .download(storagePath)
+        .createSignedUrl(path, expiresIn)
 
-      if (downloadError) {
-        console.error('Download error:', downloadError)
+      if (error) return { error: error.message }
+      return { data: data.signedUrl }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
+  // ============================================
+  // ✅ NEW: Get document for viewing (handles encryption)
+  // ============================================
+  async getDocumentForViewing(doc, userRole = null) {
+    try {
+      console.log('📄 Preparing document for viewing:', doc.document_name)
+
+      // Check RBAC for encrypted documents
+      if (doc.is_encrypted) {
+        const folderType = doc.document_folders?.folder_type || doc.document_type
+        const accessRules = {
+          contracts: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          contract: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          finance: ['super_admin', 'finance_officer'],
+          financial: ['super_admin', 'finance_officer'],
+          hr: ['super_admin', 'hr_manager']
+        }
+        const allowedRoles = accessRules[folderType] || ['super_admin']
         
-        // Try alternative path
-        const altPath = doc.file_url.split('/documents/').pop()
-        if (altPath && altPath !== storagePath) {
-          console.log('🔄 Trying alternative path:', altPath)
-          const { data: altData, error: altError } = await supabase.storage
-            .from('documents')
-            .download(altPath)
-          
-          if (!altError && altData) {
-            const decrypted = await tryDecrypt(altData, decryptionPassword)
-            if (decrypted) {
-              return { 
-                data: doc, 
-                decrypted: true, 
-                decryptedBlob: decrypted.blob,
-                decryptedUrl: URL.createObjectURL(decrypted.blob),
-                usedPassword: decrypted.password
-              }
-            }
+        if (userRole && !allowedRoles.includes(userRole)) {
+          return { error: 'You do not have permission to view this encrypted document' }
+        }
+
+        // Download encrypted blob
+        const path = getStoragePathFromUrl(doc.file_url)
+        const { data: fileBlob, error: downloadError } = await supabase.storage
+          .from('documents')
+          .download(path)
+
+        if (downloadError) return { error: 'Failed to download encrypted file' }
+
+        // Decrypt
+        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
+        const password = getEncryptionPassword(folderTypeForPassword)
+        if (!password) return { error: 'No decryption key available' }
+
+        const decryptedBlob = await decryptBlob(fileBlob, password)
+        const blobUrl = URL.createObjectURL(decryptedBlob)
+
+        console.log('✅ Decrypted successfully')
+        return {
+          data: {
+            ...doc,
+            viewUrl: blobUrl,
+            isBlob: true,
+            blob: decryptedBlob,
+            mimeType: doc.file_type
           }
         }
-        
-        return { error: 'Failed to download encrypted file: ' + downloadError.message }
       }
 
-      // Decrypt
-      const decrypted = await tryDecrypt(fileData, decryptionPassword)
-      
-      if (!decrypted) {
-        return { error: 'Failed to decrypt file. Password may be incorrect.' }
+      // Unencrypted: use signed URL
+      const { data: signedUrl, error } = await this.getSignedUrl(doc.file_url)
+      if (error) {
+        // Fallback to public URL
+        return {
+          data: { ...doc, viewUrl: doc.file_url, isBlob: false, mimeType: doc.file_type }
+        }
       }
 
-      return { 
-        data: doc, 
-        decrypted: true, 
-        decryptedBlob: decrypted.blob,
-        decryptedUrl: URL.createObjectURL(decrypted.blob),
-        usedPassword: decrypted.password
+      return {
+        data: { ...doc, viewUrl: signedUrl, isBlob: false, mimeType: doc.file_type }
       }
-    } catch (error) {
-      console.error('Decryption exception:', error)
-      return { error: error.message || 'Failed to decrypt document' }
+    } catch (err) {
+      console.error('View preparation error:', err)
+      return { error: err.message }
     }
   },
 
   // ============================================
-  // GET ACCESS RULES
+  // ✅ NEW: Download document (encrypted or not)
   // ============================================
-  async getAccessRules() {
-    return ENCRYPTED_FOLDER_ACCESS
+  async downloadDocument(doc, userRole = null) {
+    try {
+      if (doc.is_encrypted) {
+        // RBAC check
+        const folderType = doc.document_folders?.folder_type || doc.document_type
+        const accessRules = {
+          contracts: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          contract: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          finance: ['super_admin', 'finance_officer'],
+          financial: ['super_admin', 'finance_officer'],
+          hr: ['super_admin', 'hr_manager']
+        }
+        const allowedRoles = accessRules[folderType] || ['super_admin']
+        
+        if (userRole && !allowedRoles.includes(userRole)) {
+          return { error: 'Permission denied' }
+        }
+
+        const path = getStoragePathFromUrl(doc.file_url)
+        const { data: fileBlob, error } = await supabase.storage.from('documents').download(path)
+        if (error) return { error: 'Download failed' }
+
+        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
+        const password = getEncryptionPassword(folderTypeForPassword)
+        const decryptedBlob = await decryptBlob(fileBlob, password)
+
+        // Trigger download
+        const url = URL.createObjectURL(decryptedBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = doc.document_name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        return { success: true }
+      }
+
+      // Unencrypted: signed URL download
+      const { data: signedUrl, error } = await this.getSignedUrl(doc.file_url)
+      const url = signedUrl || doc.file_url
+
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = doc.document_name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+
+      return { success: true }
+    } catch (err) {
+      return { error: err.message }
+    }
   },
 
   // ============================================
-  // UPDATE / DELETE
+  // ✅ NEW: Download as PDF
   // ============================================
+  async downloadAsPdf(doc, userRole = null) {
+    try {
+      const { jsPDF } = await import('jspdf')
+
+      // Get file first (decrypted if needed)
+      let blob
+      if (doc.is_encrypted) {
+        const folderType = doc.document_folders?.folder_type || doc.document_type
+        const accessRules = {
+          contracts: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          contract: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          finance: ['super_admin', 'finance_officer'],
+          financial: ['super_admin', 'finance_officer'],
+          hr: ['super_admin', 'hr_manager']
+        }
+        const allowedRoles = accessRules[folderType] || ['super_admin']
+        if (userRole && !allowedRoles.includes(userRole)) {
+          return { error: 'Permission denied' }
+        }
+        const path = getStoragePathFromUrl(doc.file_url)
+        const { data: fileBlob } = await supabase.storage.from('documents').download(path)
+        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
+        const password = getEncryptionPassword(folderTypeForPassword)
+        blob = await decryptBlob(fileBlob, password)
+      } else {
+        const { data: signedUrl } = await this.getSignedUrl(doc.file_url)
+        const response = await fetch(signedUrl || doc.file_url)
+        blob = await response.blob()
+      }
+
+      const baseName = doc.document_name.replace(/\.[^.]+$/, '')
+      const fileType = doc.file_type || blob.type
+
+      // Already a PDF → download as is
+      if (fileType === 'application/pdf' || doc.document_name.toLowerCase().endsWith('.pdf')) {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${baseName}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return { success: true }
+      }
+
+      // Image → convert to PDF
+      if (fileType.startsWith('image/')) {
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result)
+          reader.readAsDataURL(blob)
+        })
+
+        const img = new Image()
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = dataUrl
+        })
+
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? 'landscape' : 'portrait',
+          unit: 'pt',
+          format: 'a4'
+        })
+
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const ratio = Math.min(pageWidth / img.width, pageHeight / img.height)
+        const imgWidth = img.width * ratio
+        const imgHeight = img.height * ratio
+        const x = (pageWidth - imgWidth) / 2
+        const y = (pageHeight - imgHeight) / 2
+
+        pdf.addImage(dataUrl, 'PNG', x, y, imgWidth, imgHeight)
+        pdf.save(`${baseName}.pdf`)
+        return { success: true }
+      }
+
+      // Text files
+      if (fileType.startsWith('text/') || fileType === 'application/json') {
+        const text = await blob.text()
+        const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+        const margin = 40
+        const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        
+        pdf.setFontSize(12)
+        const lines = pdf.splitTextToSize(text, pageWidth)
+        let y = margin + 20
+        for (const line of lines) {
+          if (y > pageHeight - margin) {
+            pdf.addPage()
+            y = margin + 20
+          }
+          pdf.text(line, margin, y)
+          y += 16
+        }
+        pdf.save(`${baseName}.pdf`)
+        return { success: true }
+      }
+
+      // Office docs - open print dialog (browser can save as PDF)
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank')
+      if (win) {
+        // Give browser time to load, then trigger print (user can "Save as PDF")
+        setTimeout(() => {
+          try { win.print() } catch (e) {}
+        }, 1500)
+      }
+      return { 
+        success: true, 
+        note: 'Document opened in new tab. Use "Print" → "Save as PDF" to download as PDF.' 
+      }
+    } catch (err) {
+      console.error('PDF conversion error:', err)
+      return { error: err.message || 'Failed to generate PDF' }
+    }
+  },
+
   async updateDocument(id, updates) {
     const { data, error } = await supabase
       .from('managed_documents')
@@ -455,86 +471,23 @@ export const documentsApi = {
     return { error }
   },
 
-  // ============================================
-  // STATS
-  // ============================================
   async getStats() {
-    const userRole = await this.getCurrentUserRole()
-    
-    const { data: allDocs } = await supabase
-      .from('managed_documents')
-      .select('*')
-      .neq('status', 'archived')
-
-    const { data: allFolders } = await supabase
-      .from('document_folders')
-      .select('*')
-
-    const visibleDocs = (allDocs || []).filter(doc => {
-      if (!doc.is_encrypted) return true
-      return userRole === 'super_admin'
-    })
-
-    const visibleFolders = (allFolders || []).filter(folder => {
-      if (!folder.is_encrypted) return true
-      return userRole === 'super_admin'
-    })
-
-    return {
-      totalDocs: visibleDocs.length,
-      contracts: visibleDocs.filter(d => d.document_type === 'contract').length,
-      policies: visibleDocs.filter(d => d.document_type === 'policy').length,
-      sops: visibleDocs.filter(d => d.document_type === 'sop').length,
-      encryptedDocs: visibleDocs.filter(d => d.is_encrypted).length,
-      totalFolders: visibleFolders.length,
-      encryptedFolders: visibleFolders.filter(f => f.is_encrypted).length,
-      userRole
-    }
-  },
-
-  async logDocumentAccess(docId, userId, accessType = 'view') {
-    try {
-      await supabase.from('document_access_logs').insert([{
-        document_id: docId,
-        user_id: userId,
-        access_granted: true,
-        access_type: accessType,
-        accessed_at: new Date().toISOString()
-      }])
-    } catch (error) {
-      console.error('Access log error:', error)
+    const [
+      { count: totalDocs },
+      { count: contracts },
+      { count: policies },
+      { count: sops },
+      { count: encryptedDocs }
+    ] = await Promise.all([
+      supabase.from('managed_documents').select('*', { count: 'exact', head: true }).neq('status', 'archived'),
+      supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('document_type', 'contract').neq('status', 'archived'),
+      supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('document_type', 'policy').neq('status', 'archived'),
+      supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('document_type', 'sop').neq('status', 'archived'),
+      supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('is_encrypted', true).neq('status', 'archived')
+    ])
+    return { 
+      totalDocs: totalDocs || 0, contracts: contracts || 0, policies: policies || 0, 
+      sops: sops || 0, encryptedDocs: encryptedDocs || 0
     }
   }
-}
-
-// ✅ Helper: Try decryption with password or all passwords
-async function tryDecrypt(encryptedBlob, preferredPassword) {
-  // Try preferred password first
-  if (preferredPassword) {
-    try {
-      const blob = await decryptFile(encryptedBlob, preferredPassword)
-      if (blob) return { blob, password: preferredPassword }
-    } catch (e) {
-      console.log('Preferred password failed, trying all...')
-    }
-  }
-  
-  // Try all known passwords
-  const allPasswords = [
-    'NDANDULENI_CONTRACTS_2025_SECURE',
-    'NDANDULENI_FINANCE_2025_SECURE',
-    'NDANDULENI_HR_2025_SECURE',
-  ]
-  
-  for (const pwd of allPasswords) {
-    if (pwd === preferredPassword) continue
-    try {
-      const blob = await decryptFile(encryptedBlob, pwd)
-      if (blob) return { blob, password: pwd }
-    } catch (e) {
-      continue
-    }
-  }
-  
-  return null
 }
