@@ -11,45 +11,21 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const { signIn, loading, profile, user } = useAuthStore()
+  const { signIn, loading } = useAuthStore()
   const { isDark, toggleTheme, initTheme } = useThemeStore()
   const navigate = useNavigate()
 
   useEffect(() => {
     initTheme()
-  }, [initTheme])
-
-  // If already logged in, redirect immediately
-  useEffect(() => {
-    if (!loading && user && profile && !isLoggingIn) {
-      if (profile.role === 'cleaner') {
-        window.location.href = '/mobile'
-      } else {
-        window.location.href = '/dashboard'
+    // Force clear any browser autofill
+    setTimeout(() => {
+      const emailInput = document.getElementById('login-email-field')
+      const passInput = document.getElementById('login-password-field')
+      if (emailInput && emailInput.value && emailInput.value !== '') {
+        // Only clear if not set by React state
       }
-    }
-  }, [])
-
-  // Redirect based on role AFTER profile is loaded
-  useEffect(() => {
-    if (isLoggingIn && profile && user && !loading) {
-      console.log('✅ Login complete - Profile:', profile.role)
-      
-      // Force a small delay to ensure state is set, then hard redirect
-      setTimeout(() => {
-        if (profile.role === 'cleaner') {
-          console.log('→ Redirecting cleaner to /mobile')
-          window.location.href = '/mobile'
-        } else {
-          console.log('→ Redirecting to /dashboard')
-          window.location.href = '/dashboard'
-        }
-      }, 500)
-      
-      setIsLoggingIn(false)
-    }
-  }, [isLoggingIn, profile, user, loading])
+    }, 100)
+  }, [initTheme])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -59,15 +35,14 @@ export default function Login() {
       return
     }
 
-    setIsLoggingIn(true)
     const result = await signIn(email, password)
     
-    if (!result.success) {
-      setIsLoggingIn(false)
+    if (result.success) {
+      toast.success('Welcome back!')
+      navigate('/dashboard')
+    } else {
       toast.error(result.error || 'Login failed')
     }
-    // If success, the useEffect above will handle the redirect
-    // after the profile is loaded into the store
   }
 
   return (
@@ -82,10 +57,6 @@ export default function Login() {
           onClick={toggleTheme}
           className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110 transition-transform"
           title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          style={{
-            background: isDark ? 'linear-gradient(145deg, #1e293b, #0f172a)' : 'linear-gradient(145deg, #eef2f8, #e2e8f0)',
-            boxShadow: isDark ? '8px 8px 16px #020617, -8px -8px 16px #334155' : '8px 8px 16px #cbd5e1, -8px -8px 16px #ffffff'
-          }}
         >
           {isDark ? (
             <Sun className="w-6 h-6 text-amber-400" />
@@ -101,23 +72,10 @@ export default function Login() {
         transition={{ duration: 0.4 }}
         className="w-full max-w-[380px]"
       >
-        <div className="
-          neu-raised
-          w-full 
-          p-[35px] 
-          rounded-[2em]
-          transition-all duration-300
-        ">
+        <div className="neu-raised w-full p-[35px] rounded-[2em] transition-all duration-300">
           {/* Logo */}
           <div className="flex justify-center mb-5">
-            <div className="
-              w-[90px] h-[90px] 
-              rounded-full 
-              flex items-center justify-center
-              neu-inset
-              p-2.5
-              overflow-hidden
-            ">
+            <div className="w-[90px] h-[90px] rounded-full flex items-center justify-center neu-inset p-2.5 overflow-hidden">
               {!logoError ? (
                 <img 
                   src="/logo.png" 
@@ -144,23 +102,43 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="pt-5 pb-1 px-1">
+          <form onSubmit={handleSubmit} className="pt-5 pb-1 px-1" autoComplete="off">
+            {/* Hidden dummy fields to trick browser autofill */}
+            <input 
+              type="text" 
+              name="fakeusernameremembered" 
+              style={{ display: 'none' }} 
+              tabIndex={-1}
+              autoComplete="off"
+            />
+            <input 
+              type="password" 
+              name="fakepasswordremembered" 
+              style={{ display: 'none' }} 
+              tabIndex={-1}
+              autoComplete="off"
+            />
+
             <div className="mb-5">
               <input
+                id="login-email-field"
                 type="text"
+                name="ndanduleni-email-no-autofill"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Please enter your e-mail"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                readOnly
+                onFocus={(e) => e.target.removeAttribute('readonly')}
                 className="
-                  w-full 
-                  px-5 
-                  py-5 
-                  text-[20px]
+                  w-full px-5 py-5 text-[20px]
                   bg-transparent
                   text-slate-700 dark:text-slate-200
                   placeholder-slate-400 dark:placeholder-slate-500
-                  rounded-[25px]
-                  neu-inset
+                  rounded-[25px] neu-inset
                   transition-all duration-300
                   focus:ring-2 focus:ring-emerald-500/50
                 "
@@ -169,20 +147,24 @@ export default function Login() {
 
             <div className="mb-5 relative">
               <input
+                id="login-password-field"
                 type={showPassword ? "text" : "password"}
+                name="ndanduleni-password-no-autofill"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                readOnly
+                onFocus={(e) => e.target.removeAttribute('readonly')}
                 className="
-                  w-full 
-                  px-5 
-                  py-5 
-                  text-[20px]
+                  w-full px-5 py-5 text-[20px]
                   bg-transparent
                   text-slate-700 dark:text-slate-200
                   placeholder-slate-400 dark:placeholder-slate-500
-                  rounded-[25px]
-                  neu-inset
+                  rounded-[25px] neu-inset
                   transition-all duration-300
                   pr-12
                   focus:ring-2 focus:ring-emerald-500/50
@@ -201,14 +183,7 @@ export default function Login() {
             <div className="text-right -mt-2 mb-2">
               <Link
                 to="/forgot-password"
-                className="
-                  text-slate-500 dark:text-slate-400
-                  text-[14px] 
-                  no-underline 
-                  transition-all duration-300
-                  hover:text-emerald-600 dark:hover:text-emerald-400
-                  inline-block
-                "
+                className="text-slate-500 dark:text-slate-400 text-[14px] no-underline transition-all duration-300 hover:text-emerald-600 dark:hover:text-emerald-400 inline-block"
               >
                 Forgot Password?
               </Link>
@@ -217,28 +192,19 @@ export default function Login() {
             {/* Submit Button */}
             <motion.button
               type="submit"
-              disabled={loading || isLoggingIn}
+              disabled={loading}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className="
-                w-full 
-                py-5 
-                px-5 
-                mt-5 
-                text-[20px]
-                font-medium
-                text-white
+                w-full py-5 px-5 mt-5 text-[20px] font-medium text-white
                 bg-gradient-to-br from-emerald-700 to-emerald-800
-                rounded-[25px]
-                neu-btn
-                shadow-lg
+                rounded-[25px] neu-btn shadow-lg
                 transition-all duration-300
                 hover:from-emerald-600 hover:to-emerald-700
-                disabled:opacity-50
-                disabled:cursor-not-allowed
+                disabled:opacity-50 disabled:cursor-not-allowed
               "
             >
-              {loading || isLoggingIn ? 'Signing in...' : 'Log in'}
+              {loading ? 'Signing in...' : 'Log in'}
             </motion.button>
           </form>
         </div>
