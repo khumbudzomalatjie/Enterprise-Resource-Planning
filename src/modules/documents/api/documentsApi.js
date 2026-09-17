@@ -51,16 +51,20 @@ function requiresEncryption(folderType) {
   return ['contracts', 'finance', 'hr'].includes(folderType)
 }
 
-// Extract storage path from public URL
 function getStoragePathFromUrl(url) {
   if (!url) return null
-  // URL format: https://xxx.supabase.co/storage/v1/object/public/documents/docs/filename
   const match = url.match(/\/documents\/(.+)$/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
+// ============================================
+// API OBJECT
+// ============================================
 export const documentsApi = {
-  // Folders
+
+  // ============================================
+  // FOLDERS
+  // ============================================
   async getFolders() {
     const { data, error } = await supabase.from('document_folders').select('*').order('folder_name')
     return { data, error }
@@ -76,20 +80,22 @@ export const documentsApi = {
     return { data, error }
   },
 
-  // Documents
+  // ============================================
+  // DOCUMENTS
+  // ============================================
   async getDocuments(folderId = null, filters = {}) {
     let query = supabase
       .from('managed_documents')
       .select('*, document_folders(folder_name, folder_type, is_encrypted)')
       .neq('status', 'archived')
       .order('updated_at', { ascending: false })
-    
+
     if (folderId) query = query.eq('folder_id', folderId)
     if (filters.type) query = query.eq('document_type', filters.type)
     if (filters.search) {
       query = query.or(`document_name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
     }
-    
+
     const { data, error } = await query
     return { data, error }
   },
@@ -172,12 +178,13 @@ export const documentsApi = {
       if (dbError) return { error: dbError.message || 'Failed to save document record' }
       return { data: docData }
     } catch (error) {
+      console.error('Upload exception:', error)
       return { error: error.message || 'An unexpected error occurred' }
     }
   },
 
   // ============================================
-  // ✅ NEW: Get signed URL (secure, time-limited)
+  // SIGNED URL (secure, time-limited)
   // ============================================
   async getSignedUrl(fileUrl, expiresIn = 3600) {
     try {
@@ -196,13 +203,13 @@ export const documentsApi = {
   },
 
   // ============================================
-  // ✅ NEW: Get document for viewing (handles encryption)
+  // ✅ GET DOCUMENT BLOB (handles encryption + returns Blob for rendering)
   // ============================================
-  async getDocumentForViewing(doc, userRole = null) {
+  async getDocumentBlob(doc, userRole = null) {
     try {
-      console.log('📄 Preparing document for viewing:', doc.document_name)
+      console.log('📥 getDocumentBlob called for:', doc.document_name, '| Encrypted:', doc.is_encrypted)
 
-      // Check RBAC for encrypted documents
+      // Encrypted — check permission, download, decrypt
       if (doc.is_encrypted) {
         const folderType = doc.document_folders?.folder_type || doc.document_type
         const accessRules = {
@@ -213,22 +220,71 @@ export const documentsApi = {
           hr: ['super_admin', 'hr_manager']
         }
         const allowedRoles = accessRules[folderType] || ['super_admin']
-        
         if (userRole && !allowedRoles.includes(userRole)) {
           return { error: 'You do not have permission to view this encrypted document' }
         }
 
-        // Download encrypted blob
         const path = getStoragePathFromUrl(doc.file_url)
-        const { data: fileBlob, error: downloadError } = await supabase.storage
-          .from('documents')
-          .download(path)
+        if (!path) return { error: 'Invalid file URL' }
 
+        const { data: fileBlob, error } = await supabase.storage.from('documents').download(path)
+        if (error) {
+          console.error('Download error:', error)
+          return { error: 'Failed to download encrypted file' }
+        }
+
+        const password = getEncryptionPassword(folderType)
+        if (!password) return { error: 'No decryption key available' }
+
+        const decryptedBlob = await decryptBlob(fileBlob, password)
+        const typedBlob = new Blob([decryptedBlob], { type: doc.file_type || 'application/octet-stream' })
+        console.log('✅ Decrypted successfully, size:', typedBlob.size)
+        return { data: { blob: typedBlob, mimeType: doc.file_type } }
+      }
+
+      // Unencrypted — signed URL then fetch as Blob
+      const { data: signedUrl } = await this.getSignedUrl(doc.file_url)
+      const url = signedUrl || doc.file_url
+      console.log('🔗 Fetching from:', url)
+
+      const response = await fetch(url)
+      if (!response.ok) return { error: `Failed to fetch document (${response.status})` }
+      const blob = await response.blob()
+      console.log('✅ Fetched blob, size:', blob.size, 'type:', blob.type)
+      return { data: { blob, mimeType: doc.file_type || blob.type } }
+    } catch (err) {
+      console.error('getDocumentBlob error:', err)
+      return { error: err.message || 'Failed to load document' }
+    }
+  },
+
+  // ============================================
+  // ✅ GET DOCUMENT FOR VIEWING (kept for compatibility)
+  // ============================================
+  async getDocumentForViewing(doc, userRole = null) {
+    try {
+      console.log('📄 Preparing document for viewing:', doc.document_name)
+
+      if (doc.is_encrypted) {
+        const folderType = doc.document_folders?.folder_type || doc.document_type
+        const accessRules = {
+          contracts: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          contract: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
+          finance: ['super_admin', 'finance_officer'],
+          financial: ['super_admin', 'finance_officer'],
+          hr: ['super_admin', 'hr_manager']
+        }
+        const allowedRoles = accessRules[folderType] || ['super_admin']
+
+        if (userRole && !allowedRoles.includes(userRole)) {
+          return { error: 'You do not have permission to view this encrypted document' }
+        }
+
+        const path = getStoragePathFromUrl(doc.file_url)
+        const { data: fileBlob, error: downloadError } = await supabase.storage.from('documents').download(path)
         if (downloadError) return { error: 'Failed to download encrypted file' }
 
-        // Decrypt
-        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
-        const password = getEncryptionPassword(folderTypeForPassword)
+        const password = getEncryptionPassword(folderType)
         if (!password) return { error: 'No decryption key available' }
 
         const decryptedBlob = await decryptBlob(fileBlob, password)
@@ -246,18 +302,12 @@ export const documentsApi = {
         }
       }
 
-      // Unencrypted: use signed URL
       const { data: signedUrl, error } = await this.getSignedUrl(doc.file_url)
       if (error) {
-        // Fallback to public URL
-        return {
-          data: { ...doc, viewUrl: doc.file_url, isBlob: false, mimeType: doc.file_type }
-        }
+        return { data: { ...doc, viewUrl: doc.file_url, isBlob: false, mimeType: doc.file_type } }
       }
 
-      return {
-        data: { ...doc, viewUrl: signedUrl, isBlob: false, mimeType: doc.file_type }
-      }
+      return { data: { ...doc, viewUrl: signedUrl, isBlob: false, mimeType: doc.file_type } }
     } catch (err) {
       console.error('View preparation error:', err)
       return { error: err.message }
@@ -265,12 +315,11 @@ export const documentsApi = {
   },
 
   // ============================================
-  // ✅ NEW: Download document (encrypted or not)
+  // ✅ DOWNLOAD ORIGINAL (encrypted or not)
   // ============================================
   async downloadDocument(doc, userRole = null) {
     try {
       if (doc.is_encrypted) {
-        // RBAC check
         const folderType = doc.document_folders?.folder_type || doc.document_type
         const accessRules = {
           contracts: ['super_admin', 'operations_manager', 'finance_officer', 'hr_manager'],
@@ -280,7 +329,6 @@ export const documentsApi = {
           hr: ['super_admin', 'hr_manager']
         }
         const allowedRoles = accessRules[folderType] || ['super_admin']
-        
         if (userRole && !allowedRoles.includes(userRole)) {
           return { error: 'Permission denied' }
         }
@@ -289,11 +337,9 @@ export const documentsApi = {
         const { data: fileBlob, error } = await supabase.storage.from('documents').download(path)
         if (error) return { error: 'Download failed' }
 
-        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
-        const password = getEncryptionPassword(folderTypeForPassword)
+        const password = getEncryptionPassword(folderType)
         const decryptedBlob = await decryptBlob(fileBlob, password)
 
-        // Trigger download
         const url = URL.createObjectURL(decryptedBlob)
         const a = document.createElement('a')
         a.href = url
@@ -302,18 +348,16 @@ export const documentsApi = {
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-
         return { success: true }
       }
 
-      // Unencrypted: signed URL download
-      const { data: signedUrl, error } = await this.getSignedUrl(doc.file_url)
+      // Unencrypted
+      const { data: signedUrl } = await this.getSignedUrl(doc.file_url)
       const url = signedUrl || doc.file_url
-
       const response = await fetch(url)
       const blob = await response.blob()
       const blobUrl = URL.createObjectURL(blob)
-      
+
       const a = document.createElement('a')
       a.href = blobUrl
       a.download = doc.document_name
@@ -321,7 +365,6 @@ export const documentsApi = {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(blobUrl)
-
       return { success: true }
     } catch (err) {
       return { error: err.message }
@@ -329,13 +372,12 @@ export const documentsApi = {
   },
 
   // ============================================
-  // ✅ NEW: Download as PDF
+  // ✅ DOWNLOAD AS PDF
   // ============================================
   async downloadAsPdf(doc, userRole = null) {
     try {
       const { jsPDF } = await import('jspdf')
 
-      // Get file first (decrypted if needed)
       let blob
       if (doc.is_encrypted) {
         const folderType = doc.document_folders?.folder_type || doc.document_type
@@ -352,8 +394,7 @@ export const documentsApi = {
         }
         const path = getStoragePathFromUrl(doc.file_url)
         const { data: fileBlob } = await supabase.storage.from('documents').download(path)
-        const folderTypeForPassword = doc.document_folders?.folder_type || doc.document_type
-        const password = getEncryptionPassword(folderTypeForPassword)
+        const password = getEncryptionPassword(folderType)
         blob = await decryptBlob(fileBlob, password)
       } else {
         const { data: signedUrl } = await this.getSignedUrl(doc.file_url)
@@ -363,9 +404,10 @@ export const documentsApi = {
 
       const baseName = doc.document_name.replace(/\.[^.]+$/, '')
       const fileType = doc.file_type || blob.type
+      const lowerName = doc.document_name.toLowerCase()
 
-      // Already a PDF → download as is
-      if (fileType === 'application/pdf' || doc.document_name.toLowerCase().endsWith('.pdf')) {
+      // PDF — download directly
+      if (fileType === 'application/pdf' || lowerName.endsWith('.pdf')) {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -377,8 +419,8 @@ export const documentsApi = {
         return { success: true }
       }
 
-      // Image → convert to PDF
-      if (fileType.startsWith('image/')) {
+      // Image → PDF
+      if (fileType.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(lowerName)) {
         const dataUrl = await new Promise((resolve) => {
           const reader = new FileReader()
           reader.onload = () => resolve(reader.result)
@@ -411,14 +453,14 @@ export const documentsApi = {
         return { success: true }
       }
 
-      // Text files
+      // Text → PDF
       if (fileType.startsWith('text/') || fileType === 'application/json') {
         const text = await blob.text()
         const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
         const margin = 40
         const pageWidth = pdf.internal.pageSize.getWidth() - margin * 2
         const pageHeight = pdf.internal.pageSize.getHeight()
-        
+
         pdf.setFontSize(12)
         const lines = pdf.splitTextToSize(text, pageWidth)
         let y = margin + 20
@@ -434,18 +476,17 @@ export const documentsApi = {
         return { success: true }
       }
 
-      // Office docs - open print dialog (browser can save as PDF)
+      // Office docs — open in new tab, user can print → Save as PDF
       const url = URL.createObjectURL(blob)
       const win = window.open(url, '_blank')
       if (win) {
-        // Give browser time to load, then trigger print (user can "Save as PDF")
         setTimeout(() => {
           try { win.print() } catch (e) {}
         }, 1500)
       }
-      return { 
-        success: true, 
-        note: 'Document opened in new tab. Use "Print" → "Save as PDF" to download as PDF.' 
+      return {
+        success: true,
+        note: 'Document opened. Use "Print" → "Save as PDF" in the new tab to download as PDF.'
       }
     } catch (err) {
       console.error('PDF conversion error:', err)
@@ -485,9 +526,14 @@ export const documentsApi = {
       supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('document_type', 'sop').neq('status', 'archived'),
       supabase.from('managed_documents').select('*', { count: 'exact', head: true }).eq('is_encrypted', true).neq('status', 'archived')
     ])
-    return { 
-      totalDocs: totalDocs || 0, contracts: contracts || 0, policies: policies || 0, 
-      sops: sops || 0, encryptedDocs: encryptedDocs || 0
+    return {
+      totalDocs: totalDocs || 0,
+      contracts: contracts || 0,
+      policies: policies || 0,
+      sops: sops || 0,
+      encryptedDocs: encryptedDocs || 0
     }
   }
 }
+
+export default documentsApi
