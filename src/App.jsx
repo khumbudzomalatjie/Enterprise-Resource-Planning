@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import AppRoutes from './routes/AppRoutes'
 import useAuthStore from './store/authStore'
@@ -12,6 +13,7 @@ export default function App() {
   const initTheme = useThemeStore(state => state.initTheme)
   const initSession = useAIStore(state => state.initSession)
   const { user } = useAuthStore()
+  const location = useLocation()
 
   useEffect(() => {
     initialize()
@@ -23,6 +25,13 @@ export default function App() {
       initSession(user.id)
     }
   }, [user?.id, initSession])
+
+  // ✅ Hide Khumo on public/auth pages
+  const authPages = ['/login', '/forgot-password', '/reset-password', '/register']
+  const isAuthPage = authPages.includes(location.pathname)
+
+  // Show Khumo only when user is logged in AND not on auth pages
+  const shouldShowKhumo = !!user && !isAuthPage
 
   return (
     <>
@@ -46,9 +55,13 @@ export default function App() {
         }}
       />
       <AppRoutes />
-      {/* KHUMO AI Assistant - Available on every page */}
-      <AIFloatButton />
-      <AIChatWindow />
+      {/* KHUMO AI Assistant - Only visible when logged in, hidden on auth pages */}
+      {shouldShowKhumo && (
+        <>
+          <AIFloatButton />
+          <AIChatWindow />
+        </>
+      )}
     </>
   )
 }
