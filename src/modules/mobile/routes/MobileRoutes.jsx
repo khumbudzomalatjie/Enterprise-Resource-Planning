@@ -8,6 +8,7 @@ import LeaveManagement from '../pages/LeaveManagement'
 import Profile from '../pages/Profile'
 import Photos from '../pages/Photos'
 import RequestSupplies from '../pages/RequestSupplies'
+import ReportIncident from '../pages/ReportIncident'
 
 export default function MobileRoutes() {
   return (
@@ -17,6 +18,7 @@ export default function MobileRoutes() {
       <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
       <Route path="/photos" element={<ProtectedRoute><Photos /></ProtectedRoute>} />
       <Route path="/supplies" element={<ProtectedRoute><RequestSupplies /></ProtectedRoute>} />
+      <Route path="/incident" element={<ProtectedRoute><ReportIncident /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
       <Route path="/leave" element={<ProtectedRoute><LeaveManagement /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
