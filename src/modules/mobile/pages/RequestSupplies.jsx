@@ -8,17 +8,16 @@ import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   Package, Plus, Trash2, Send, X, Loader2, 
-  Scan, Camera, Check, AlertCircle
+  Scan, Camera, Check, AlertCircle, Briefcase 
 } from 'lucide-react'
 
 export default function RequestSupplies() {
   const { user } = useAuthStore()
-  const { myJobs } = useMobileStore()
+  const { myJobs, fetchMyJobs } = useMobileStore()
   const navigate = useNavigate()
-  
+
   const [activeTab, setActiveTab] = useState('request')
   const [items, setItems] = useState([{ name: '', quantity: 1, unit: 'each', notes: '' }])
-  const [jobId, setJobId] = useState('')
   const [urgency, setUrgency] = useState('normal')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -29,13 +28,12 @@ export default function RequestSupplies() {
   const [scannedItem, setScannedItem] = useState(null)
   const scannerRef = useRef(null)
 
+  // ✅ Auto-select active job
+  const activeJob = myJobs && myJobs.length > 0 ? myJobs[0] : null
+
   useEffect(() => {
     setupAndLoad()
-    return () => {
-      if (scannerRef.current) {
-        try { scannerRef.current.clear() } catch (e) {}
-      }
-    }
+    return () => stopScanner()
   }, [])
 
   useEffect(() => {
@@ -46,7 +44,10 @@ export default function RequestSupplies() {
   const setupAndLoad = async () => {
     const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
     setMyEmployeeId(emp?.id || null)
-    if (emp?.id) await loadRequests(emp.id)
+    if (emp?.id) {
+      await fetchMyJobs(emp.id)
+      await loadRequests(emp.id)
+    }
     setLoadingRequests(false)
   }
 
@@ -79,7 +80,8 @@ export default function RequestSupplies() {
         .from('supplies_requests')
         .insert([{
           employee_id: myEmployeeId,
-          job_id: jobId || null,
+          // ✅ Auto-link to active job
+          job_id: activeJob?.id || null,
           urgency,
           notes,
           status: 'pending'
@@ -103,9 +105,8 @@ export default function RequestSupplies() {
 
       if (itemsError) throw itemsError
 
-      toast.success('Request submitted!')
+      toast.success(`Request submitted${activeJob ? ` for ${activeJob.job_number}` : ''}!`)
       setItems([{ name: '', quantity: 1, unit: 'each', notes: '' }])
-      setJobId('')
       setNotes('')
       setUrgency('normal')
       await loadRequests(myEmployeeId)
@@ -118,9 +119,6 @@ export default function RequestSupplies() {
     }
   }
 
-  // ============================================
-  // QR SCANNER
-  // ============================================
   const startScanner = async () => {
     setScanning(true)
     setScannedItem(null)
@@ -136,18 +134,16 @@ export default function RequestSupplies() {
 
         scanner.render(
           (decodedText) => {
-            console.log('✅ Scanned:', decodedText)
             setScannedItem(decodedText)
             toast.success('Item scanned!')
             try { scanner.clear() } catch (e) {}
             setScanning(false)
           },
-          (error) => { /* Ignore scan errors */ }
+          () => {}
         )
         scannerRef.current = scanner
       }, 100)
     } catch (err) {
-      console.error('Scanner error:', err)
       toast.error('Camera not available')
       setScanning(false)
     }
@@ -163,7 +159,6 @@ export default function RequestSupplies() {
 
   const useScannedItem = () => {
     if (!scannedItem) return
-    // Add scanned item to the request list
     setItems([...items, { name: scannedItem, quantity: 1, unit: 'each', notes: 'Scanned' }])
     setScannedItem(null)
     setActiveTab('request')
@@ -182,29 +177,42 @@ export default function RequestSupplies() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-500 via-indigo-600 to-blue-700 font-['Inter'] flex flex-col"
       style={{ minHeight: '100dvh' }}>
-      
+
       {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white flex-shrink-0">
         <h1 className="text-2xl font-bold">Request Supplies</h1>
         <p className="text-purple-100 text-sm mt-1">Request or scan supplies</p>
+
+        {/* ✅ Active Job Banner */}
+        {activeJob && (
+          <div className="mt-3 bg-white/15 border border-white/20 rounded-xl p-3 flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-white/80 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-white text-xs opacity-70">Linked to job</p>
+              <p className="text-white font-semibold text-sm truncate">
+                {activeJob.job_number} · {activeJob.title}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
       <div className="px-5 -mt-2 flex-shrink-0">
         <div className="flex gap-2 bg-white/10 rounded-2xl p-1">
-          <button onClick={() => setActiveTab('request')} 
+          <button onClick={() => setActiveTab('request')}
             className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
               activeTab === 'request' ? 'bg-white text-purple-700 shadow-lg' : 'text-white/70'
             }`}>
             <Plus className="w-4 h-4" /> Request
           </button>
-          <button onClick={() => setActiveTab('scan')} 
+          <button onClick={() => setActiveTab('scan')}
             className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
               activeTab === 'scan' ? 'bg-white text-purple-700 shadow-lg' : 'text-white/70'
             }`}>
             <Scan className="w-4 h-4" /> Scan
           </button>
-          <button onClick={() => setActiveTab('my')} 
+          <button onClick={() => setActiveTab('my')}
             className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
               activeTab === 'my' ? 'bg-white text-purple-700 shadow-lg' : 'text-white/70'
             }`}>
@@ -215,41 +223,22 @@ export default function RequestSupplies() {
 
       {/* Content */}
       <div className="px-5 pt-3 pb-24 flex-1 overflow-y-auto">
-        
-        {/* === REQUEST TAB === */}
+
         {activeTab === 'request' && (
           <div className="space-y-3">
-            {/* Job */}
-            <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <label className="text-xs text-slate-500 mb-1 block">Job (optional)</label>
-              <select 
-                value={jobId} 
-                onChange={e => setJobId(e.target.value)}
-                className="w-full p-3 rounded-xl bg-slate-100 text-sm"
-              >
-                <option value="">No specific job</option>
-                {(myJobs || []).map(j => (
-                  <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>
-                ))}
-              </select>
-            </div>
-
             {/* Urgency */}
             <div className="bg-white rounded-2xl p-4 shadow-lg">
               <label className="text-xs text-slate-500 mb-2 block">Urgency</label>
               <div className="grid grid-cols-3 gap-2">
                 {['normal','urgent','critical'].map(u => (
-                  <button
-                    key={u}
-                    onClick={() => setUrgency(u)}
+                  <button key={u} onClick={() => setUrgency(u)}
                     className={`py-2.5 rounded-xl text-xs font-bold capitalize transition-all ${
-                      urgency === u 
-                        ? u === 'critical' ? 'bg-red-600 text-white' 
-                        : u === 'urgent' ? 'bg-amber-600 text-white' 
+                      urgency === u
+                        ? u === 'critical' ? 'bg-red-600 text-white'
+                        : u === 'urgent' ? 'bg-amber-600 text-white'
                         : 'bg-blue-600 text-white'
                         : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
+                    }`}>
                     {u}
                   </button>
                 ))}
@@ -275,39 +264,22 @@ export default function RequestSupplies() {
                       </button>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    value={item.name}
-                    onChange={e => updateItem(i, 'name', e.target.value)}
-                    placeholder="Item name"
-                    className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm"
-                  />
+                  <input type="text" value={item.name} onChange={e => updateItem(i, 'name', e.target.value)}
+                    placeholder="Item name" className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm" />
                   <div className="grid grid-cols-3 gap-2">
-                    <input
-                      type="number"
-                      value={item.quantity}
+                    <input type="number" value={item.quantity}
                       onChange={e => updateItem(i, 'quantity', parseInt(e.target.value) || 1)}
-                      placeholder="Qty"
-                      className="p-3 rounded-xl bg-white border border-slate-200 text-sm"
-                    />
-                    <select
-                      value={item.unit}
-                      onChange={e => updateItem(i, 'unit', e.target.value)}
-                      className="p-3 rounded-xl bg-white border border-slate-200 text-sm"
-                    >
+                      placeholder="Qty" className="p-3 rounded-xl bg-white border border-slate-200 text-sm" />
+                    <select value={item.unit} onChange={e => updateItem(i, 'unit', e.target.value)}
+                      className="p-3 rounded-xl bg-white border border-slate-200 text-sm">
                       <option value="each">each</option>
                       <option value="box">box</option>
                       <option value="litre">litre</option>
                       <option value="pack">pack</option>
                       <option value="roll">roll</option>
                     </select>
-                    <input
-                      type="text"
-                      value={item.notes}
-                      onChange={e => updateItem(i, 'notes', e.target.value)}
-                      placeholder="Notes"
-                      className="p-3 rounded-xl bg-white border border-slate-200 text-sm"
-                    />
+                    <input type="text" value={item.notes} onChange={e => updateItem(i, 'notes', e.target.value)}
+                      placeholder="Notes" className="p-3 rounded-xl bg-white border border-slate-200 text-sm" />
                   </div>
                 </div>
               ))}
@@ -316,37 +288,22 @@ export default function RequestSupplies() {
             {/* Notes */}
             <div className="bg-white rounded-2xl p-4 shadow-lg">
               <label className="text-xs text-slate-500 mb-1 block">Additional Notes</label>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={3}
-                placeholder="Any additional info..."
-                className="w-full p-3 rounded-xl bg-slate-100 text-sm resize-none"
-              />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                placeholder="Any additional info..." className="w-full p-3 rounded-xl bg-slate-100 text-sm resize-none" />
             </div>
 
             {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="w-full py-4 rounded-2xl bg-purple-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg"
-            >
+            <button onClick={handleSubmit} disabled={submitting}
+              className="w-full py-4 rounded-2xl bg-purple-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg">
               {submitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Submitting...
-                </>
+                <><Loader2 className="w-5 h-5 animate-spin" /> Submitting...</>
               ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  Submit Request
-                </>
+                <><Send className="w-5 h-5" /> Submit Request</>
               )}
             </button>
           </div>
         )}
 
-        {/* === SCAN TAB === */}
         {activeTab === 'scan' && (
           <div className="space-y-3">
             <div className="bg-white rounded-2xl p-4 shadow-lg">
@@ -355,32 +312,23 @@ export default function RequestSupplies() {
                 Scan Supply Barcode / QR
               </h3>
               <p className="text-xs text-slate-500 mb-3">
-                Point your camera at a barcode or QR code to scan supplies
+                Point your camera at a barcode or QR code
               </p>
-              
-              <div 
-                id="qr-reader" 
-                className="w-full rounded-2xl overflow-hidden bg-black"
-                style={{ minHeight: '320px' }}
-              />
+
+              <div id="qr-reader" className="w-full rounded-2xl overflow-hidden bg-black"
+                style={{ minHeight: '320px' }} />
 
               {!scanning && (
-                <button
-                  onClick={startScanner}
-                  className="w-full mt-3 py-4 rounded-2xl bg-purple-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95"
-                >
-                  <Camera className="w-5 h-5" />
-                  Start Scanner
+                <button onClick={startScanner}
+                  className="w-full mt-3 py-4 rounded-2xl bg-purple-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95">
+                  <Camera className="w-5 h-5" /> Start Scanner
                 </button>
               )}
             </div>
 
             {scannedItem && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl p-4 shadow-lg border-2 border-emerald-500"
-              >
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl p-4 shadow-lg border-2 border-emerald-500">
                 <div className="flex items-center gap-2 mb-3">
                   <Check className="w-5 h-5 text-emerald-600" />
                   <span className="font-bold text-slate-800">Scanned Item</span>
@@ -388,10 +336,8 @@ export default function RequestSupplies() {
                 <p className="p-3 rounded-xl bg-slate-100 text-sm font-mono text-slate-800 mb-3 break-all">
                   {scannedItem}
                 </p>
-                <button
-                  onClick={useScannedItem}
-                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 active:scale-95"
-                >
+                <button onClick={useScannedItem}
+                  className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 active:scale-95">
                   <Plus className="w-4 h-4" /> Add to Request
                 </button>
               </motion.div>
@@ -413,7 +359,6 @@ export default function RequestSupplies() {
           </div>
         )}
 
-        {/* === MY REQUESTS TAB === */}
         {activeTab === 'my' && (
           <div className="space-y-3">
             {loadingRequests ? (
