@@ -6,36 +6,36 @@ import useMobileStore from '../store/mobileStore'
 import BottomNav from '../components/BottomNav'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
-import { 
-  Camera, Upload, ArrowLeft, Trash2, Eye, X, Download, Loader2 
-} from 'lucide-react'
+import { Camera, Trash2, X, Download, Loader2, Briefcase } from 'lucide-react'
 
 export default function Photos() {
-  const { user, profile } = useAuthStore()
-  const { myJobs } = useMobileStore()
+  const { user } = useAuthStore()
+  const { myJobs, fetchMyJobs } = useMobileStore()
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
-  
+
   const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [uploadForm, setUploadForm] = useState({ jobId: '', photoType: 'before', caption: '' })
+  const [photoType, setPhotoType] = useState('before')
+  const [caption, setCaption] = useState('')
   const [myEmployeeId, setMyEmployeeId] = useState(null)
+
+  // ✅ Active job = first job in My Jobs
+  const activeJob = myJobs && myJobs.length > 0 ? myJobs[0] : null
 
   useEffect(() => { setupAndLoad() }, [])
 
   const setupAndLoad = async () => {
-    const empId = await findEmployee()
-    setMyEmployeeId(empId)
-    if (empId) await loadPhotos(empId)
+    const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
+    setMyEmployeeId(emp?.id || null)
+    if (emp?.id) {
+      await fetchMyJobs(emp.id)
+      await loadPhotos(emp.id)
+    }
     setLoading(false)
-  }
-
-  const findEmployee = async () => {
-    let { data: emp } = await supabase.from('employees').select('id').eq('user_id', user?.id).single()
-    return emp?.id || null
   }
 
   const loadPhotos = async (empId) => {
@@ -46,7 +46,7 @@ export default function Photos() {
       .eq('employee_id', empId)
       .order('taken_at', { ascending: false })
       .limit(50)
-    
+
     if (error) console.error(error)
     setPhotos(data || [])
     setLoading(false)
@@ -55,16 +55,22 @@ export default function Photos() {
   const handleUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!uploadForm.jobId) {
-      toast.error('Please select a job first')
+
+    // ✅ Auto-use active job — no need to select
+    if (!activeJob) {
+      toast.error('No active job. Select a job first from My Jobs.')
       if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    if (!myEmployeeId) {
+      toast.error('Profile not ready')
       return
     }
 
     setUploading(true)
     try {
       const fileExt = file.name.split('.').pop()
-      const fileName = `job-photos/${uploadForm.jobId}/${Date.now()}.${fileExt}`
+      const fileName = `job-photos/${activeJob.id}/${Date.now()}.${fileExt}`
 
       try {
         await supabase.storage.createBucket('fleet', { public: true, fileSizeLimit: 10485760 })
@@ -81,18 +87,19 @@ export default function Photos() {
       const { error: dbError } = await supabase
         .from('job_photos')
         .insert([{
-          job_id: uploadForm.jobId,
+          job_id: activeJob.id,
           employee_id: myEmployeeId,
-          photo_type: uploadForm.photoType,
+          photo_type: photoType,
           photo_url: publicUrl,
-          caption: uploadForm.caption
+          caption
         }])
 
       if (dbError) throw dbError
 
-      toast.success('Photo uploaded!')
+      toast.success(`Photo uploaded to ${activeJob.job_number}`)
       setShowUploadModal(false)
-      setUploadForm({ jobId: '', photoType: 'before', caption: '' })
+      setPhotoType('before')
+      setCaption('')
       await loadPhotos(myEmployeeId)
     } catch (err) {
       console.error(err)
@@ -124,28 +131,58 @@ export default function Photos() {
     }
   }
 
-  const formatDate = (date) => date 
+  const formatDate = (date) => date
     ? new Date(date).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : ''
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-500 via-blue-600 to-indigo-700 font-['Inter'] flex flex-col"
       style={{ minHeight: '100dvh' }}>
-      
+
       {/* Header */}
       <div className="px-5 pt-8 pb-5 text-white flex-shrink-0">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-2xl font-bold">Photos</h1>
             <p className="text-blue-100 text-sm mt-1">{photos.length} photo{photos.length !== 1 ? 's' : ''}</p>
           </div>
-          <button 
-            onClick={() => setShowUploadModal(true)}
+          <button
+            onClick={() => {
+              if (!activeJob) {
+                toast.error('Select a job from My Jobs first')
+                navigate('/mobile/jobs')
+                return
+              }
+              setShowUploadModal(true)
+            }}
             className="w-12 h-12 rounded-full bg-white text-blue-600 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
           >
             <Camera className="w-6 h-6" />
           </button>
         </div>
+
+        {/* ✅ Active Job Banner */}
+        {activeJob ? (
+          <div className="bg-white/15 border border-white/20 rounded-xl p-3 flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-white/80 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-white text-xs opacity-70">Current Job</p>
+              <p className="text-white font-semibold text-sm truncate">
+                {activeJob.job_number} · {activeJob.title}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-3 flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-amber-300 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-amber-200 text-xs font-semibold">No active job</p>
+              <button onClick={() => navigate('/mobile/jobs')} className="text-amber-100 text-xs underline">
+                Select a job →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -198,18 +235,12 @@ export default function Photos() {
             <Camera className="w-16 h-16 text-white/50 mx-auto mb-3" />
             <p className="text-white font-semibold">No photos yet</p>
             <p className="text-white/60 text-sm mt-1 mb-4">Tap the camera button to take your first photo</p>
-            <button 
-              onClick={() => setShowUploadModal(true)}
-              className="px-6 py-3 rounded-2xl bg-white text-blue-600 font-bold shadow-lg active:scale-95"
-            >
-              Upload Photo
-            </button>
           </div>
         )}
       </div>
 
       {/* Upload Modal */}
-      {showUploadModal && (
+      {showUploadModal && activeJob && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center"
           onClick={() => !uploading && setShowUploadModal(false)}>
           <motion.div
@@ -226,31 +257,30 @@ export default function Photos() {
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Job *</label>
-                <select 
-                  value={uploadForm.jobId} 
-                  onChange={e => setUploadForm({...uploadForm, jobId: e.target.value})}
-                  className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-sm"
-                >
-                  <option value="">Select Job</option>
-                  {(myJobs || []).map(j => (
-                    <option key={j.id} value={j.id}>{j.job_number} - {j.title}</option>
-                  ))}
-                </select>
+            {/* ✅ Job is auto-selected — just display it */}
+            <div className="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Active Job</p>
+                  <p className="text-sm text-slate-800 dark:text-white font-semibold truncate">
+                    {activeJob.job_number} · {activeJob.title}
+                  </p>
+                </div>
               </div>
+            </div>
 
+            <div className="space-y-3">
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Photo Type</label>
                 <div className="grid grid-cols-4 gap-2">
                   {['before','after','incident','other'].map(type => (
                     <button
                       key={type}
-                      onClick={() => setUploadForm({...uploadForm, photoType: type})}
+                      onClick={() => setPhotoType(type)}
                       className={`py-2 rounded-xl text-xs font-medium capitalize ${
-                        uploadForm.photoType === type 
-                          ? 'bg-blue-600 text-white' 
+                        photoType === type
+                          ? 'bg-blue-600 text-white'
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                       }`}
                     >
@@ -262,10 +292,10 @@ export default function Photos() {
 
               <div>
                 <label className="text-xs text-slate-500 mb-1 block">Caption</label>
-                <input 
+                <input
                   type="text"
-                  value={uploadForm.caption}
-                  onChange={e => setUploadForm({...uploadForm, caption: e.target.value})}
+                  value={caption}
+                  onChange={e => setCaption(e.target.value)}
                   placeholder="Optional description..."
                   className="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-sm"
                 />
@@ -281,11 +311,8 @@ export default function Photos() {
               />
 
               <button
-                onClick={() => {
-                  if (!uploadForm.jobId) { toast.error('Please select a job'); return }
-                  fileInputRef.current?.click()
-                }}
-                disabled={uploading || !uploadForm.jobId}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
                 className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 shadow-lg"
               >
                 {uploading ? (
@@ -315,26 +342,26 @@ export default function Photos() {
             className="w-full max-w-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <img 
-              src={selectedPhoto.photo_url} 
+            <img
+              src={selectedPhoto.photo_url}
               alt="Full size"
               className="w-full max-h-[70vh] object-contain rounded-2xl"
             />
             <div className="flex justify-center gap-3 mt-4">
-              <a 
-                href={selectedPhoto.photo_url} 
-                download 
+              <a
+                href={selectedPhoto.photo_url}
+                download
                 className="px-5 py-3 bg-white text-slate-800 rounded-xl font-medium flex items-center gap-2"
               >
                 <Download className="w-4 h-4" /> Download
               </a>
-              <button 
+              <button
                 onClick={() => handleDelete(selectedPhoto)}
                 className="px-5 py-3 bg-red-600 text-white rounded-xl font-medium flex items-center gap-2"
               >
                 <Trash2 className="w-4 h-4" /> Delete
               </button>
-              <button 
+              <button
                 onClick={() => setSelectedPhoto(null)}
                 className="px-5 py-3 bg-slate-700 text-white rounded-xl font-medium flex items-center gap-2"
               >
