@@ -120,7 +120,6 @@ export default function ReportIncident() {
           emergency_services: form.emergency_services,
           estimated_cost: form.estimated_cost,
           status,
-          // ✅ Auto-link to active job
           job_id: activeJob?.id || null,
           job_number: activeJob?.job_number || null,
           client_id: activeJob?.client_id || null,
