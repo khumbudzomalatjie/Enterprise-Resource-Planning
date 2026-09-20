@@ -11,6 +11,7 @@ import ReportIncident from '../incidents/pages/ReportIncident'
 import IncidentList from '../incidents/pages/IncidentList'
 import IncidentDetail from '../incidents/pages/IncidentDetail'
 import IncidentTracker from '../incidents/pages/IncidentTracker'
+import MyIncidents from '../incidents/pages/MyIncidents'
 
 // Field Ops Messaging System
 import Messages from '../messages/pages/Messages'
@@ -100,6 +101,15 @@ export default function FieldOpsRoutes() {
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
             <IncidentTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ NEW: My Incidents - Assigned to me */}
+      <Route path="/incidents/my" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <MyIncidents />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
