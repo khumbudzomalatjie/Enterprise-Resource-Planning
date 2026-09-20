@@ -11,7 +11,7 @@ import {
   Radio, Search, Users, UserPlus, UserX, MapPin, 
   Clock, Play, CheckCircle2, XCircle, ChevronRight,
   Sun, Moon, Sparkles, Building2, Calendar, Eye, 
-  Wifi, WifiOff, RefreshCw, Briefcase, Camera, Download,
+  Wifi, WifiOff, RefreshCw, Camera, Download, X,
   Image as ImageIcon
 } from 'lucide-react'
 
@@ -59,12 +59,6 @@ export default function LiveJobs() {
       .channel('live-jobs-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => { loadAllData(); setLastSync(new Date()) })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'field_job_assignments' }, () => { loadAllData(); setLastSync(new Date()) })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_photos' }, (payload) => {
-        // Refresh photos when new ones are uploaded
-        if (payload.new?.job_id) {
-          loadJobPhotos(payload.new.job_id, true)
-        }
-      })
       .subscribe()
 
     const fallbackInterval = setInterval(() => { loadAllData(); setLastSync(new Date()) }, 15000)
@@ -101,9 +95,7 @@ export default function LiveJobs() {
     }
   }
 
-  // ============================================
-  // ✅ LOAD PHOTOS FOR A SPECIFIC JOB
-  // ============================================
+  // ✅ Load photos for a job
   const loadJobPhotos = async (jobId, force = false) => {
     if (!force && jobPhotos[jobId]) return
     setLoadingPhotos(prev => ({ ...prev, [jobId]: true }))
@@ -124,17 +116,7 @@ export default function LiveJobs() {
     }
   }
 
-  // Load photos when opening job details
-  const handleViewJobDetails = (jobId) => {
-    if (showJobDetail === jobId) {
-      setShowJobDetail(null)
-    } else {
-      setShowJobDetail(jobId)
-      loadJobPhotos(jobId)
-    }
-  }
-
-  // Auto-load photos for all visible jobs
+  // Auto-load photos for first 10 jobs
   useEffect(() => {
     if (liveJobs && liveJobs.length > 0) {
       liveJobs.slice(0, 10).forEach(job => {
@@ -364,7 +346,6 @@ export default function LiveJobs() {
             {sortedJobs.map((job) => {
               const activeAssignments = (job.field_job_assignments || []).filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
               const photos = jobPhotos[job.id] || []
-              const isPhotosLoading = loadingPhotos[job.id]
               
               return (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} layout
@@ -381,7 +362,6 @@ export default function LiveJobs() {
                           <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>{job.status?.replace('_', ' ')}</span>
                           <span className={`px-2 py-0.5 rounded-full text-xs ${getPriorityColor(job.priority)}`}>{job.priority}</span>
                           {job.isMyJob && <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">🔒 My Job</span>}
-                          {job.job_categories && <span className="px-2 py-0.5 rounded-full text-xs" style={{ backgroundColor: (job.job_categories.color || '#10b981') + '20', color: job.job_categories.color || '#10b981' }}>{job.job_categories.name}</span>}
                         </div>
                         <h3 className="text-lg font-semibold text-slate-800 dark:text-white mt-1">{job.title}</h3>
                         <div className="flex items-center gap-4 mt-2 text-sm text-slate-500 flex-wrap">
@@ -412,7 +392,7 @@ export default function LiveJobs() {
                         <UserPlus className="w-4 h-4" />
                       </button>
                       
-                      {/* ✅ NEW: Photo indicator button */}
+                      {/* Photo button */}
                       <button 
                         onClick={() => { loadJobPhotos(job.id, true); setShowPhotoGallery(job) }}
                         className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 relative"
@@ -425,7 +405,7 @@ export default function LiveJobs() {
                         )}
                       </button>
                       
-                      <button onClick={() => handleViewJobDetails(job.id)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400" title="Details">
+                      <button onClick={() => setShowJobDetail(showJobDetail === job.id ? null : job.id)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400" title="Details">
                         <Eye className="w-4 h-4" />
                       </button>
                     </div>
@@ -454,7 +434,7 @@ export default function LiveJobs() {
                             <span className="text-xs opacity-75">({a.assignment_status})</span>
                             <button 
                               onClick={() => handleRelease(a.id, `${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''}`, job.job_number)}
-                              className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 hover:text-red-700 transition-colors"
+                              className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
                               title="Release Employee">
                               <XCircle className="w-4 h-4" />
                             </button>
@@ -466,7 +446,7 @@ export default function LiveJobs() {
                     )}
                   </div>
 
-                  {/* ✅ NEW: Quick photo preview strip */}
+                  {/* Photo preview strip */}
                   {photos.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-2">
@@ -483,8 +463,7 @@ export default function LiveJobs() {
                           <div 
                             key={photo.id} 
                             onClick={() => setSelectedPhoto(photo)}
-                            className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden cursor-pointer group"
-                          >
+                            className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden cursor-pointer group">
                             <img src={photo.photo_url} alt="Photo" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                             <span className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${
                               photo.photo_type === 'before' ? 'bg-blue-500' :
@@ -498,21 +477,11 @@ export default function LiveJobs() {
                         {photos.length > 6 && (
                           <button 
                             onClick={() => setShowPhotoGallery(job)}
-                            className="flex-shrink-0 w-20 h-20 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 font-bold hover:bg-slate-200"
-                          >
+                            className="flex-shrink-0 w-20 h-20 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 font-bold hover:bg-slate-200">
                             +{photos.length - 6}
                           </button>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {isPhotosLoading && photos.length === 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                      <p className="text-xs text-slate-400 flex items-center gap-2">
-                        <div className="w-3 h-3 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin"></div>
-                        Loading photos...
-                      </p>
                     </div>
                   )}
 
@@ -524,8 +493,6 @@ export default function LiveJobs() {
                           <div><p className="text-xs text-slate-500">Duration</p><p className="font-medium">{job.estimated_duration_minutes || 'N/A'} min</p></div>
                           <div><p className="text-xs text-slate-500">Amount</p><p className="font-medium text-emerald-600">{new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(job.quoted_amount || 0)}</p></div>
                           <div><p className="text-xs text-slate-500">Contact</p><p className="font-medium">{job.site_contact_name || 'N/A'}</p></div>
-                          {job.access_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Access</p><p className="text-sm">{job.access_instructions}</p></div>}
-                          {job.special_instructions && <div className="col-span-2"><p className="text-xs text-slate-500">Instructions</p><p className="text-sm">{job.special_instructions}</p></div>}
                         </div>
                       </motion.div>
                     )}
@@ -545,21 +512,10 @@ export default function LiveJobs() {
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Assign Staff</h3>
               <p className="text-sm text-slate-500 mb-4">Job: <span className="font-medium">{selectedJob.job_number}</span> - {selectedJob.title}</p>
               
-              {(selectedJob.field_job_assignments || []).filter(a => a.assignment_status !== 'released').length > 0 && (
-                <div className="mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-                  <p className="text-xs font-semibold text-slate-500 mb-2">Currently Assigned:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedJob.field_job_assignments.filter(a => a.assignment_status !== 'released').map(a => (
-                      <span key={a.id} className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">{a.employees?.first_name} {a.employees?.last_name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-slate-700 dark:text-slate-300">
                 <option value="">Select Employee to Assign</option>
                 {availableEmployees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code}) - {emp.department || 'N/A'}</option>
+                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code})</option>
                 ))}
               </select>
 
@@ -572,19 +528,69 @@ export default function LiveJobs() {
         )}
       </AnimatePresence>
 
-      {/* ✅ NEW: Photo Gallery Modal */}
+      {/* Photo Gallery Modal */}
       <AnimatePresence>
         {showPhotoGallery && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
             className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
             onClick={() => setShowPhotoGallery(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+              className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
               onClick={e => e.stopPropagation()}>
               
-              {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                     <Camera className="w-5 h-5 text-indigo-600" />
-                    Photos - {showPhotoGallery.j
+                    Photos - {showPhotoGallery.job_number}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">{showPhotoGallery.title}</p>
+                </div>
+                <button onClick={() => setShowPhotoGallery(null)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5">
+                {(jobPhotos[showPhotoGallery.id] || []).length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {(jobPhotos[showPhotoGallery.id] || []).map(photo => (
+                      <div key={photo.id} onClick={() => setSelectedPhoto(photo)}
+                        className="relative rounded-xl overflow-hidden cursor-pointer group">
+                        <img src={photo.photo_url} alt="Photo" className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
+                        <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize text-white ${
+                          photo.photo_type === 'before' ? 'bg-blue-500' :
+                          photo.photo_type === 'after' ? 'bg-emerald-500' :
+                          photo.photo_type === 'incident' ? 'bg-red-500' : 'bg-slate-500'
+                        }`}>
+                          {photo.photo_type}
+                        </span>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                          <p className="text-white text-[10px] font-medium truncate">
+                            {photo.employees?.first_name} {photo.employees?.last_name}
+                          </p>
+                          <p className="text-white/60 text-[9px]">{formatDate(photo.taken_at)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Camera className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <p className="text-slate-500">No photos for this job yet</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Full Photo Viewer */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4"
+            onClick={() => setSelectedPhoto(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="max-w-4xl w-full" onClick={e => e
