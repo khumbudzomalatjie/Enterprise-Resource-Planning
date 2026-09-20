@@ -460,4 +460,54 @@ export default function IncidentDetail() {
       <AnimatePresence>
         {showCapaModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowCapaModal(false)}>
-           
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Add Action (CAPA)</h3>
+              <div className="space-y-3">
+                <input type="text" placeholder="Action title *" value={capaForm.title} onChange={e => setCapaForm({ ...capaForm, title: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
+                <textarea placeholder="Description" value={capaForm.description} onChange={e => setCapaForm({ ...capaForm, description: e.target.value })} rows={3} className="w-full p-3 neu-inset rounded-xl text-sm resize-none text-slate-700 dark:text-slate-300" />
+                <select value={capaForm.action_type} onChange={e => setCapaForm({ ...capaForm, action_type: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="corrective">Corrective</option>
+                  <option value="preventive">Preventive</option>
+                </select>
+                <select value={capaForm.priority} onChange={e => setCapaForm({ ...capaForm, priority: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="low">Low Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="high">High Priority</option>
+                  <option value="critical">Critical Priority</option>
+                </select>
+                <select value={capaForm.assigned_to} onChange={e => setCapaForm({ ...capaForm, assigned_to: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="">Assign To (optional)</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                </select>
+                <input type="date" value={capaForm.due_date} onChange={e => setCapaForm({ ...capaForm, due_date: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setShowCapaModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
+                <button onClick={handleCreateCapa} disabled={saving} className="flex-1 py-3 rounded-xl bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />} Create
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showApprovalModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowApprovalModal(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white capitalize">{showApprovalModal} Approval</h3>
+              <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Comments..." rows={3} className="w-full p-3 neu-inset rounded-xl mb-4 text-sm resize-none text-slate-700 dark:text-slate-300" />
+              <div className="flex gap-2">
+                <button onClick={() => handleApproval(showApprovalModal, false)} disabled={saving} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50">Reject</button>
+                <button onClick={() => handleApproval(showApprovalModal, true)} disabled={saving} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
