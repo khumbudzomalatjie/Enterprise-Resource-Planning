@@ -4,6 +4,7 @@ import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import FieldOpsDashboard from '../pages/FieldOpsDashboard'
 import LiveJobs from '../pages/LiveJobs'
 import JobTracker from '../pages/JobTracker'
+import PhotoGallery from '../pages/PhotoGallery'
 
 // Enterprise Incident Management
 import IncidentDashboard from '../incidents/pages/IncidentDashboard'
@@ -12,6 +13,7 @@ import IncidentList from '../incidents/pages/IncidentList'
 import IncidentDetail from '../incidents/pages/IncidentDetail'
 import IncidentTracker from '../incidents/pages/IncidentTracker'
 import MyIncidents from '../incidents/pages/MyIncidents'
+import AllCapas from '../incidents/pages/AllCapas'
 
 // Field Ops Messaging System
 import Messages from '../messages/pages/Messages'
@@ -38,7 +40,7 @@ export default function FieldOpsRoutes() {
       } />
       
       {/* ============================================ */}
-      {/* LIVE JOBS - Active job monitoring            */}
+      {/* LIVE JOBS                                     */}
       {/* ============================================ */}
       <Route path="/live-jobs" element={
         <ProtectedRoute>
@@ -49,7 +51,7 @@ export default function FieldOpsRoutes() {
       } />
       
       {/* ============================================ */}
-      {/* JOB TRACKER - Complete job audit trail       */}
+      {/* JOB TRACKER                                   */}
       {/* ============================================ */}
       <Route path="/job-tracker" element={
         <ProtectedRoute>
@@ -60,7 +62,18 @@ export default function FieldOpsRoutes() {
       } />
 
       {/* ============================================ */}
-      {/* FIELD OPS MESSAGING SYSTEM                    */}
+      {/* PHOTO GALLERY                                 */}
+      {/* ============================================ */}
+      <Route path="/photos" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <PhotoGallery />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ============================================ */}
+      {/* MESSAGING                                     */}
       {/* ============================================ */}
       <Route path="/messages" element={
         <ProtectedRoute>
@@ -105,11 +118,20 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ NEW: My Incidents - Assigned to me */}
+      {/* My Incidents - Assigned to me */}
       <Route path="/incidents/my" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
             <MyIncidents />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* All CAPAs tracker */}
+      <Route path="/incidents/capas" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <AllCapas />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
