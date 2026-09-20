@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { 
   Search, AlertTriangle, ChevronRight, Sun, Moon, Sparkles, 
   Eye, User, CheckCircle2, UserCheck, Wrench, X, Loader2,
-  Activity, Play, ClipboardCheck, Clock
+  Activity, Play, ClipboardCheck, MessageSquare, Send
 } from 'lucide-react'
 
 export default function MyIncidents() {
@@ -24,6 +24,7 @@ export default function MyIncidents() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(null)
+  const [showCommentModal, setShowCommentModal] = useState(null)
   const [newStatus, setNewStatus] = useState('')
   const [comment, setComment] = useState('')
 
@@ -59,6 +60,7 @@ export default function MyIncidents() {
         if (error) throw error
         setIncidents(data || [])
       } else if (activeTab === 'capa') {
+        // ✅ Only show OPEN and IN_PROGRESS — completed moves out
         let orClause = `assigned_to.eq.${user.id}`
         if (emp?.id) orClause += `,assigned_employee_id.eq.${emp.id}`
         
@@ -66,6 +68,7 @@ export default function MyIncidents() {
           .from('corrective_actions')
           .select('*, incidents(incident_number, title, severity, id)')
           .or(orClause)
+          .in('status', ['open', 'in_progress'])
           .order('created_at', { ascending: false })
         if (error) throw error
         setCapas(data || [])
@@ -79,7 +82,7 @@ export default function MyIncidents() {
   }
 
   // ============================================
-  // ✅ ACTION: Change Incident Status
+  // ACTION: Change Incident Status
   // ============================================
   const handleStatusChange = async () => {
     if (!newStatus || !showStatusModal) { toast.error('Select status'); return }
@@ -115,7 +118,34 @@ export default function MyIncidents() {
   }
 
   // ============================================
-  // ✅ ACTION: Update CAPA status
+  // ✅ ACTION: Add Comment
+  // ============================================
+  const handleAddComment = async () => {
+    if (!comment.trim() || !showCommentModal) { toast.error('Enter a comment'); return }
+    setSaving(true)
+    try {
+      await supabase.from('incident_audit_log').insert([{
+        incident_id: showCommentModal.id,
+        action_type: 'comment',
+        action_description: `💬 ${comment}`,
+        performed_by: user?.id,
+        performed_by_name: profile?.full_name || user?.email,
+        performed_by_role: userRole
+      }])
+
+      toast.success('Comment added!')
+      setShowCommentModal(null)
+      setComment('')
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ============================================
+  // ✅ ACTION: Update CAPA status (auto-removes when completed)
   // ============================================
   const handleCapaStatus = async (capa, newStatus) => {
     setSaving(true)
@@ -132,16 +162,64 @@ export default function MyIncidents() {
       const { error } = await supabase.from('corrective_actions').update(updates).eq('id', capa.id)
       if (error) throw error
 
+      // Log to audit
       await supabase.from('incident_audit_log').insert([{
         incident_id: capa.incident_id,
         action_type: newStatus === 'completed' ? 'capa_completed' : 'capa_updated',
-        action_description: `CAPA "${capa.title}" marked as ${newStatus.replace(/_/g, ' ')}`,
+        action_description: newStatus === 'completed' 
+          ? `✅ CAPA COMPLETED: "${capa.title}" — returned to investigator for review`
+          : `CAPA "${capa.title}" marked as ${newStatus.replace(/_/g, ' ')}`,
         performed_by: user?.id,
         performed_by_name: profile?.full_name || user?.email,
         performed_by_role: userRole
       }])
 
-      toast.success(`Action marked as ${newStatus.replace(/_/g, ' ')}!`)
+      if (newStatus === 'completed') {
+        toast.success('✅ Action completed! It has been returned to the investigator.', { duration: 5000 })
+      } else {
+        toast.success(`Action marked as ${newStatus.replace(/_/g, ' ')}!`)
+      }
+      
+      // Reload — completed CAPAs will disappear from this list
+      loadData()
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ============================================
+  // ✅ ACTION: Add comment to CAPA
+  // ============================================
+  const handleCapaComment = async () => {
+    if (!comment.trim() || !showCommentModal?.capa) { toast.error('Enter a comment'); return }
+    setSaving(true)
+    try {
+      const capa = showCommentModal.capa
+      const newNotes = capa.completion_notes 
+        ? `${capa.completion_notes}\n\n[${new Date().toLocaleString()}] ${profile?.full_name || user?.email}: ${comment}`
+        : `[${new Date().toLocaleString()}] ${profile?.full_name || user?.email}: ${comment}`
+
+      const { error } = await supabase
+        .from('corrective_actions')
+        .update({ completion_notes: newNotes, updated_at: new Date().toISOString() })
+        .eq('id', capa.id)
+      if (error) throw error
+
+      await supabase.from('incident_audit_log').insert([{
+        incident_id: capa.incident_id,
+        action_type: 'capa_comment',
+        action_description: `💬 Comment on "${capa.title}": ${comment}`,
+        performed_by: user?.id,
+        performed_by_name: profile?.full_name || user?.email,
+        performed_by_role: userRole
+      }])
+
+      toast.success('Comment added!')
+      setShowCommentModal(null)
+      setComment('')
       loadData()
     } catch (err) {
       console.error(err)
@@ -188,7 +266,7 @@ export default function MyIncidents() {
 
   const tabs = [
     { id: 'investigating', label: 'Investigating', icon: Search },
-    { id: 'capa', label: 'My Actions', icon: Wrench },
+    { id: 'capa', label: `My Actions (${capas.length})`, icon: Wrench },
     { id: 'reported', label: 'Reported', icon: User },
   ]
 
@@ -254,9 +332,7 @@ export default function MyIncidents() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
           </div>
         ) : activeTab === 'capa' ? (
-          /* ============================================ */
-          /* MY ACTIONS (CAPA) - with working buttons       */
-          /* ============================================ */
+          /* MY ACTIONS (CAPA) */
           <div className="space-y-4">
             {filteredCapas.map(capa => (
               <motion.div 
@@ -285,6 +361,14 @@ export default function MyIncidents() {
                     </div>
                     <h3 className="font-semibold text-slate-800 dark:text-white">{capa.title}</h3>
                     {capa.description && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{capa.description}</p>}
+                    
+                    {/* Show existing comments */}
+                    {capa.completion_notes && (
+                      <div className="mt-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-700/30 border-l-2 border-blue-400">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-line">{capa.completion_notes}</p>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center gap-4 mt-2 text-xs text-slate-400 flex-wrap">
                       {capa.incidents && (
                         <span className="text-purple-600 font-medium cursor-pointer hover:underline"
@@ -293,76 +377,60 @@ export default function MyIncidents() {
                         </span>
                       )}
                       <span>📅 Due: {capa.due_date ? new Date(capa.due_date).toLocaleDateString() : 'N/A'}</span>
-                      {capa.incidents?.severity && (
-                        <span className={`px-2 py-0.5 rounded-full ${getSeverityColor(capa.incidents.severity)}`}>
-                          {capa.incidents.severity}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <Wrench className="w-5 h-5 text-orange-500 flex-shrink-0" />
                 </div>
 
-                {/* ✅ ACTION BUTTONS FOR CAPA */}
-                {capa.status !== 'completed' && capa.status !== 'cancelled' && (
-                  <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
-                    {capa.status === 'open' && (
-                      <button
-                        onClick={() => handleCapaStatus(capa, 'in_progress')}
-                        disabled={saving}
-                        className="neu-raised neu-btn px-4 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-                      >
-                        <Play className="w-4 h-4" /> Start Action
-                      </button>
-                    )}
-                    {capa.status === 'in_progress' && (
-                      <>
-                        <button
-                          onClick={() => handleCapaStatus(capa, 'completed')}
-                          disabled={saving}
-                          className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-                        >
-                          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                          Mark Complete
-                        </button>
-                        <button
-                          onClick={() => navigate(`/fieldops/incidents/${capa.incidents?.id}`)}
-                          className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm font-medium"
-                        >
-                          <Eye className="w-4 h-4" /> View Incident
-                        </button>
-                      </>
-                    )}
-                    {capa.status !== 'in_progress' && capa.incidents?.id && (
-                      <button
-                        onClick={() => navigate(`/fieldops/incidents/${capa.incidents.id}`)}
-                        className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm font-medium"
-                      >
-                        <Eye className="w-4 h-4" /> View Incident
-                      </button>
-                    )}
-                  </div>
-                )}
-                {capa.status === 'completed' && (
-                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2 text-sm text-emerald-600">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Completed on {capa.completed_date ? new Date(capa.completed_date).toLocaleDateString() : 'N/A'}</span>
-                  </div>
-                )}
+                {/* ACTION BUTTONS */}
+                <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+                  {capa.status === 'open' && (
+                    <button
+                      onClick={() => handleCapaStatus(capa, 'in_progress')}
+                      disabled={saving}
+                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      <Play className="w-4 h-4" /> Start Action
+                    </button>
+                  )}
+                  {capa.status === 'in_progress' && (
+                    <button
+                      onClick={() => handleCapaStatus(capa, 'completed')}
+                      disabled={saving}
+                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      Mark Complete
+                    </button>
+                  )}
+                  
+                  {/* ✅ Comment button */}
+                  <button
+                    onClick={() => { setShowCommentModal({ capa }); setComment('') }}
+                    className="neu-raised neu-btn px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Comment
+                  </button>
+
+                  <button
+                    onClick={() => capa.incidents?.id && navigate(`/fieldops/incidents/${capa.incidents.id}`)}
+                    className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm font-medium"
+                  >
+                    <Eye className="w-4 h-4" /> View Incident
+                  </button>
+                </div>
               </motion.div>
             ))}
             {filteredCapas.length === 0 && (
               <div className="text-center py-16 neu-raised rounded-3xl">
-                <Wrench className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 text-lg">No actions assigned to you</p>
-                <p className="text-slate-400 text-sm mt-1">CAPAs assigned to you will appear here</p>
+                <CheckCircle2 className="w-16 h-16 text-emerald-300 mx-auto mb-4" />
+                <p className="text-slate-500 text-lg">All actions completed! 🎉</p>
+                <p className="text-slate-400 text-sm mt-1">Completed actions have been returned to the investigator</p>
               </div>
             )}
           </div>
         ) : (
-          /* ============================================ */
-          /* INCIDENTS - with action buttons              */
-          /* ============================================ */
+          /* INCIDENTS */
           <div className="space-y-4">
             {filteredIncidents.map(inc => (
               <motion.div 
@@ -391,7 +459,7 @@ export default function MyIncidents() {
                   </div>
                 </div>
 
-                {/* ✅ ACTION BUTTONS FOR INCIDENT */}
+                {/* ACTION BUTTONS */}
                 <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
                   <button
                     onClick={() => navigate(`/fieldops/incidents/${inc.id}`)}
@@ -430,17 +498,16 @@ export default function MyIncidents() {
                           <Play className="w-4 h-4" /> Start Investigation
                         </button>
                       )}
-
-                      {inc.status === 'under_investigation' && (
-                        <button
-                          onClick={() => { setShowStatusModal(inc); setNewStatus('awaiting_approval') }}
-                          className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm font-medium"
-                        >
-                          <ClipboardCheck className="w-4 h-4" /> Submit Findings
-                        </button>
-                      )}
                     </>
                   )}
+
+                  {/* ✅ Comment button */}
+                  <button
+                    onClick={() => { setShowCommentModal({ incident: inc }); setComment('') }}
+                    className="neu-raised neu-btn px-4 py-2 rounded-xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2 text-sm font-medium"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Comment
+                  </button>
                 </div>
               </motion.div>
             ))}
@@ -493,6 +560,47 @@ export default function MyIncidents() {
                   className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                   Update
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* COMMENT MODAL */}
+      <AnimatePresence>
+        {showCommentModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+            onClick={() => !saving && setShowCommentModal(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
+              className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-600" /> Add Comment
+                </h3>
+                <button onClick={() => setShowCommentModal(null)} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                {showCommentModal.capa?.title || showCommentModal.incident?.incident_number}
+              </p>
+              <textarea value={comment} onChange={e => setComment(e.target.value)}
+                placeholder="Type your comment or update..." rows={5} autoFocus
+                className="w-full p-3 neu-inset rounded-xl mb-3 text-sm resize-none text-slate-700 dark:text-slate-300" />
+              <div className="flex gap-2">
+                <button onClick={() => setShowCommentModal(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">
+                  Cancel
+                </button>
+                <button 
+                  onClick={showCommentModal.capa ? handleCapaComment : handleAddComment} 
+                  disabled={saving || !comment.trim()}
+                  className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Post Comment
                 </button>
               </div>
             </motion.div>
