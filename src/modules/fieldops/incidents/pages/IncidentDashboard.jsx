@@ -68,6 +68,9 @@ export default function IncidentDashboard() {
             <button onClick={() => navigate('/fieldops/incidents/my')} className="neu-raised neu-btn px-5 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
               <UserCheck className="w-5 h-5" /><span>My Incidents</span>
             </button>
+            <button onClick={() => navigate('/fieldops/incidents/capas')} className="neu-raised neu-btn px-5 py-3 rounded-2xl bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-2">
+              <Wrench className="w-5 h-5" /><span>All CAPAs</span>
+            </button>
             <button onClick={() => navigate('/fieldops/incidents/tracker')} className="neu-raised neu-btn px-5 py-3 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2">
               <History className="w-5 h-5" /><span>Track</span>
             </button>
@@ -120,7 +123,7 @@ export default function IncidentDashboard() {
           <div className="space-y-3">
             {(stats.recentIncidents || []).map(inc => (
               <div key={inc.incident_number}
-                onClick={() => navigate(`/fieldops/incidents/list`)}
+                onClick={() => navigate('/fieldops/incidents/list')}
                 className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/30 cursor-pointer">
                 <div>
                   <p className="font-medium text-sm text-slate-800 dark:text-white">{inc.incident_number}</p>
