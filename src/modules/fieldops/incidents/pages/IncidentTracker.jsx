@@ -388,4 +388,178 @@ export default function IncidentTracker() {
             <div className="neu-raised rounded-3xl p-6">
               <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
                 <History className="w-5 h-5 text-purple-600" />Complete Audit Trail ({trackerData.auditLog.length} events)
-              </h2
+              </h2>
+              {trackerData.auditLog.length > 0 ? (
+                <div className="relative">
+                  <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-red-500 via-purple-500 to-emerald-500"></div>
+                  <div className="space-y-4">
+                    {trackerData.auditLog.map((log) => (
+                      <div key={log.id} className="relative pl-12">
+                        <div className="absolute left-3 top-2 w-5 h-5 rounded-full bg-white dark:bg-slate-800 border-2 border-purple-500 flex items-center justify-center">
+                          {getStatusIcon(log.action_type)}
+                        </div>
+                        <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-semibold text-sm capitalize text-slate-800 dark:text-white">{log.action_type?.replace(/_/g, ' ')}</span>
+                            <span className="text-xs text-slate-500">{formatDateTime(log.created_at)}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{log.action_description}</p>
+                          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+                            <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center"><User className="w-3.5 h-3.5 text-purple-600" /></div>
+                            <div><p className="text-sm font-medium text-slate-800 dark:text-white">{log.performed_by_name || 'System'}</p><p className="text-xs text-slate-500 capitalize">{log.performed_by_role?.replace(/_/g, ' ') || 'N/A'}</p></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : <p className="text-slate-500 text-center py-8">No audit records available</p>}
+            </div>
+
+            {/* CORRECTIVE ACTIONS */}
+            {trackerData.correctiveActions.length > 0 && (
+              <div className="neu-raised rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Wrench className="w-5 h-5 text-orange-600" />Actions ({trackerData.correctiveActions.length})</h2>
+                <div className="space-y-3">
+                  {trackerData.correctiveActions.map(action => (
+                    <div key={action.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className={`w-3 h-3 rounded-full ${action.status === 'completed' ? 'bg-emerald-500' : action.status === 'in_progress' ? 'bg-amber-500' : 'bg-slate-400'}`}></span>
+                        <div><p className="font-medium text-sm">{action.title}</p><p className="text-xs text-slate-500 capitalize">{action.action_type} • {action.priority} • Due: {formatDate(action.due_date)}</p></div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${action.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : action.status === 'in_progress' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{action.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* APPROVAL STATUS */}
+            <div className="neu-raised rounded-3xl p-6">
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-emerald-600" />Approval Status</h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {[
+                  { label: 'Supervisor', approved: trackerData.incident.supervisor_approved, date: trackerData.incident.supervisor_approved_at },
+                  { label: 'HSE Officer', approved: trackerData.incident.hse_approved, date: trackerData.incident.hse_approved_at },
+                  { label: 'Ops Manager', approved: trackerData.incident.ops_manager_approved, date: trackerData.incident.ops_manager_approved_at },
+                  { label: 'HR', approved: trackerData.incident.hr_approved, date: trackerData.incident.hr_approved_at },
+                  { label: 'MD', approved: trackerData.incident.md_approved, date: trackerData.incident.md_approved_at },
+                ].map(approval => (
+                  <div key={approval.label} className={`p-3 rounded-xl text-center ${approval.approved ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-slate-50 dark:bg-slate-700/30'}`}>
+                    <p className="text-xs text-slate-500 mb-1">{approval.label}</p>
+                    {approval.approved ? <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" /> : <Clock className="w-6 h-6 text-slate-400 mx-auto" />}
+                    <p className="text-xs mt-1 font-medium">{approval.approved ? 'Approved' : 'Pending'}</p>
+                    {approval.date && <p className="text-xs text-slate-400 mt-1">{formatDate(approval.date)}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* INVESTIGATION FINDINGS */}
+            {trackerData.incident.investigation_findings && (
+              <div className="neu-raised rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-3">Investigation Findings</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{trackerData.incident.investigation_findings}</p>
+                {trackerData.incident.root_causes && trackerData.incident.root_causes.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold text-slate-500 mb-2">Root Causes:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {trackerData.incident.root_causes.map((cause, i) => (
+                        <span key={i} className="px-3 py-1 rounded-full text-xs bg-red-100 text-red-700 capitalize">{cause.replace(/_/g, ' ')}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* IMMEDIATE ACTIONS */}
+            {trackerData.incident.immediate_actions && (
+              <div className="neu-raised rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-3">Immediate Actions Taken</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{trackerData.incident.immediate_actions}</p>
+              </div>
+            )}
+
+            {/* GPS LOCATION */}
+            {trackerData.incident.gps_latitude && (
+              <div className="neu-raised rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-3 flex items-center gap-2"><MapPin className="w-5 h-5 text-blue-600" />GPS Location</h2>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-slate-500">Latitude:</span> {trackerData.incident.gps_latitude}</div>
+                  <div><span className="text-slate-500">Longitude:</span> {trackerData.incident.gps_longitude}</div>
+                  <div className="col-span-2"><span className="text-slate-500">Address:</span> {trackerData.incident.site_address || trackerData.incident.location_address || 'N/A'}</div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Empty State */}
+        {!trackerData && !searching && (
+          <div className="text-center py-16 neu-raised rounded-3xl">
+            <History className="w-20 h-20 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Incident Tracker</h3>
+            <p className="text-slate-500 text-lg mb-1">Enter an incident number to view its complete audit trail</p>
+            <p className="text-slate-400 text-sm">Example: INC-2026-000001</p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400">
+              <span className="flex items-center gap-1"><User className="w-3 h-3" /> Who reported</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Search className="w-3 h-3" /> Who investigated</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Who approved</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Wrench className="w-3 h-3" /> Actions taken</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Camera className="w-3 h-3" /> Photos</span>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* FULL PHOTO VIEWER MODAL */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="max-w-4xl w-full"
+              onClick={e => e.stopPropagation()}
+            >
+              <img
+                src={selectedPhoto}
+                alt="Full size"
+                className="w-full max-h-[75vh] object-contain rounded-2xl"
+              />
+              <div className="flex justify-center gap-3 mt-4">
+                <a
+                  href={selectedPhoto}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-white text-slate-800 rounded-xl font-medium flex items-center gap-2 hover:bg-slate-100"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </a>
+                <button
+                  onClick={() => setSelectedPhoto(null)}
+                  className="px-5 py-3 bg-slate-700 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-slate-600"
+                >
+                  <X className="w-4 h-4" /> Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
