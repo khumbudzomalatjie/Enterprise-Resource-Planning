@@ -105,9 +105,27 @@ export default function IncidentDetail() {
     setSaving(true)
     try {
       const emp = employees.find(e => e.id === capaForm.assigned_to)
-      const { error } = await supabase.from('corrective_actions').insert([{ incident_id: id, title: capaForm.title, description: capaForm.description, action_type: capaForm.action_type, priority: capaForm.priority, assigned_employee_id: capaForm.assigned_to || null, assigned_to: emp?.user_id || null, due_date: capaForm.due_date, status: 'open', created_by: user?.id }])
+      const { error } = await supabase.from('corrective_actions').insert([{ 
+        incident_id: id, 
+        title: capaForm.title, 
+        description: capaForm.description, 
+        action_type: capaForm.action_type, 
+        priority: capaForm.priority, 
+        assigned_employee_id: capaForm.assigned_to || null, 
+        assigned_to: emp?.user_id || null, 
+        due_date: capaForm.due_date, 
+        status: 'open', 
+        created_by: user?.id 
+      }])
       if (error) throw error
-      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'corrective_action_created', action_description: `${capaForm.action_type} action created: "${capaForm.title}"`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
+      await supabase.from('incident_audit_log').insert([{ 
+        incident_id: id, 
+        action_type: 'corrective_action_created', 
+        action_description: `${capaForm.action_type} action created: "${capaForm.title}"`, 
+        performed_by: user?.id, 
+        performed_by_name: profile?.full_name || user?.email, 
+        performed_by_role: userRole 
+      }])
       toast.success('Action created!')
       setShowCapaModal(false)
       setCapaForm({ title: '', description: '', action_type: 'corrective', priority: 'medium', assigned_to: '', due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] })
@@ -126,13 +144,20 @@ export default function IncidentDetail() {
       refresh()
     } catch (err) { toast.error('Failed: ' + err.message) } finally { setSaving(false) }
   }
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
   if (!selectedIncident) return <div className="min-h-screen flex items-center justify-center"><p className="text-slate-500">Incident not found</p></div>
 
   const inc = selectedIncident
   const allPhotos = [...(inc.before_photos || []), ...(inc.after_photos || []), ...(inc.photos || [])]
   const isClosed = inc.status === 'closed' || inc.status === 'cancelled'
   const getRiskColor = (r) => ({ green: 'bg-green-500', yellow: 'bg-yellow-500', orange: 'bg-orange-500', red: 'bg-red-500', critical: 'bg-red-700' }[r] || 'bg-slate-400')
+
+  // CAPA stats
+  const capaList = inc.corrective_actions || []
+  const openCount = capaList.filter(a => a.status === 'open').length
+  const progressCount = capaList.filter(a => a.status === 'in_progress').length
+  const completedCount = capaList.filter(a => a.status === 'completed').length
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -209,6 +234,118 @@ export default function IncidentDetail() {
             </div>
           )}
 
+          {/* ✅ CORRECTIVE ACTIONS - Show ALL (open, in-progress, completed) */}
+          {capaList.length > 0 && (
+            <div className="neu-raised rounded-3xl p-6 mb-6 border-l-4 border-orange-500">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-orange-600" />
+                  Corrective & Preventive Actions ({capaList.length})
+                </h3>
+                <div className="flex gap-2 text-xs flex-wrap">
+                  {openCount > 0 && (
+                    <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
+                      📋 {openCount} Open
+                    </span>
+                  )}
+                  {progressCount > 0 && (
+                    <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
+                      ⏳ {progressCount} In Progress
+                    </span>
+                  )}
+                  {completedCount > 0 && (
+                    <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                      ✅ {completedCount} Completed
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {capaList.map(action => (
+                  <div 
+                    key={action.id} 
+                    className={`p-4 rounded-xl border-l-4 ${
+                      action.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-900/10 border-l-emerald-500' :
+                      action.status === 'in_progress' ? 'bg-amber-50 dark:bg-amber-900/10 border-l-amber-500' :
+                      'bg-slate-50 dark:bg-slate-700/30 border-l-blue-500'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          action.status === 'completed' ? 'bg-emerald-500' :
+                          action.status === 'in_progress' ? 'bg-amber-500' :
+                          'bg-blue-500'
+                        }`}>
+                          {action.status === 'completed' ? (
+                            <CheckCircle2 className="w-4 h-4 text-white" />
+                          ) : action.status === 'in_progress' ? (
+                            <Clock className="w-4 h-4 text-white" />
+                          ) : (
+                            <Wrench className="w-4 h-4 text-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-slate-800 dark:text-white">
+                            {action.title}
+                          </p>
+                          <p className="text-xs text-slate-500 capitalize">
+                            {action.action_type} • {action.priority} priority
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold capitalize flex-shrink-0 ${
+                        action.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                        action.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {action.status?.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+
+                    {action.description && (
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-2 ml-12">
+                        {action.description}
+                      </p>
+                    )}
+
+                    {(action.progress_percentage > 0 || action.status === 'completed') && (
+                      <div className="ml-12 mb-2">
+                        <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full">
+                          <div 
+                            className={`h-1.5 rounded-full transition-all ${
+                              action.status === 'completed' ? 'bg-emerald-500' :
+                              'bg-amber-500'
+                            }`}
+                            style={{ width: `${action.progress_percentage || (action.status === 'completed' ? 100 : 0)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {action.completion_notes && (
+                      <div className="ml-12 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 mb-2">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-line">
+                          💬 {action.completion_notes}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="ml-12 flex items-center gap-4 text-xs text-slate-400 flex-wrap">
+                      <span>📅 Due: {action.due_date ? new Date(action.due_date).toLocaleDateString() : 'N/A'}</span>
+                      {action.completed_date && (
+                        <span className="text-emerald-600 font-medium">
+                          ✅ Completed: {new Date(action.completed_date).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-600" />Incident Info</h3>
@@ -258,7 +395,8 @@ export default function IncidentDetail() {
           </div>
         </motion.div>
       </main>
-            <AnimatePresence>
+
+      <AnimatePresence>
         {selectedPhoto && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="max-w-4xl w-full" onClick={e => e.stopPropagation()}>
@@ -322,54 +460,4 @@ export default function IncidentDetail() {
       <AnimatePresence>
         {showCapaModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowCapaModal(false)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Add Action (CAPA)</h3>
-              <div className="space-y-3">
-                <input type="text" placeholder="Action title *" value={capaForm.title} onChange={e => setCapaForm({ ...capaForm, title: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
-                <textarea placeholder="Description" value={capaForm.description} onChange={e => setCapaForm({ ...capaForm, description: e.target.value })} rows={3} className="w-full p-3 neu-inset rounded-xl text-sm resize-none text-slate-700 dark:text-slate-300" />
-                <select value={capaForm.action_type} onChange={e => setCapaForm({ ...capaForm, action_type: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
-                  <option value="corrective">Corrective</option>
-                  <option value="preventive">Preventive</option>
-                </select>
-                <select value={capaForm.priority} onChange={e => setCapaForm({ ...capaForm, priority: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="critical">Critical Priority</option>
-                </select>
-                <select value={capaForm.assigned_to} onChange={e => setCapaForm({ ...capaForm, assigned_to: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
-                  <option value="">Assign To (optional)</option>
-                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
-                </select>
-                <input type="date" value={capaForm.due_date} onChange={e => setCapaForm({ ...capaForm, due_date: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setShowCapaModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
-                <button onClick={handleCreateCapa} disabled={saving} className="flex-1 py-3 rounded-xl bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />} Create
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showApprovalModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowApprovalModal(null)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white capitalize">{showApprovalModal} Approval</h3>
-              <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Comments..." rows={3} className="w-full p-3 neu-inset rounded-xl mb-4 text-sm resize-none text-slate-700 dark:text-slate-300" />
-              <div className="flex gap-2">
-                <button onClick={() => handleApproval(showApprovalModal, false)} disabled={saving} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50">Reject</button>
-                <button onClick={() => handleApproval(showApprovalModal, true)} disabled={saving} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
+           
