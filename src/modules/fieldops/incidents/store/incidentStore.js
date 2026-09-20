@@ -23,7 +23,12 @@ const useIncidentStore = create((set, get) => ({
     set({ loading: true, error: null })
     const { data, error } = await incidentApi.getIncident(id)
     if (error) { set({ error: error.message, loading: false }); return { success: false } }
-    set({ selectedIncident: data, correctiveActions: data?.corrective_actions || [], auditLog: data?.incident_audit_log || [], loading: false })
+    set({ 
+      selectedIncident: data, 
+      correctiveActions: data?.corrective_actions || [], 
+      auditLog: data?.incident_audit_log || [], 
+      loading: false 
+    })
     return { success: true, data }
   },
 
@@ -40,51 +45,57 @@ const useIncidentStore = create((set, get) => ({
     set({ loading: true, error: null })
     const { data, error } = await incidentApi.updateIncident(id, updates)
     if (error) { set({ error: error.message, loading: false }); return { success: false, error: error.message } }
-    set(state => ({ incidents: state.incidents.map(i => i.id === id ? data : i), selectedIncident: state.selectedIncident?.id === id ? data : state.selectedIncident, loading: false }))
+    set(state => ({ 
+      incidents: state.incidents.map(i => i.id === id ? data : i), 
+      selectedIncident: state.selectedIncident?.id === id ? data : state.selectedIncident, 
+      loading: false 
+    }))
     return { success: true, data }
   },
 
   updateStatus: async (id, status) => {
     const { data, error } = await incidentApi.updateStatus(id, status)
     if (error) return { success: false, error: error.message }
-    set(state => ({ incidents: state.incidents.map(i => i.id === id ? data : i), selectedIncident: state.selectedIncident?.id === id ? data : state.selectedIncident }))
+    set(state => ({ 
+      incidents: state.incidents.map(i => i.id === id ? data : i), 
+      selectedIncident: state.selectedIncident?.id === id ? data : state.selectedIncident 
+    }))
     toast.success(`Status: ${status.replace(/_/g, ' ')}`)
     return { success: true, data }
   },
 
-  // Auto-progression actions
   acknowledgeIncident: async (id) => {
     const result = await incidentApi.acknowledgeIncident(id)
     if (result.success) { toast.success('Incident acknowledged!'); get().fetchIncident(id) }
-    else toast.error(result.error || 'Failed')
+    else toast.error(result.error?.message || 'Failed')
     return result
   },
 
   startInvestigation: async (id) => {
     const result = await incidentApi.startInvestigation(id)
     if (result.success) { toast.success('Investigation started!'); get().fetchIncident(id) }
-    else toast.error(result.error || 'Failed')
+    else toast.error(result.error?.message || 'Failed')
     return result
   },
 
   submitForApproval: async (id) => {
     const result = await incidentApi.submitForApproval(id)
     if (result.success) { toast.success('Submitted for approval!'); get().fetchIncident(id) }
-    else toast.error(result.error || 'Failed')
+    else toast.error(result.error?.message || 'Failed')
     return result
   },
 
   approveIncident: async (id) => {
     const result = await incidentApi.approveIncident(id)
     if (result.success) { toast.success('Incident approved!'); get().fetchIncident(id) }
-    else toast.error(result.error || 'Failed')
+    else toast.error(result.error?.message || 'Failed')
     return result
   },
 
   closeIncident: async (id) => {
     const result = await incidentApi.closeIncident(id)
     if (result.success) { toast.success('Incident closed!'); get().fetchIncident(id) }
-    else toast.error(result.error || 'Failed')
+    else toast.error(result.error?.message || 'Failed')
     return result
   },
 
@@ -94,7 +105,6 @@ const useIncidentStore = create((set, get) => ({
     return result
   },
 
-  // Approvals
   approveByRole: async (id, role) => {
     const result = await incidentApi.approveByRole(id, role)
     if (!result.error) { toast.success(`${role.replace(/_/g, ' ')} approved!`); get().fetchIncident(id) }
