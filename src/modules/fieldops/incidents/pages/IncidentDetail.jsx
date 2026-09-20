@@ -34,10 +34,7 @@ export default function IncidentDetail() {
   const isHSE = ['super_admin', 'hr_manager'].includes(userRole)
 
   useEffect(() => {
-    if (id) {
-      fetchIncident(id)
-      loadEmployees()
-    }
+    if (id) { fetchIncident(id); loadEmployees() }
   }, [id])
 
   const loadEmployees = async () => {
@@ -53,10 +50,9 @@ export default function IncidentDetail() {
     try {
       const updates = { status: newStatus, updated_at: new Date().toISOString() }
       if (newStatus === 'closed') updates.closed_at = new Date().toISOString()
-      if (newStatus === 'under_investigation') updates.investigation_started_at = new Date().toISOString()
       const { error } = await supabase.from('incidents').update(updates).eq('id', id)
       if (error) throw error
-      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'status_change', action_description: `Status changed to "${newStatus.replace(/_/g, ' ')}"${comment ? ': ' + comment : ''}`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
+      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'status_change', action_description: `Status changed to "${newStatus.replace(/_/g, ' ')}"`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
       toast.success('Status updated!')
       setShowStatusModal(false); setComment(''); setNewStatus('')
       refresh()
@@ -97,7 +93,7 @@ export default function IncidentDetail() {
       if (approve) updates.status = 'awaiting_approval'
       const { error } = await supabase.from('incidents').update(updates).eq('id', id)
       if (error) throw error
-      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: approve ? 'approved' : 'rejected', action_description: `${approvalType.toUpperCase()} ${approve ? 'approved' : 'rejected'}${comment ? ': ' + comment : ''}`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
+      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: approve ? 'approved' : 'rejected', action_description: `${approvalType.toUpperCase()} ${approve ? 'approved' : 'rejected'}`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
       toast.success(`${approvalType.toUpperCase()} ${approve ? 'approved' : 'rejected'}!`)
       setShowApprovalModal(null); setComment('')
       refresh()
@@ -123,15 +119,14 @@ export default function IncidentDetail() {
     if (!window.confirm('Mark this incident as CLOSED?')) return
     setSaving(true)
     try {
-      const { error } = await supabase.from('incidents').update({ status: 'closed', closed_at: new Date().toISOString(), resolution: 'Incident resolved and closed', updated_at: new Date().toISOString() }).eq('id', id)
+      const { error } = await supabase.from('incidents').update({ status: 'closed', closed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id)
       if (error) throw error
       await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'closed', action_description: 'Incident closed', performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
       toast.success('Incident closed!')
       refresh()
     } catch (err) { toast.error('Failed: ' + err.message) } finally { setSaving(false) }
   }
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
   if (!selectedIncident) return <div className="min-h-screen flex items-center justify-center"><p className="text-slate-500">Incident not found</p></div>
 
   const inc = selectedIncident
@@ -172,7 +167,7 @@ export default function IncidentDetail() {
             </div>
           </div>
 
-          {!isClosed ? (
+          {!isClosed && (
             <div className="neu-raised rounded-3xl p-5 mb-6">
               <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Available Actions</h3>
               <div className="flex flex-wrap gap-2">
@@ -187,7 +182,9 @@ export default function IncidentDetail() {
                 <button onClick={() => navigate('/fieldops/incidents/tracker')} className="neu-raised neu-btn px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 text-sm font-medium"><Search className="w-4 h-4" /> Track Audit</button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {isClosed && (
             <div className="neu-raised rounded-3xl p-5 mb-6 bg-emerald-50 dark:bg-emerald-900/10 border-l-4 border-emerald-500">
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="w-6 h-6 text-emerald-600" />
@@ -258,27 +255,10 @@ export default function IncidentDetail() {
                 <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">{inc.immediate_actions}</p>
               </div>
             )}
-            {inc.corrective_actions && inc.corrective_actions.length > 0 && (
-              <div className="neu-raised rounded-3xl p-6 md:col-span-2">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Wrench className="w-5 h-5 text-orange-600" />Corrective Actions ({inc.corrective_actions.length})</h3>
-                <div className="space-y-3">
-                  {inc.corrective_actions.map(action => (
-                    <div key={action.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-3 h-3 rounded-full ${action.status === 'completed' ? 'bg-emerald-500' : action.status === 'in_progress' ? 'bg-amber-500' : 'bg-slate-400'}`}></span>
-                        <div><p className="font-medium text-sm">{action.title}</p><p className="text-xs text-slate-500 capitalize">{action.action_type} • {action.priority}</p></div>
-                      </div>
-                      <span className="text-xs">{action.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </motion.div>
       </main>
-
-      <AnimatePresence>
+            <AnimatePresence>
         {selectedPhoto && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="max-w-4xl w-full" onClick={e => e.stopPropagation()}>
@@ -361,10 +341,7 @@ export default function IncidentDetail() {
                   <option value="">Assign To (optional)</option>
                   {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
                 </select>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Due Date *</label>
-                  <input type="date" value={capaForm.due_date} onChange={e => setCapaForm({ ...capaForm, due_date: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
-                </div>
+                <input type="date" value={capaForm.due_date} onChange={e => setCapaForm({ ...capaForm, due_date: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
               </div>
               <div className="flex gap-2 mt-4">
                 <button onClick={() => setShowCapaModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
@@ -382,3 +359,17 @@ export default function IncidentDetail() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowApprovalModal(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white capitalize">{showApprovalModal} Approval</h3>
+              <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Comments..." rows={3} className="w-full p-3 neu-inset rounded-xl mb-4 text-sm resize-none text-slate-700 dark:text-slate-300" />
+              <div className="flex gap-2">
+                <button onClick={() => handleApproval(showApprovalModal, false)} disabled={saving} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50">Reject</button>
+                <button onClick={() => handleApproval(showApprovalModal, true)} disabled={saving} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
