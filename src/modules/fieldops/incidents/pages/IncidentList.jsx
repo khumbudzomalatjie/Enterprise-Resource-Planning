@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import Navbar from '../../../../components/Navbar'
 import useIncidentStore from '../store/incidentStore'
 import useThemeStore from '../../../../store/themeStore'
-import { Search, AlertTriangle, ChevronRight, Sun, Moon, Sparkles, Eye, Camera } from 'lucide-react'
+import { Search, AlertTriangle, ChevronRight, Sun, Moon, Sparkles, Eye, Camera, UserCheck } from 'lucide-react'
 
 export default function IncidentList() {
   const { incidents, fetchIncidents, loading } = useIncidentStore()
@@ -49,24 +49,8 @@ export default function IncidentList() {
     return 'bg-blue-100 text-blue-700'
   }
 
-  // ✅ Count all photos attached to an incident
-  const countPhotos = (inc) => {
-    return (
-      (inc.before_photos?.length || 0) +
-      (inc.after_photos?.length || 0) +
-      (inc.photos?.length || 0)
-    )
-  }
-
-  // ✅ Get first photo for thumbnail
-  const getFirstPhoto = (inc) => {
-    return (
-      inc.before_photos?.[0] ||
-      inc.after_photos?.[0] ||
-      inc.photos?.[0] ||
-      null
-    )
-  }
+  const countPhotos = (inc) => (inc.before_photos?.length || 0) + (inc.after_photos?.length || 0) + (inc.photos?.length || 0)
+  const getFirstPhoto = (inc) => inc.before_photos?.[0] || inc.after_photos?.[0] || inc.photos?.[0] || null
 
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
@@ -95,26 +79,30 @@ export default function IncidentList() {
             </h1>
             <p className="text-slate-500 mt-1">{incidents.length} incidents found</p>
           </div>
-          <button onClick={() => navigate('/fieldops/incidents/report')} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" /><span>Report New</span>
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => navigate('/fieldops/incidents/my')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
+              <UserCheck className="w-5 h-5" /><span>My Incidents</span>
+            </button>
+            <button onClick={() => navigate('/fieldops/incidents/report')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" /><span>Report New</span>
+            </button>
+          </div>
         </motion.div>
 
-        {/* Filters */}
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by number, title, or description..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
             </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
               <option value="all">All Status</option>
               <option value="reported">Reported</option>
               <option value="under_investigation">Under Investigation</option>
               <option value="awaiting_approval">Awaiting Approval</option>
               <option value="closed">Closed</option>
             </select>
-            <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl">
+            <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
               <option value="all">All Severity</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -125,9 +113,10 @@ export default function IncidentList() {
           </form>
         </div>
 
-        {/* Incidents List */}
         {loading ? (
-          <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          </div>
         ) : (
           <div className="space-y-4">
             {incidents.map(inc => {
@@ -141,11 +130,10 @@ export default function IncidentList() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1 min-w-0">
                       <span className={`w-3 h-3 rounded-full mt-2 flex-shrink-0 ${getRiskColor(inc.risk_level)}`}></span>
-                      
-                      {/* ✅ Photo thumbnail */}
+
                       {firstPhoto && (
                         <div className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 border-indigo-200 dark:border-indigo-800">
-                          <img src={firstPhoto} alt="Incident photo" className="w-full h-full object-cover" />
+                          <img src={firstPhoto} alt="Incident" className="w-full h-full object-cover" />
                         </div>
                       )}
 
@@ -155,12 +143,14 @@ export default function IncidentList() {
                           <span className={`px-2 py-0.5 rounded-full text-xs ${getSeverityColor(inc.severity)}`}>{inc.severity}</span>
                           <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(inc.status)}`}>{inc.status?.replace(/_/g, ' ')}</span>
                           {inc.incident_category && <span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600 capitalize">{inc.incident_category.replace(/_/g, ' ')}</span>}
-                          
-                          {/* ✅ Photo count badge */}
                           {photoCount > 0 && (
                             <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-100 text-indigo-700 flex items-center gap-1 font-semibold">
-                              <Camera className="w-3 h-3" />
-                              {photoCount}
+                              <Camera className="w-3 h-3" /> {photoCount}
+                            </span>
+                          )}
+                          {inc.investigator_id && (
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700 flex items-center gap-1">
+                              <UserCheck className="w-3 h-3" /> Assigned
                             </span>
                           )}
                         </div>
