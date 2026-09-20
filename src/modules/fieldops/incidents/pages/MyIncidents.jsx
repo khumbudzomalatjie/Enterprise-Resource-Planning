@@ -8,7 +8,7 @@ import { supabase } from '../../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   Search, AlertTriangle, ChevronRight, Sun, Moon, Sparkles, 
-  Eye, Camera, User, Clock, CheckCircle2, UserCheck, Wrench
+  Eye, User, CheckCircle2, UserCheck, Wrench
 } from 'lucide-react'
 
 export default function MyIncidents() {
@@ -28,7 +28,6 @@ export default function MyIncidents() {
     if (!user?.id) return
     setLoading(true)
     try {
-      // Get employee record
       const { data: emp } = await supabase
         .from('employees')
         .select('id')
@@ -36,33 +35,30 @@ export default function MyIncidents() {
         .maybeSingle()
 
       if (activeTab === 'investigating') {
-        // Incidents where I am the investigator
         const { data, error } = await supabase
           .from('incidents')
           .select('*')
           .eq('investigator_id', user.id)
           .order('created_at', { ascending: false })
-        
         if (error) throw error
         setIncidents(data || [])
       } else if (activeTab === 'reported') {
-        // Incidents I reported
         const { data, error } = await supabase
           .from('incidents')
           .select('*')
           .eq('reported_by', user.id)
           .order('created_at', { ascending: false })
-        
         if (error) throw error
         setIncidents(data || [])
       } else if (activeTab === 'capa') {
-        // CAPAs assigned to me
+        let orClause = `assigned_to.eq.${user.id}`
+        if (emp?.id) orClause += `,assigned_employee_id.eq.${emp.id}`
+        
         const { data, error } = await supabase
           .from('corrective_actions')
           .select('*, incidents(incident_number, title, severity)')
-          .or(`assigned_to.eq.${user.id}${emp?.id ? `,assigned_employee_id.eq.${emp.id}` : ''}`)
+          .or(orClause)
           .order('created_at', { ascending: false })
-        
         if (error) throw error
         setCapas(data || [])
       }
@@ -110,9 +106,9 @@ export default function MyIncidents() {
   })
 
   const tabs = [
-    { id: 'investigating', label: 'Investigating', icon: Search, count: activeTab === 'investigating' ? incidents.length : null },
-    { id: 'capa', label: 'My Actions', icon: Wrench, count: activeTab === 'capa' ? capas.length : null },
-    { id: 'reported', label: 'Reported', icon: User, count: activeTab === 'reported' ? incidents.length : null },
+    { id: 'investigating', label: 'Investigating', icon: Search },
+    { id: 'capa', label: 'My Actions', icon: Wrench },
+    { id: 'reported', label: 'Reported', icon: User },
   ]
 
   return (
@@ -142,7 +138,6 @@ export default function MyIncidents() {
           <p className="text-slate-500 mt-1">Incidents assigned to you, actions you need to take</p>
         </motion.div>
 
-        {/* Tabs */}
         <div className="neu-raised rounded-2xl p-2 mb-6 flex gap-2 flex-wrap">
           {tabs.map(tab => (
             <button
@@ -160,7 +155,6 @@ export default function MyIncidents() {
           ))}
         </div>
 
-        {/* Search */}
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -174,7 +168,6 @@ export default function MyIncidents() {
           </div>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
@@ -206,9 +199,7 @@ export default function MyIncidents() {
                     {capa.description && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{capa.description}</p>}
                     <div className="flex items-center gap-4 mt-2 text-xs text-slate-400 flex-wrap">
                       {capa.incidents && (
-                        <span className="text-purple-600 font-medium">
-                          🔗 {capa.incidents.incident_number}
-                        </span>
+                        <span className="text-purple-600 font-medium">🔗 {capa.incidents.incident_number}</span>
                       )}
                       <span>📅 Due: {capa.due_date ? new Date(capa.due_date).toLocaleDateString() : 'N/A'}</span>
                       {capa.incidents?.severity && (
@@ -266,7 +257,7 @@ export default function MyIncidents() {
               <div className="text-center py-16 neu-raised rounded-3xl">
                 <AlertTriangle className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 text-lg">
-                  {activeTab === 'investigating' ? 'No incidents assigned to you' : 'You haven\'t reported any incidents'}
+                  {activeTab === 'investigating' ? 'No incidents assigned to you' : 'You have not reported any incidents'}
                 </p>
               </div>
             )}
