@@ -8,17 +8,16 @@ import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
-  Radio, Search, Users, UserPlus, UserX, MapPin, 
+  Radio, Search, Users, UserPlus, MapPin, 
   Clock, Play, CheckCircle2, XCircle, ChevronRight,
   Sun, Moon, Sparkles, Building2, Calendar, Eye, 
-  Wifi, WifiOff, RefreshCw, Camera, Download, X,
-  Image as ImageIcon
+  Wifi, WifiOff, RefreshCw, Camera, Download, X
 } from 'lucide-react'
 
 export default function LiveJobs() {
   const { 
     liveJobs, myAssignedJobs, fetchLiveJobs, fetchMyAssignedJobs,
-    assignEmployee, releaseEmployee, updateJobStatus, loading 
+    assignEmployee, releaseEmployee, updateJobStatus
   } = useFieldOpsStore()
   const { user, profile } = useAuthStore()
   const { isDark, toggleTheme } = useThemeStore()
@@ -32,7 +31,6 @@ export default function LiveJobs() {
   const [showJobDetail, setShowJobDetail] = useState(null)
   const [showPhotoGallery, setShowPhotoGallery] = useState(null)
   const [jobPhotos, setJobPhotos] = useState({})
-  const [loadingPhotos, setLoadingPhotos] = useState({})
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [availableEmployees, setAvailableEmployees] = useState([])
   const [selectedEmployee, setSelectedEmployee] = useState('')
@@ -95,14 +93,12 @@ export default function LiveJobs() {
     }
   }
 
-  // ✅ Load photos for a job
   const loadJobPhotos = async (jobId, force = false) => {
     if (!force && jobPhotos[jobId]) return
-    setLoadingPhotos(prev => ({ ...prev, [jobId]: true }))
     try {
       const { data, error } = await supabase
         .from('job_photos')
-        .select('*, employees(first_name, last_name, employee_code)')
+        .select('*')
         .eq('job_id', jobId)
         .order('taken_at', { ascending: false })
 
@@ -111,12 +107,9 @@ export default function LiveJobs() {
     } catch (err) {
       console.error('Load photos error:', err)
       setJobPhotos(prev => ({ ...prev, [jobId]: [] }))
-    } finally {
-      setLoadingPhotos(prev => ({ ...prev, [jobId]: false }))
     }
   }
 
-  // Auto-load photos for first 10 jobs
   useEffect(() => {
     if (liveJobs && liveJobs.length > 0) {
       liveJobs.slice(0, 10).forEach(job => {
@@ -181,7 +174,7 @@ export default function LiveJobs() {
   }
 
   const handleRelease = async (assignmentId, employeeName, jobNumber) => {
-    if (!window.confirm(`Are you sure you want to release ${employeeName} from ${jobNumber}?`)) return
+    if (!window.confirm(`Release ${employeeName} from ${jobNumber}?`)) return
     const result = await releaseEmployee(assignmentId, 'Manually released from Live Jobs')
     if (result.success) {
       toast.success(`${employeeName} released from ${jobNumber}`)
@@ -280,7 +273,6 @@ export default function LiveJobs() {
             </h1>
             <p className="text-slate-500 mt-1">
               {jobs.length} total • {myJobCount} my jobs • {inProgressCount} in progress
-              {!dataLoaded && <span className="ml-2 text-amber-500">(Loading...)</span>}
             </p>
           </div>
           <div className="flex gap-2">
@@ -337,9 +329,6 @@ export default function LiveJobs() {
           <div className="text-center py-12 neu-raised rounded-3xl">
             <Radio className="w-16 h-16 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 text-lg">No live jobs found</p>
-            <button onClick={() => { setFilterView('all'); setSearch('') }} className="mt-4 neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm">
-              Reset Filters
-            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -355,7 +344,7 @@ export default function LiveJobs() {
                   
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3 flex-1">
-                      <span className="text-xl mt-1" title={job.priority}>{getPriorityIcon(job.priority)}</span>
+                      <span className="text-xl mt-1">{getPriorityIcon(job.priority)}</span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-800 dark:text-white text-lg">{job.job_number}</span>
@@ -392,7 +381,6 @@ export default function LiveJobs() {
                         <UserPlus className="w-4 h-4" />
                       </button>
                       
-                      {/* Photo button */}
                       <button 
                         onClick={() => { loadJobPhotos(job.id, true); setShowPhotoGallery(job) }}
                         className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 relative"
@@ -411,38 +399,33 @@ export default function LiveJobs() {
                     </div>
                   </div>
 
-                  {/* Assigned Staff */}
                   <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
                         <Users className="w-4 h-4" />
                         Staff ({activeAssignments.length}/{job.cleaners_required || 1})
                       </h4>
-                      {activeAssignments.length >= (job.cleaners_required || 1) && (
-                        <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Fully Staffed</span>
-                      )}
                     </div>
                     
                     {activeAssignments.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {activeAssignments.map(a => (
-                          <div key={a.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${a.employees?.user_id === user?.id ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
+                          <div key={a.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                             <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-xs font-bold">
                               {a.employees?.first_name?.[0] || '?'}{a.employees?.last_name?.[0] || '?'}
                             </div>
                             <span className="font-medium">{a.employees?.first_name || 'Unknown'} {a.employees?.last_name || ''}</span>
-                            <span className="text-xs opacity-75">({a.assignment_status})</span>
                             <button 
-                              onClick={() => handleRelease(a.id, `${a.employees?.first_name || 'Unknown'} ${a.employees?.last_name || ''}`, job.job_number)}
-                              className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                              title="Release Employee">
+                              onClick={() => handleRelease(a.id, `${a.employees?.first_name || ''} ${a.employees?.last_name || ''}`, job.job_number)}
+                              className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                              title="Release">
                               <XCircle className="w-4 h-4" />
                             </button>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-slate-400 italic">No staff assigned - Click the blue <UserPlus className="w-3 h-3 inline" /> button to assign</p>
+                      <p className="text-sm text-slate-400 italic">No staff assigned</p>
                     )}
                   </div>
 
@@ -450,10 +433,7 @@ export default function LiveJobs() {
                   {photos.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4" />
-                          Photos ({photos.length})
-                        </h4>
+                        <h4 className="text-sm font-semibold text-slate-500">📷 Photos ({photos.length})</h4>
                         <button onClick={() => setShowPhotoGallery(job)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
                           View All →
                         </button>
@@ -484,19 +464,6 @@ export default function LiveJobs() {
                       </div>
                     </div>
                   )}
-
-                  <AnimatePresence>
-                    {showJobDetail === job.id && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                          <div><p className="text-xs text-slate-500">Cleaners</p><p className="font-medium">{job.cleaners_required}</p></div>
-                          <div><p className="text-xs text-slate-500">Duration</p><p className="font-medium">{job.estimated_duration_minutes || 'N/A'} min</p></div>
-                          <div><p className="text-xs text-slate-500">Amount</p><p className="font-medium text-emerald-600">{new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(job.quoted_amount || 0)}</p></div>
-                          <div><p className="text-xs text-slate-500">Contact</p><p className="font-medium">{job.site_contact_name || 'N/A'}</p></div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </motion.div>
               )
             })}
@@ -510,7 +477,7 @@ export default function LiveJobs() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowAssignModal(false); setSelectedEmployee('') }}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Assign Staff</h3>
-              <p className="text-sm text-slate-500 mb-4">Job: <span className="font-medium">{selectedJob.job_number}</span> - {selectedJob.title}</p>
+              <p className="text-sm text-slate-500 mb-4">Job: {selectedJob.job_number} - {selectedJob.title}</p>
               
               <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-slate-700 dark:text-slate-300">
                 <option value="">Select Employee to Assign</option>
@@ -566,9 +533,6 @@ export default function LiveJobs() {
                           {photo.photo_type}
                         </span>
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                          <p className="text-white text-[10px] font-medium truncate">
-                            {photo.employees?.first_name} {photo.employees?.last_name}
-                          </p>
                           <p className="text-white/60 text-[9px]">{formatDate(photo.taken_at)}</p>
                         </div>
                       </div>
@@ -589,8 +553,51 @@ export default function LiveJobs() {
       {/* Full Photo Viewer */}
       <AnimatePresence>
         {selectedPhoto && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4"
-            onClick={() => setSelectedPhoto(null)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              className="max-w-4xl w-full" onClick={e => e
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9 }} 
+              animate={{ scale: 1 }} 
+              exit={{ scale: 0.9 }}
+              className="max-w-4xl w-full" 
+              onClick={e => e.stopPropagation()}
+            >
+              <img 
+                src={selectedPhoto.photo_url} 
+                alt="Full size" 
+                className="w-full max-h-[75vh] object-contain rounded-2xl"
+              />
+              <div className="flex justify-center gap-3 mt-4">
+                <a 
+                  href={selectedPhoto.photo_url} 
+                  download 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-white text-slate-800 rounded-xl font-medium flex items-center gap-2 hover:bg-slate-100"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </a>
+                <button 
+                  onClick={() => setSelectedPhoto(null)}
+                  className="px-5 py-3 bg-slate-700 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-slate-600"
+                >
+                  <X className="w-4 h-4" /> Close
+                </button>
+              </div>
+              <div className="mt-3 text-center text-white/70 text-sm">
+                <p>Type: <span className="capitalize font-medium text-white">{selectedPhoto.photo_type}</span></p>
+                {selectedPhoto.caption && <p className="mt-1">{selectedPhoto.caption}</p>}
+                <p className="text-xs mt-1">{formatDate(selectedPhoto.taken_at)}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
