@@ -7,7 +7,7 @@ import useThemeStore from '../../../../store/themeStore'
 import useAuthStore from '../../../../store/authStore'
 import { supabase } from '../../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
-import { ChevronRight, Sun, Moon, Shield, Clock, MapPin, User, AlertTriangle, Camera, X, Image as ImageIcon, CheckCircle2, UserPlus, Wrench, Briefcase, Loader2, Search, Activity, Download } from 'lucide-react'
+import { ChevronRight, Sun, Moon, Shield, Clock, MapPin, User, AlertTriangle, Camera, X, CheckCircle2, UserPlus, Wrench, Briefcase, Loader2, Search, Activity, Download } from 'lucide-react'
 
 export default function IncidentDetail() {
   const { id } = useParams()
@@ -15,6 +15,7 @@ export default function IncidentDetail() {
   const { isDark, toggleTheme } = useThemeStore()
   const { user, profile } = useAuthStore()
   const navigate = useNavigate()
+
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showCapaModal, setShowCapaModal] = useState(false)
@@ -25,14 +26,19 @@ export default function IncidentDetail() {
   const [newStatus, setNewStatus] = useState('')
   const [comment, setComment] = useState('')
   const [investigatorId, setInvestigatorId] = useState('')
-  const [capaForm, setCapaForm] = useState({ title: '', description: '', action_type: 'corrective', priority: 'medium', assigned_to: '', due_date: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0] })
+  const [capaForm, setCapaForm] = useState({ title: '', description: '', action_type: 'corrective', priority: 'medium', assigned_to: '', due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] })
 
   const userRole = profile?.role
   const isSuperAdmin = userRole === 'super_admin'
   const isManager = ['super_admin', 'operations_manager', 'hr_manager'].includes(userRole)
   const isHSE = ['super_admin', 'hr_manager'].includes(userRole)
 
-  useEffect(() => { if (id) { fetchIncident(id); loadEmployees() } }, [id])
+  useEffect(() => {
+    if (id) {
+      fetchIncident(id)
+      loadEmployees()
+    }
+  }, [id])
 
   const loadEmployees = async () => {
     const { data } = await supabase.from('employees').select('id, first_name, last_name, employee_code, user_id').eq('employment_status', 'active').order('first_name')
@@ -50,7 +56,7 @@ export default function IncidentDetail() {
       if (newStatus === 'under_investigation') updates.investigation_started_at = new Date().toISOString()
       const { error } = await supabase.from('incidents').update(updates).eq('id', id)
       if (error) throw error
-      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'status_change', action_description: `Status changed to "${newStatus.replace(/_/g,' ')}"${comment ? ': ' + comment : ''}`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
+      await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'status_change', action_description: `Status changed to "${newStatus.replace(/_/g, ' ')}"${comment ? ': ' + comment : ''}`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
       toast.success('Status updated!')
       setShowStatusModal(false); setComment(''); setNewStatus('')
       refresh()
@@ -108,7 +114,7 @@ export default function IncidentDetail() {
       await supabase.from('incident_audit_log').insert([{ incident_id: id, action_type: 'corrective_action_created', action_description: `${capaForm.action_type} action created: "${capaForm.title}"`, performed_by: user?.id, performed_by_name: profile?.full_name || user?.email, performed_by_role: userRole }])
       toast.success('Action created!')
       setShowCapaModal(false)
-      setCapaForm({ title: '', description: '', action_type: 'corrective', priority: 'medium', assigned_to: '', due_date: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0] })
+      setCapaForm({ title: '', description: '', action_type: 'corrective', priority: 'medium', assigned_to: '', due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] })
       refresh()
     } catch (err) { toast.error('Failed: ' + err.message) } finally { setSaving(false) }
   }
@@ -211,7 +217,7 @@ export default function IncidentDetail() {
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-600" />Incident Info</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-slate-500">Category:</span><span className="capitalize">{inc.incident_category?.replace(/_/g, ' ')}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Date:</span><span>{new Date(inc.incident_date).toLocaleDateString()} at {inc.incident_time?.slice(0,5)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Date:</span><span>{new Date(inc.incident_date).toLocaleDateString()} at {inc.incident_time?.slice(0, 5)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Risk Score:</span><span className="font-bold">{inc.risk_score} ({inc.risk_level})</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Reported By:</span><span>{inc.employee_name || 'N/A'}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Department:</span><span>{inc.department || 'N/A'}</span></div>
@@ -272,7 +278,6 @@ export default function IncidentDetail() {
         </motion.div>
       </main>
 
-      {/* PHOTO VIEWER */}
       <AnimatePresence>
         {selectedPhoto && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
@@ -286,35 +291,94 @@ export default function IncidentDetail() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  )
-}
-      {/* APPROVAL MODAL */}
+
       <AnimatePresence>
-        {showApprovalModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-            onClick={() => !saving && setShowApprovalModal(null)}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-              className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full"
-              onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white capitalize">
-                {showApprovalModal} Approval
-              </h3>
-              <textarea value={comment} onChange={e => setComment(e.target.value)}
-                placeholder="Add your comments..." rows={3}
-                className="w-full p-3 neu-inset rounded-xl mb-4 text-sm resize-none text-slate-700 dark:text-slate-300" />
+        {showStatusModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowStatusModal(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Change Status</h3>
+              <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-3 text-sm text-slate-700 dark:text-slate-300">
+                <option value="reported">Reported</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="assigned">Assigned</option>
+                <option value="under_review">Under Review</option>
+                <option value="under_investigation">Under Investigation</option>
+                <option value="corrective_in_progress">Corrective In Progress</option>
+                <option value="awaiting_approval">Awaiting Approval</option>
+                <option value="approved">Approved</option>
+              </select>
+              <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Comment..." rows={3} className="w-full p-3 neu-inset rounded-xl mb-3 text-sm resize-none text-slate-700 dark:text-slate-300" />
               <div className="flex gap-2">
-                <button onClick={() => handleApproval(showApprovalModal, false)} disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  <X className="w-4 h-4" /> Reject
-                </button>
-                <button onClick={() => handleApproval(showApprovalModal, true)} disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
+                <button onClick={() => setShowStatusModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
+                <button onClick={handleStatusChange} disabled={saving} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Update
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {showAssignModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowAssignModal(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Assign Investigator</h3>
+              <select value={investigatorId} onChange={e => setInvestigatorId(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-sm text-slate-700 dark:text-slate-300">
+                <option value="">Select Investigator</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAssignModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
+                <button onClick={handleAssignInvestigator} disabled={saving} className="flex-1 py-3 rounded-xl bg-purple-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />} Assign
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCapaModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowCapaModal(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">Add Action (CAPA)</h3>
+              <div className="space-y-3">
+                <input type="text" placeholder="Action title *" value={capaForm.title} onChange={e => setCapaForm({ ...capaForm, title: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
+                <textarea placeholder="Description" value={capaForm.description} onChange={e => setCapaForm({ ...capaForm, description: e.target.value })} rows={3} className="w-full p-3 neu-inset rounded-xl text-sm resize-none text-slate-700 dark:text-slate-300" />
+                <select value={capaForm.action_type} onChange={e => setCapaForm({ ...capaForm, action_type: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="corrective">Corrective</option>
+                  <option value="preventive">Preventive</option>
+                </select>
+                <select value={capaForm.priority} onChange={e => setCapaForm({ ...capaForm, priority: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="low">Low Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="high">High Priority</option>
+                  <option value="critical">Critical Priority</option>
+                </select>
+                <select value={capaForm.assigned_to} onChange={e => setCapaForm({ ...capaForm, assigned_to: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300">
+                  <option value="">Assign To (optional)</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                </select>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Due Date *</label>
+                  <input type="date" value={capaForm.due_date} onChange={e => setCapaForm({ ...capaForm, due_date: e.target.value })} className="w-full p-3 neu-inset rounded-xl text-sm text-slate-700 dark:text-slate-300" />
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setShowCapaModal(false)} className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
+                <button onClick={handleCreateCapa} disabled={saving} className="flex-1 py-3 rounded-xl bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />} Create
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showApprovalModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !saving && setShowApprovalModal(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-white capitalize">{showApprovalModal} Approval</h3>
