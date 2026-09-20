@@ -9,9 +9,9 @@ import { supabase } from '../../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { 
   ChevronRight, Sun, Moon, Shield, Clock, MapPin, 
-  User, AlertTriangle, Camera, Download, X, Image as ImageIcon,
+  User, AlertTriangle, Camera, X, Image as ImageIcon,
   CheckCircle2, UserPlus, Wrench, Briefcase, Loader2, Search,
-  Activity
+  Activity, Download
 } from 'lucide-react'
 
 export default function IncidentDetail() {
@@ -61,9 +61,6 @@ export default function IncidentDetail() {
 
   const refresh = async () => { await fetchIncident(id) }
 
-  // ============================================
-  // STATUS CHANGE
-  // ============================================
   const handleStatusChange = async () => {
     if (!newStatus) { toast.error('Select a status'); return }
     setSaving(true)
@@ -88,9 +85,6 @@ export default function IncidentDetail() {
     finally { setSaving(false) }
   }
 
-  // ============================================
-  // ASSIGN INVESTIGATOR
-  // ============================================
   const handleAssignInvestigator = async () => {
     if (!investigatorId) { toast.error('Select an investigator'); return }
     setSaving(true)
@@ -117,9 +111,6 @@ export default function IncidentDetail() {
     finally { setSaving(false) }
   }
 
-  // ============================================
-  // APPROVE / REJECT
-  // ============================================
   const handleApproval = async (approvalType, approve) => {
     setSaving(true)
     try {
@@ -156,9 +147,6 @@ export default function IncidentDetail() {
     finally { setSaving(false) }
   }
 
-  // ============================================
-  // CREATE CAPA
-  // ============================================
   const handleCreateCapa = async () => {
     if (!capaForm.title || !capaForm.due_date) { toast.error('Title and due date required'); return }
     setSaving(true)
@@ -190,9 +178,6 @@ export default function IncidentDetail() {
     finally { setSaving(false) }
   }
 
-  // ============================================
-  // CLOSE INCIDENT
-  // ============================================
   const handleClose = async () => {
     if (!window.confirm('Mark this incident as CLOSED? This cannot be undone.')) return
     setSaving(true)
@@ -240,7 +225,7 @@ export default function IncidentDetail() {
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
-      <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
+      <div className="fixed top-20 right-4 z-30">
         <button onClick={toggleTheme} className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110">
           {isDark ? <Sun className="w-6 h-6 text-amber-400" /> : <Moon className="w-6 h-6 text-slate-600" />}
         </button>
@@ -278,7 +263,6 @@ export default function IncidentDetail() {
             </div>
           </div>
 
-          {/* ACTIONS */}
           {!isClosed ? (
             <div className="neu-raised rounded-3xl p-5 mb-6">
               <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Available Actions</h3>
@@ -350,7 +334,6 @@ export default function IncidentDetail() {
             </div>
           )}
 
-          {/* PHOTOS */}
           {allPhotos.length > 0 && (
             <div className="neu-raised rounded-3xl p-6 mb-6 border-l-4 border-indigo-500">
               <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
@@ -370,7 +353,6 @@ export default function IncidentDetail() {
             </div>
           )}
 
-          {/* DETAILS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="neu-raised rounded-3xl p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-600" />Incident Info</h3>
@@ -443,7 +425,29 @@ export default function IncidentDetail() {
         </motion.div>
       </main>
 
-      {/* STATUS MODAL */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedPhoto(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
+              className="max-w-4xl w-full" onClick={e => e.stopPropagation()}>
+              <img src={selectedPhoto} alt="Full size" className="w-full max-h-[75vh] object-contain rounded-2xl" />
+              <div className="flex justify-center gap-3 mt-4">
+                <a href={selectedPhoto} download target="_blank" rel="noopener noreferrer"
+                  className="px-5 py-3 bg-white text-slate-800 rounded-xl font-medium flex items-center gap-2 hover:bg-slate-100">
+                  <Download className="w-4 h-4" /> Download
+                </a>
+                <button onClick={() => setSelectedPhoto(null)}
+                  className="px-5 py-3 bg-slate-700 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-slate-600">
+                  <X className="w-4 h-4" /> Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showStatusModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -479,7 +483,6 @@ export default function IncidentDetail() {
         )}
       </AnimatePresence>
 
-      {/* ASSIGN MODAL */}
       <AnimatePresence>
         {showAssignModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -509,7 +512,6 @@ export default function IncidentDetail() {
         )}
       </AnimatePresence>
 
-      {/* CAPA MODAL */}
       <AnimatePresence>
         {showCapaModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -553,17 +555,4 @@ export default function IncidentDetail() {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setShowCapaModal(false)}
-                  className="flex-1 py-3 rounded-xl bg-slate-200 dark:bg-slate-700 font-medium text-slate-700 dark:text-slate-300">Cancel</button>
-                <button onClick={handleCreateCapa} disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />} Create
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* APPROVAL MODAL */}
-      <
+                <button onClick
