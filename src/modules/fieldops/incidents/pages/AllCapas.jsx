@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import { 
   Search, ChevronRight, Sun, Moon, Sparkles, Eye, 
   Wrench, CheckCircle2, Clock, AlertTriangle, 
-  User, Calendar, MessageSquare, Filter
+  User, Calendar
 } from 'lucide-react'
 
 export default function AllCapas() {
@@ -40,7 +40,6 @@ export default function AllCapas() {
       if (error) throw error
       setCapas(data || [])
 
-      // Stats
       const today = new Date().toISOString().split('T')[0]
       const { data: allCapas } = await supabase.from('corrective_actions').select('status, due_date')
       if (allCapas) {
@@ -117,7 +116,6 @@ export default function AllCapas() {
           <p className="text-slate-500 mt-1">Every CAPA across all incidents — track, filter and manage</p>
         </motion.div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
           {statCards.map((s, i) => (
             <motion.button
@@ -138,7 +136,6 @@ export default function AllCapas() {
           ))}
         </div>
 
-        {/* Filters */}
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -162,7 +159,6 @@ export default function AllCapas() {
           </select>
         </div>
 
-        {/* CAPA List */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
