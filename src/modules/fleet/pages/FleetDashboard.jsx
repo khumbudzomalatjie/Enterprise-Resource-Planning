@@ -42,12 +42,7 @@ export default function FleetDashboard() {
   const [meterForm, setMeterForm] = useState({ vehicle_id: '', reading_date: new Date().toISOString().split('T')[0], odometer_reading: '', notes: '' })
 
   useEffect(() => {
-    fetchVehicles()
-    fetchFuelRecords()
-    fetchExpenses()
-    fetchReminders()
-    fetchMeterReadings()
-    fetchFleetStats()
+    loadAll()
   }, [])
 
   useEffect(() => {
@@ -56,6 +51,17 @@ export default function FleetDashboard() {
       loadVehicleForm(vehicles[0])
     }
   }, [vehicles])
+
+  const loadAll = async () => {
+    await Promise.all([
+      fetchVehicles(),
+      fetchFuelRecords(),
+      fetchExpenses(),
+      fetchReminders(),
+      fetchMeterReadings(),
+      fetchFleetStats()
+    ])
+  }
 
   const loadVehicleForm = (v) => {
     if (!v) return
@@ -76,6 +82,9 @@ export default function FleetDashboard() {
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA') : ''
 
+  // ============================================
+  // IMAGE UPLOAD
+  // ============================================
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -101,34 +110,44 @@ export default function FleetDashboard() {
     } finally { setUploading(false) }
   }
 
+  // ============================================
+  // VEHICLE SAVE
+  // ============================================
   const handleSaveVehicle = async () => {
     if (!vehicleForm.name) { toast.error('Vehicle name is required'); return }
     if (selectedVehicle) {
-      await updateVehicle(selectedVehicle.id, vehicleForm)
-      toast.success('Vehicle updated!')
+      const result = await updateVehicle(selectedVehicle.id, vehicleForm)
+      if (result.success) toast.success('Vehicle updated!')
+      else toast.error('Failed to update')
     } else {
-      await createVehicle(vehicleForm)
-      toast.success('Vehicle added!')
+      const result = await createVehicle(vehicleForm)
+      if (result.success) toast.success('Vehicle added!')
+      else toast.error('Failed to add')
     }
     await fetchVehicles()
   }
 
-  // ✅ HARD DELETE — permanently removes the vehicle + all related records
+  // ============================================
+  // ✅ HARD DELETE with verbose logging
+  // ============================================
   const handleDeleteVehicle = async () => {
-    if (!selectedVehicle) return
-    if (!window.confirm(`Delete ${selectedVehicle.name}? This will remove it permanently along with all its records.`)) return
+    if (!selectedVehicle) { toast.error('Select a vehicle first'); return }
+    if (!window.confirm(`Delete ${selectedVehicle.name}? This will PERMANENTLY remove it and all its records.`)) return
+
+    console.log('🚨 DELETING VEHICLE:', selectedVehicle.id, selectedVehicle.name)
+    toast.loading('Deleting...', { id: 'delete-vehicle' })
 
     const result = await deleteVehicle(selectedVehicle.id)
+    toast.dismiss('delete-vehicle')
+
     if (result.success) {
-      toast.success('Vehicle deleted')
+      toast.success('✅ Vehicle deleted')
       setSelectedVehicle(null)
-      await fetchVehicles()
-      await fetchFuelRecords()
-      await fetchExpenses()
-      await fetchReminders()
-      await fetchMeterReadings()
+      setVehicleForm({ name: '', plate_number: '', make: '', model: '', vehicle_type: '', seats: 4, notes: '', fuel_type: 'petrol', purchase_date: '', purchase_price: '', image_url: '' })
+      await loadAll()
     } else {
-      toast.error('Failed to delete: ' + (result.error || 'Unknown error'))
+      console.error('❌ Delete failed:', result.error)
+      toast.error('Delete failed: ' + (result.error || 'Unknown'))
     }
   }
 
@@ -170,18 +189,6 @@ export default function FleetDashboard() {
     toast.success('Reading saved!')
     setShowMeterForm(false)
     fetchMeterReadings()
-  }
-
-  const handleRefresh = async () => {
-    await Promise.all([
-      fetchVehicles(),
-      fetchFuelRecords(),
-      fetchExpenses(),
-      fetchReminders(),
-      fetchMeterReadings(),
-      fetchFleetStats()
-    ])
-    toast.success('Refreshed!')
   }
 
   const getReminderStatus = (r) => {
@@ -231,7 +238,7 @@ export default function FleetDashboard() {
             <button onClick={handleAddVehicle} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
               <Plus className="w-5 h-5" /><span>New Vehicle</span>
             </button>
-            <button onClick={handleRefresh} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2">
+            <button onClick={loadAll} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 flex items-center gap-2">
               <RefreshCw className="w-5 h-5" /><span>Refresh</span>
             </button>
           </div>
@@ -390,269 +397,4 @@ export default function FleetDashboard() {
               )}
 
               {activeTab === 'expenses' && (
-                <motion.div key="expenses" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="neu-raised rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Repairs & Expenses</h3>
-                    <button onClick={() => setShowExpenseForm(!showExpenseForm)}
-                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> Add Expense
-                    </button>
-                  </div>
-                  {showExpenseForm && (
-                    <div className="neu-inset rounded-2xl p-4 mb-4 space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <select value={expenseForm.vehicle_id} onChange={e => setExpenseForm({ ...expenseForm, vehicle_id: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm">
-                          <option value="">Vehicle</option>
-                          {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                        </select>
-                        <input type="date" value={expenseForm.expense_date} onChange={e => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="number" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                          placeholder="Amount" className="p-3 neu-inset rounded-xl text-sm" />
-                        <select value={expenseForm.expense_type} onChange={e => setExpenseForm({ ...expenseForm, expense_type: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm">
-                          <option value="maintenance">Maintenance</option>
-                          <option value="repair">Repair</option>
-                          <option value="tyres">Tyres</option>
-                          <option value="insurance">Insurance</option>
-                          <option value="registration">Registration</option>
-                          <option value="toll">Toll</option>
-                          <option value="fine">Fine</option>
-                          <option value="cleaning">Cleaning</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </div>
-                      <input value={expenseForm.vendor} onChange={e => setExpenseForm({ ...expenseForm, vendor: e.target.value })}
-                        placeholder="Vendor" className="w-full p-3 neu-inset rounded-xl text-sm" />
-                      <input value={expenseForm.notes} onChange={e => setExpenseForm({ ...expenseForm, notes: e.target.value })}
-                        placeholder="Notes" className="w-full p-3 neu-inset rounded-xl text-sm" />
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveExpense} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Save</button>
-                        <button onClick={() => setShowExpenseForm(false)} className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-sm font-medium">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-700">
-                          <th className="text-left py-3 px-3 text-slate-500">Vehicle</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Date</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Amount</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Type</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Vendor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {expenses.map(e => (
-                          <tr key={e.id} className="border-b border-slate-100 dark:border-slate-700/50">
-                            <td className="py-3 px-3 text-slate-800 dark:text-white">{vehicles.find(v => v.id === e.vehicle_id)?.name || 'N/A'}</td>
-                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{formatDate(e.expense_date)}</td>
-                            <td className="py-3 px-3 font-medium text-slate-800 dark:text-white">{formatCurrency(e.amount)}</td>
-                            <td className="py-3 px-3 capitalize text-slate-600 dark:text-slate-400">{e.expense_type}</td>
-                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{e.vendor || '-'}</td>
-                          </tr>
-                        ))}
-                        {expenses.length === 0 && (
-                          <tr><td colSpan="5" className="text-center py-8 text-slate-400">No expenses recorded</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </motion.div>
-              )}
-
-              {activeTab === 'fuel' && (
-                <motion.div key="fuel" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="neu-raised rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Fuel Purchases</h3>
-                    <button onClick={() => setShowFuelForm(!showFuelForm)}
-                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> Add Fuel
-                    </button>
-                  </div>
-                  {showFuelForm && (
-                    <div className="neu-inset rounded-2xl p-4 mb-4 space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <select value={fuelForm.vehicle_id} onChange={e => setFuelForm({ ...fuelForm, vehicle_id: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm">
-                          <option value="">Vehicle</option>
-                          {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                        </select>
-                        <input type="date" value={fuelForm.fuel_date} onChange={e => setFuelForm({ ...fuelForm, fuel_date: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="number" value={fuelForm.amount} onChange={e => setFuelForm({ ...fuelForm, amount: e.target.value })}
-                          placeholder="Amount" className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="number" value={fuelForm.quantity} onChange={e => setFuelForm({ ...fuelForm, quantity: e.target.value })}
-                          placeholder="Litres" className="p-3 neu-inset rounded-xl text-sm" />
-                      </div>
-                      <input value={fuelForm.fuel_station} onChange={e => setFuelForm({ ...fuelForm, fuel_station: e.target.value })}
-                        placeholder="Fuel station" className="w-full p-3 neu-inset rounded-xl text-sm" />
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveFuel} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Save</button>
-                        <button onClick={() => setShowFuelForm(false)} className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-sm font-medium">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-700">
-                          <th className="text-left py-3 px-3 text-slate-500">Vehicle</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Date</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Amount</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Qty (L)</th>
-                          <th className="text-left py-3 px-3 text-slate-500">Station</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fuelRecords.map(f => (
-                          <tr key={f.id} className="border-b border-slate-100 dark:border-slate-700/50">
-                            <td className="py-3 px-3 text-slate-800 dark:text-white">{vehicles.find(v => v.id === f.vehicle_id)?.name || 'N/A'}</td>
-                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{formatDate(f.fuel_date)}</td>
-                            <td className="py-3 px-3 font-medium text-slate-800 dark:text-white">{formatCurrency(f.amount)}</td>
-                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{f.quantity || 0}</td>
-                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{f.fuel_station || '-'}</td>
-                          </tr>
-                        ))}
-                        {fuelRecords.length === 0 && (
-                          <tr><td colSpan="5" className="text-center py-8 text-slate-400">No fuel records</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </motion.div>
-              )}
-
-              {activeTab === 'reminders' && (
-                <motion.div key="reminders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="neu-raised rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Reminders</h3>
-                    <button onClick={() => setShowReminderForm(!showReminderForm)}
-                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> Add Reminder
-                    </button>
-                  </div>
-                  {showReminderForm && (
-                    <div className="neu-inset rounded-2xl p-4 mb-4 space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <select value={reminderForm.vehicle_id} onChange={e => setReminderForm({ ...reminderForm, vehicle_id: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm">
-                          <option value="">Vehicle</option>
-                          {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                        </select>
-                        <input value={reminderForm.reminder_name} onChange={e => setReminderForm({ ...reminderForm, reminder_name: e.target.value })}
-                          placeholder="Reminder name" className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="date" value={reminderForm.next_date} onChange={e => setReminderForm({ ...reminderForm, next_date: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="number" value={reminderForm.frequency_days} onChange={e => setReminderForm({ ...reminderForm, frequency_days: parseInt(e.target.value) || 90 })}
-                          placeholder="Every X days" className="p-3 neu-inset rounded-xl text-sm" />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveReminder} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Save</button>
-                        <button onClick={() => setShowReminderForm(false)} className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-sm font-medium">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-3">
-                    {reminders.map(r => {
-                      const st = getReminderStatus(r)
-                      return (
-                        <div key={r.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-slate-800 dark:text-white">{r.reminder_name}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {vehicles.find(v => v.id === r.vehicle_id)?.name} • Due {formatDate(r.next_date)} • Every {r.frequency_days}d
-                            </p>
-                          </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${st.class}`}>{st.label}</span>
-                        </div>
-                      )
-                    })}
-                    {reminders.length === 0 && (
-                      <p className="text-center py-8 text-slate-400">No reminders</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-              {activeTab === 'meter' && (
-                <motion.div key="meter" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="neu-raised rounded-3xl p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Meter Readings</h3>
-                    <button onClick={() => setShowMeterForm(!showMeterForm)}
-                      className="neu-raised neu-btn px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> Add Reading
-                    </button>
-                  </div>
-                  {showMeterForm && (
-                    <div className="neu-inset rounded-2xl p-4 mb-4 space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <select value={meterForm.vehicle_id} onChange={e => setMeterForm({ ...meterForm, vehicle_id: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm">
-                          <option value="">Vehicle</option>
-                          {vehicles.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                        </select>
-                        <input type="date" value={meterForm.reading_date} onChange={e => setMeterForm({ ...meterForm, reading_date: e.target.value })}
-                          className="p-3 neu-inset rounded-xl text-sm" />
-                        <input type="number" value={meterForm.odometer_reading} onChange={e => setMeterForm({ ...meterForm, odometer_reading: e.target.value })}
-                          placeholder="Odometer" className="p-3 neu-inset rounded-xl text-sm" />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveMeter} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Save</button>
-                        <button onClick={() => setShowMeterForm(false)} className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-sm font-medium">Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    {[...meterReadings].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date)).map(m => (
-                      <div key={m.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-800 dark:text-white">{vehicles.find(v => v.id === m.vehicle_id)?.name}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(m.reading_date)}</p>
-                        </div>
-                        <p className="text-sm font-bold text-slate-800 dark:text-white">{Number(m.odometer_reading).toLocaleString()} km</p>
-                      </div>
-                    ))}
-                    {meterReadings.length === 0 && (
-                      <p className="text-center py-8 text-slate-400">No readings yet</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-              {activeTab === 'dashboard' && (
-                <motion.div key="dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="neu-raised rounded-2xl p-4">
-                      <Car className="w-6 h-6 text-emerald-600 mb-2" />
-                      <p className="text-2xl font-bold text-slate-800 dark:text-white">{vehicles.length}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Total Vehicles</p>
-                    </div>
-                    <div className="neu-raised rounded-2xl p-4">
-                      <Fuel className="w-6 h-6 text-emerald-600 mb-2" />
-                      <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalFuelCost)}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Fuel Spend</p>
-                    </div>
-                    <div className="neu-raised rounded-2xl p-4">
-                      <Wrench className="w-6 h-6 text-emerald-600 mb-2" />
-                      <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(stats.totalExpenses)}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Expenses</p>
-                    </div>
-                    <div className="neu-raised rounded-2xl p-4">
-                      <AlertCircle className="w-6 h-6 text-red-600 mb-2" />
-                      <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.overdueReminders || 0}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Overdue Reminders</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-            </AnimatePresence>
-          </div>
-        </div>
-      </main>
-    </div>
-  )
-}
+                <motion.div key="expenses" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{
