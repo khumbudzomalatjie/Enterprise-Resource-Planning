@@ -1,10 +1,13 @@
 import { supabase } from '../../../lib/supabaseClient'
 
 export const fleetApi = {
-  // Vehicles
+  // ============================================
+  // VEHICLES
+  // ============================================
   async getVehicles(filters = {}) {
-    let query = supabase.from('vehicles')
-      .select('*, employees(first_name, last_name), teams(team_name)')
+    let query = supabase
+      .from('vehicles')
+      .select('*')
       .order('created_at', { ascending: false })
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.search) query = query.or(`name.ilike.%${filters.search}%,plate_number.ilike.%${filters.search}%,make.ilike.%${filters.search}%`)
@@ -13,69 +16,97 @@ export const fleetApi = {
   },
 
   async getVehicle(id) {
-    const { data, error } = await supabase.from('vehicles')
-      .select('*, employees(*), teams(*), fuel_records(*), vehicle_expenses(*), maintenance_records(*), fleet_reminders(*), meter_readings(*)')
-      .eq('id', id).single()
+    const { data, error } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('id', id)
+      .single()
     return { data, error }
   },
 
   async createVehicle(vehicleData) {
-    const { data, error } = await supabase.from('vehicles').insert([vehicleData]).select().single()
+    const { data, error } = await supabase
+      .from('vehicles')
+      .insert([vehicleData])
+      .select()
+      .single()
     return { data, error }
   },
 
   async updateVehicle(id, updates) {
-    const { data, error } = await supabase.from('vehicles').update({...updates, updated_at: new Date().toISOString()}).eq('id', id).select().single()
+    const { data, error } = await supabase
+      .from('vehicles')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
     return { data, error }
   },
 
+  // ✅ HARD DELETE — permanently removes the vehicle + cascades to all related records
   async deleteVehicle(id) {
-    const { error } = await supabase.from('vehicles').update({ status: 'retired' }).eq('id', id)
-    return { error }
+    console.log('🗑️ [fleetApi] Deleting vehicle:', id)
+    const { data, error } = await supabase
+      .from('vehicles')
+      .delete()
+      .eq('id', id)
+      .select()
+    console.log('🗑️ [fleetApi] Delete result:', { data, error })
+    return { data, error }
   },
 
-  // Fuel Records
+  // ============================================
+  // FUEL RECORDS
+  // ============================================
   async getFuelRecords(vehicleId = null) {
-    let query = supabase.from('fuel_records').select('*, vehicles(name, plate_number)').order('fuel_date', { ascending: false })
+    let query = supabase
+      .from('fuel_records')
+      .select('*')
+      .order('fuel_date', { ascending: false })
     if (vehicleId) query = query.eq('vehicle_id', vehicleId)
     const { data, error } = await query.limit(100)
     return { data, error }
   },
 
   async createFuelRecord(fuelData) {
-    const { data, error } = await supabase.from('fuel_records').insert([fuelData]).select().single()
+    const { data, error } = await supabase
+      .from('fuel_records')
+      .insert([fuelData])
+      .select()
+      .single()
     return { data, error }
   },
 
-  // Expenses
+  // ============================================
+  // EXPENSES
+  // ============================================
   async getExpenses(vehicleId = null) {
-    let query = supabase.from('vehicle_expenses').select('*, vehicles(name, plate_number)').order('expense_date', { ascending: false })
+    let query = supabase
+      .from('vehicle_expenses')
+      .select('*')
+      .order('expense_date', { ascending: false })
     if (vehicleId) query = query.eq('vehicle_id', vehicleId)
     const { data, error } = await query.limit(100)
     return { data, error }
   },
 
   async createExpense(expenseData) {
-    const { data, error } = await supabase.from('vehicle_expenses').insert([expenseData]).select().single()
+    const { data, error } = await supabase
+      .from('vehicle_expenses')
+      .insert([expenseData])
+      .select()
+      .single()
     return { data, error }
   },
 
-  // Maintenance
-  async getMaintenanceRecords(vehicleId = null) {
-    let query = supabase.from('maintenance_records').select('*, vehicles(name)').order('service_date', { ascending: false })
-    if (vehicleId) query = query.eq('vehicle_id', vehicleId)
-    const { data, error } = await query
-    return { data, error }
-  },
-
-  async createMaintenance(recordData) {
-    const { data, error } = await supabase.from('maintenance_records').insert([recordData]).select().single()
-    return { data, error }
-  },
-
-  // Reminders
+  // ============================================
+  // REMINDERS
+  // ============================================
   async getReminders(filters = {}) {
-    let query = supabase.from('fleet_reminders').select('*, vehicles(name, plate_number)').order('next_date', { ascending: true })
+    let query = supabase
+      .from('fleet_reminders')
+      .select('*')
+      .order('next_date', { ascending: true })
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.vehicle_id) query = query.eq('vehicle_id', filters.vehicle_id)
     const { data, error } = await query
@@ -83,29 +114,49 @@ export const fleetApi = {
   },
 
   async createReminder(reminderData) {
-    const { data, error } = await supabase.from('fleet_reminders').insert([reminderData]).select().single()
+    const { data, error } = await supabase
+      .from('fleet_reminders')
+      .insert([reminderData])
+      .select()
+      .single()
     return { data, error }
   },
 
   async updateReminder(id, updates) {
-    const { data, error } = await supabase.from('fleet_reminders').update(updates).eq('id', id).select().single()
+    const { data, error } = await supabase
+      .from('fleet_reminders')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
     return { data, error }
   },
 
-  // Meter Readings
+  // ============================================
+  // METER READINGS
+  // ============================================
   async getMeterReadings(vehicleId = null) {
-    let query = supabase.from('meter_readings').select('*, vehicles(name)').order('reading_date', { ascending: false })
+    let query = supabase
+      .from('meter_readings')
+      .select('*')
+      .order('reading_date', { ascending: false })
     if (vehicleId) query = query.eq('vehicle_id', vehicleId)
     const { data, error } = await query.limit(50)
     return { data, error }
   },
 
   async createMeterReading(readingData) {
-    const { data, error } = await supabase.from('meter_readings').insert([readingData]).select().single()
+    const { data, error } = await supabase
+      .from('meter_readings')
+      .insert([readingData])
+      .select()
+      .single()
     return { data, error }
   },
 
-  // Dashboard Stats
+  // ============================================
+  // DASHBOARD STATS
+  // ============================================
   async getFleetStats() {
     const [
       { count: totalVehicles },
