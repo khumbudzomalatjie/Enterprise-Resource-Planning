@@ -13,6 +13,9 @@ const useFleetStore = create((set, get) => ({
   loading: false,
   error: null,
 
+  // ============================================
+  // VEHICLES
+  // ============================================
   fetchVehicles: async (filters = {}) => {
     set({ loading: true, error: null })
     const { data, error } = await fleetApi.getVehicles(filters)
@@ -42,13 +45,25 @@ const useFleetStore = create((set, get) => ({
     return { success: true, data }
   },
 
+  // ✅ HARD DELETE — remove from DB, then remove from local state
   deleteVehicle: async (id) => {
-    const { error } = await fleetApi.deleteVehicle(id)
-    if (error) return { success: false }
-    set(state => ({ vehicles: state.vehicles.map(v => v.id === id ? {...v, status: 'retired'} : v) }))
-    return { success: true }
+    console.log('🗑️ [store] deleteVehicle called for:', id)
+    const { data, error } = await fleetApi.deleteVehicle(id)
+    if (error) {
+      console.error('🗑️ [store] Delete failed:', error)
+      return { success: false, error: error.message }
+    }
+    console.log('🗑️ [store] Delete succeeded, removing from state')
+    set(state => ({
+      vehicles: state.vehicles.filter(v => v.id !== id),
+      selectedVehicle: state.selectedVehicle?.id === id ? null : state.selectedVehicle
+    }))
+    return { success: true, data }
   },
 
+  // ============================================
+  // FUEL
+  // ============================================
   fetchFuelRecords: async (vehicleId = null) => {
     const { data, error } = await fleetApi.getFuelRecords(vehicleId)
     if (error) return { success: false }
@@ -63,6 +78,9 @@ const useFleetStore = create((set, get) => ({
     return { success: true, data }
   },
 
+  // ============================================
+  // EXPENSES
+  // ============================================
   fetchExpenses: async (vehicleId = null) => {
     const { data, error } = await fleetApi.getExpenses(vehicleId)
     if (error) return { success: false }
@@ -77,6 +95,9 @@ const useFleetStore = create((set, get) => ({
     return { success: true, data }
   },
 
+  // ============================================
+  // REMINDERS
+  // ============================================
   fetchReminders: async (filters = {}) => {
     const { data, error } = await fleetApi.getReminders(filters)
     if (error) return { success: false }
@@ -98,6 +119,9 @@ const useFleetStore = create((set, get) => ({
     return { success: true }
   },
 
+  // ============================================
+  // METER READINGS
+  // ============================================
   fetchMeterReadings: async (vehicleId = null) => {
     const { data, error } = await fleetApi.getMeterReadings(vehicleId)
     if (error) return { success: false }
@@ -112,6 +136,9 @@ const useFleetStore = create((set, get) => ({
     return { success: true, data }
   },
 
+  // ============================================
+  // STATS
+  // ============================================
   fetchFleetStats: async () => {
     const stats = await fleetApi.getFleetStats()
     set({ stats })
