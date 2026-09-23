@@ -14,6 +14,9 @@ import IncidentTracker from '../incidents/pages/IncidentTracker'
 import MyIncidents from '../incidents/pages/MyIncidents'
 import AllCapas from '../incidents/pages/AllCapas'
 
+// ✅ Job Management
+import JobManagementRoutes from '../jobmanagement/routes/JobManagementRoutes'
+
 // Field Ops Messaging System
 import Messages from '../messages/pages/Messages'
 
@@ -50,6 +53,20 @@ export default function FieldOpsRoutes() {
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
             <JobTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ JOB MANAGEMENT */}
+      <Route path="/job-management/*" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={[
+            USER_ROLES.SUPER_ADMIN,
+            USER_ROLES.OPERATIONS_MANAGER,
+            USER_ROLES.SUPERVISOR,
+            USER_ROLES.HR_MANAGER
+          ]}>
+            <JobManagementRoutes />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
