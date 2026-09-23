@@ -7,7 +7,7 @@ import useThemeStore from '../../../store/themeStore'
 import { 
   Radio, AlertTriangle, Search, Users, Clock, Shield,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  MessageSquare, History, FileText
+  MessageSquare, History, FileText, Briefcase
 } from 'lucide-react'
 
 export default function FieldOpsDashboard() {
@@ -54,13 +54,14 @@ export default function FieldOpsDashboard() {
           <p className="text-slate-500 dark:text-slate-400 ml-11">Live job monitoring, incidents, messaging & job tracking</p>
         </motion.div>
 
-        {/* Main Action Cards - 4 cards now */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Main Action Cards - 5 cards now with Job Management */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
           {[
-            { icon: Radio, label: 'Live Jobs', desc: 'Monitor active jobs & assignments', path: '/fieldops/live-jobs', bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600', stats: `${stats.activeJobs || 0} active · ${stats.assignedEmployees || 0} assigned` },
-            { icon: AlertTriangle, label: 'Incidents', desc: 'Report & manage field incidents', path: '/fieldops/incidents', bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600', stats: `${stats.openIncidents || 0} open · ${stats.criticalIncidents || 0} critical` },
-            { icon: MessageSquare, label: 'Messages', desc: 'Real-time team communication', path: '/fieldops/messages', bg: 'bg-teal-100 dark:bg-teal-900/30', color: 'text-teal-600', stats: 'Chat with your team' },
-            { icon: History, label: 'Job Tracker', desc: 'Full audit trail by job number', path: '/fieldops/job-tracker', bg: 'bg-purple-100 dark:bg-purple-900/30', color: 'text-purple-600', stats: 'Who · What · When · How' },
+            { icon: Radio, label: 'Live Jobs', desc: 'Monitor active jobs & assignments', path: '/fieldops/live-jobs', bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600', stats: `${stats.activeJobs || 0} active` },
+            { icon: Briefcase, label: 'Job Management', desc: 'Edit, reschedule, postpone & reassign jobs', path: '/fieldops/job-management', bg: 'bg-emerald-100 dark:bg-emerald-900/30', color: 'text-emerald-600', stats: 'Manage all jobs' },
+            { icon: AlertTriangle, label: 'Incidents', desc: 'Report & manage field incidents', path: '/fieldops/incidents', bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600', stats: `${stats.openIncidents || 0} open` },
+            { icon: MessageSquare, label: 'Messages', desc: 'Real-time team communication', path: '/fieldops/messages', bg: 'bg-teal-100 dark:bg-teal-900/30', color: 'text-teal-600', stats: 'Chat with team' },
+            { icon: History, label: 'Job Tracker', desc: 'Full audit trail by job number', path: '/fieldops/job-tracker', bg: 'bg-purple-100 dark:bg-purple-900/30', color: 'text-purple-600', stats: 'Audit trail' },
           ].map((card, i) => (
             <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * i }}
               onClick={() => navigate(card.path)}
@@ -76,9 +77,10 @@ export default function FieldOpsDashboard() {
         </div>
 
         {/* Quick Links */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           {[
             { icon: Radio, label: 'Live Jobs', path: '/fieldops/live-jobs', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+            { icon: Briefcase, label: 'Job Management', path: '/fieldops/job-management', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
             { icon: AlertTriangle, label: 'Incidents', path: '/fieldops/incidents', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
             { icon: MessageSquare, label: 'Messages', path: '/fieldops/messages', color: 'text-teal-600', bg: 'bg-teal-100 dark:bg-teal-900/30' },
             { icon: History, label: 'Job Tracker', path: '/fieldops/job-tracker', color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
