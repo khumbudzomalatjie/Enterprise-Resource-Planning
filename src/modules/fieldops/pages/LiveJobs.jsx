@@ -7,22 +7,22 @@ import useAuthStore from '../../../store/authStore'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
-import { 
-  Radio, Search, Users, UserPlus, MapPin, 
+import {
+  Radio, Search, Users, UserPlus, MapPin,
   Clock, Play, CheckCircle2, XCircle, ChevronRight,
-  Sun, Moon, Sparkles, Building2, Calendar, Eye, 
+  Sun, Moon, Sparkles, Building2, Calendar, Eye,
   Wifi, WifiOff, RefreshCw, Camera, Download, X
 } from 'lucide-react'
 
 export default function LiveJobs() {
-  const { 
+  const {
     liveJobs, myAssignedJobs, fetchLiveJobs, fetchMyAssignedJobs,
     assignEmployee, releaseEmployee, updateJobStatus
   } = useFieldOpsStore()
   const { user, profile } = useAuthStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  
+
   const [search, setSearch] = useState('')
   const [filterView, setFilterView] = useState('all')
   const [sortBy, setSortBy] = useState('priority')
@@ -166,7 +166,7 @@ export default function LiveJobs() {
     }
     const result = await assignEmployee(selectedJob.id, selectedEmployee)
     if (result.success) {
-      toast.success(`Employee assigned to ${selectedJob.job_number}!`)
+      toast.success('Employee assigned to ' + selectedJob.job_number + '!')
       setShowAssignModal(false)
       setSelectedEmployee('')
       setSelectedJob(null)
@@ -177,10 +177,10 @@ export default function LiveJobs() {
   }
 
   const handleRelease = async (assignmentId, employeeName, jobNumber) => {
-    if (!window.confirm(`Release ${employeeName} from ${jobNumber}?`)) return
+    if (!window.confirm('Release ' + employeeName + ' from ' + jobNumber + '?')) return
     const result = await releaseEmployee(assignmentId, 'Manually released from Live Jobs')
     if (result.success) {
-      toast.success(`${employeeName} released from ${jobNumber}`)
+      toast.success(employeeName + ' released from ' + jobNumber)
       await loadAllData()
     } else {
       toast.error(result.error || 'Failed to release employee')
@@ -221,16 +221,18 @@ export default function LiveJobs() {
 
   const getPriorityColor = (priority) => {
     const c = {
-      low: 'bg-slate-100 text-slate-600', medium: 'bg-blue-100 text-blue-600',
-      high: 'bg-amber-100 text-amber-600', urgent: 'bg-red-100 text-red-700',
+      low: 'bg-slate-100 text-slate-600',
+      medium: 'bg-blue-100 text-blue-600',
+      high: 'bg-amber-100 text-amber-600',
+      urgent: 'bg-red-100 text-red-700',
       emergency: 'bg-red-200 text-red-800 animate-pulse',
     }
     return c[priority] || ''
   }
 
   const getPriorityIcon = (priority) => {
-    const i = { emergency: '🔴', urgent: '🟠', high: '🟡', medium: '🔵', low: '⚪' }
-    return i[priority] || '⚪'
+    const i = { emergency: '[!!]', urgent: '[!]', high: '[H]', medium: '[M]', low: '[L]' }
+    return i[priority] || '[L]'
   }
 
   const formatDate = (date) => date
@@ -243,14 +245,14 @@ export default function LiveJobs() {
   const highPriorityCount = jobs.filter(j => ['urgent', 'emergency', 'high'].includes(j.priority)).length
 
   return (
-    <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
+    <div className={'min-h-screen font-Inter transition-colors duration-300 ' + (isDark ? 'dark' : '')}>
       <Navbar />
-      
+
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-3 py-2 rounded-full flex items-center gap-2 text-xs">
           {isOnline ? <Wifi className="w-3 h-3 text-emerald-500" /> : <WifiOff className="w-3 h-3 text-red-500" />}
           <span className="text-slate-500 hidden sm:inline">
-            {isOnline ? 'Live' : 'Offline'} • {lastSync.toLocaleTimeString()}
+            {(isOnline ? 'Live' : 'Offline') + ' - ' + lastSync.toLocaleTimeString()}
           </span>
         </div>
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
@@ -275,7 +277,7 @@ export default function LiveJobs() {
               <Radio className="w-8 h-8 text-emerald-600" />Live Jobs
             </h1>
             <p className="text-slate-500 mt-1">
-              {jobs.length} total • {myJobCount} my jobs • {inProgressCount} in progress
+              {jobs.length + ' total - ' + myJobCount + ' my jobs - ' + inProgressCount + ' in progress'}
             </p>
           </div>
           <div className="flex gap-2">
@@ -297,8 +299,8 @@ export default function LiveJobs() {
             { label: 'High Priority', value: highPriorityCount, onClick: () => setSortBy('priority'), color: 'bg-red-500' },
           ].map(stat => (
             <button key={stat.label} onClick={stat.onClick}
-              className={`neu-raised rounded-xl p-3 text-center transition-all hover:scale-105 ${stat.active ? 'ring-2 ring-emerald-500' : ''}`}>
-              <div className={`w-3 h-3 rounded-full ${stat.color} mx-auto mb-1`}></div>
+              className={'neu-raised rounded-xl p-3 text-center transition-all hover:scale-105 ' + (stat.active ? 'ring-2 ring-emerald-500' : '')}>
+              <div className={'w-3 h-3 rounded-full mx-auto mb-1 ' + stat.color}></div>
               <p className="text-2xl font-bold text-slate-800 dark:text-white">{stat.value}</p>
               <p className="text-xs text-slate-500">{stat.label}</p>
             </button>
@@ -338,33 +340,35 @@ export default function LiveJobs() {
             {sortedJobs.map((job) => {
               const activeAssignments = (job.field_job_assignments || []).filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
               const photos = jobPhotos[job.id] || []
-              
+              const statusClass = 'px-2 py-0.5 rounded-full text-xs ' + getStatusColor(job.status)
+              const priorityClass = 'px-2 py-0.5 rounded-full text-xs ' + getPriorityColor(job.priority)
+              const cardClass = 'neu-raised rounded-2xl p-5 transition-all '
+                + (job.isMyJob ? 'border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/5 ' : '')
+                + (job.status === 'in_progress' ? 'border-r-4 border-amber-500' : '')
+
               return (
-                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} layout
-                  className={`neu-raised rounded-2xl p-5 transition-all ${
-                    job.isMyJob ? 'border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/5' : ''
-                  } ${job.status === 'in_progress' ? 'border-r-4 border-amber-500' : ''}`}>
-                  
+                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} layout className={cardClass}>
+
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3 flex-1">
-                      <span className="text-xl mt-1">{getPriorityIcon(job.priority)}</span>
+                      <span className="text-sm font-bold mt-1 text-slate-500">{getPriorityIcon(job.priority)}</span>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-800 dark:text-white text-lg">{job.job_number}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>{job.status?.replace('_', ' ')}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${getPriorityColor(job.priority)}`}>{job.priority}</span>
-                          {job.isMyJob && <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">🔒 My Job</span>}
+                          <span className={statusClass}>{(job.status || '').replace('_', ' ')}</span>
+                          <span className={priorityClass}>{job.priority}</span>
+                          {job.isMyJob && <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">My Job</span>}
                         </div>
                         <h3 className="text-lg font-semibold text-slate-800 dark:text-white mt-1">{job.title}</h3>
                         <div className="flex items-center gap-4 mt-2 text-sm text-slate-500 flex-wrap">
                           {job.clients && <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{job.clients.company_name}</span>}
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.site_city || 'N/A'}</span>
                           <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{new Date(job.scheduled_date).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{job.scheduled_start_time?.slice(0, 5) || 'N/A'}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{(job.scheduled_start_time || '').slice(0, 5) || 'N/A'}</span>
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {(job.status === 'scheduled' || job.status === 'pending') && (
                         <button onClick={() => handleStartJob(job.id)} className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200" title="Start Job">
@@ -376,15 +380,15 @@ export default function LiveJobs() {
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                       )}
-                      
-                      <button 
-                        onClick={() => { setSelectedJob(job); setShowAssignModal(true) }} 
-                        className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors" 
+
+                      <button
+                        onClick={() => { setSelectedJob(job); setShowAssignModal(true) }}
+                        className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
                         title="Assign Staff">
                         <UserPlus className="w-4 h-4" />
                       </button>
-                      
-                      <button 
+
+                      <button
                         onClick={() => { loadJobPhotos(job.id, true); setShowPhotoGallery(job) }}
                         className="p-2 rounded-lg bg-indigo-100 text-indigo-600 hover:bg-indigo-200 relative"
                         title="View Photos">
@@ -395,7 +399,7 @@ export default function LiveJobs() {
                           </span>
                         )}
                       </button>
-                      
+
                       <button onClick={() => setShowJobDetail(showJobDetail === job.id ? null : job.id)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400" title="Details">
                         <Eye className="w-4 h-4" />
                       </button>
@@ -406,20 +410,20 @@ export default function LiveJobs() {
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
                         <Users className="w-4 h-4" />
-                        Staff ({activeAssignments.length}/{job.cleaners_required || 1})
+                        {'Staff (' + activeAssignments.length + '/' + (job.cleaners_required || 1) + ')'}
                       </h4>
                     </div>
-                    
+
                     {activeAssignments.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {activeAssignments.map(a => (
                           <div key={a.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
                             <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-xs font-bold">
-                              {a.employees?.first_name?.[0] || '?'}{a.employees?.last_name?.[0] || '?'}
+                              {(a.employees?.first_name || '?')[0]}{(a.employees?.last_name || '?')[0]}
                             </div>
-                            <span className="font-medium">{a.employees?.first_name || 'Unknown'} {a.employees?.last_name || ''}</span>
-                            <button 
-                              onClick={() => handleRelease(a.id, `${a.employees?.first_name || ''} ${a.employees?.last_name || ''}`, job.job_number)}
+                            <span className="font-medium">{(a.employees?.first_name || 'Unknown') + ' ' + (a.employees?.last_name || '')}</span>
+                            <button
+                              onClick={() => handleRelease(a.id, (a.employees?.first_name || '') + ' ' + (a.employees?.last_name || ''), job.job_number)}
                               className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
                               title="Release">
                               <XCircle className="w-4 h-4" />
@@ -432,36 +436,35 @@ export default function LiveJobs() {
                     )}
                   </div>
 
-                  {/* Photo preview strip */}
                   {photos.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-slate-500">📷 Photos ({photos.length})</h4>
+                        <h4 className="text-sm font-semibold text-slate-500">{'Photos (' + photos.length + ')'}</h4>
                         <button onClick={() => setShowPhotoGallery(job)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                          View All →
+                          View All
                         </button>
                       </div>
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {photos.slice(0, 6).map(photo => (
-                          <div 
-                            key={photo.id} 
+                          <div
+                            key={photo.id}
                             onClick={() => setSelectedPhoto(photo)}
                             className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden cursor-pointer group">
                             <img src={photo.photo_url} alt="Photo" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                            <span className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${
+                            <span className={'absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold text-white ' + (
                               photo.photo_type === 'before' ? 'bg-blue-500' :
                               photo.photo_type === 'after' ? 'bg-emerald-500' :
                               photo.photo_type === 'incident' ? 'bg-red-500' : 'bg-slate-500'
-                            }`}>
+                            )}>
                               {photo.photo_type}
                             </span>
                           </div>
                         ))}
                         {photos.length > 6 && (
-                          <button 
+                          <button
                             onClick={() => setShowPhotoGallery(job)}
                             className="flex-shrink-0 w-20 h-20 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 font-bold hover:bg-slate-200">
-                            +{photos.length - 6}
+                            {'+' + (photos.length - 6)}
                           </button>
                         )}
                       </div>
@@ -474,18 +477,17 @@ export default function LiveJobs() {
         )}
       </main>
 
-      {/* Assign Modal */}
       <AnimatePresence>
         {showAssignModal && selectedJob && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowAssignModal(false); setSelectedEmployee('') }}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="neu-raised rounded-3xl p-6 max-w-md w-full bg-white dark:bg-slate-800" onClick={e => e.stopPropagation()}>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Assign Staff</h3>
-              <p className="text-sm text-slate-500 mb-4">Job: {selectedJob.job_number} - {selectedJob.title}</p>
-              
+              <p className="text-sm text-slate-500 mb-4">{'Job: ' + selectedJob.job_number + ' - ' + selectedJob.title}</p>
+
               <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full p-3 neu-inset rounded-xl mb-4 text-slate-700 dark:text-slate-300">
                 <option value="">Select Employee to Assign</option>
                 {availableEmployees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_code})</option>
+                  <option key={emp.id} value={emp.id}>{emp.first_name + ' ' + emp.last_name + ' (' + emp.employee_code + ')'}</option>
                 ))}
               </select>
 
@@ -498,21 +500,20 @@ export default function LiveJobs() {
         )}
       </AnimatePresence>
 
-      {/* Photo Gallery Modal */}
       <AnimatePresence>
         {showPhotoGallery && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
             onClick={() => setShowPhotoGallery(null)}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
               className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
               onClick={e => e.stopPropagation()}>
-              
+
               <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                     <Camera className="w-5 h-5 text-indigo-600" />
-                    Photos - {showPhotoGallery.job_number}
+                    {'Photos - ' + showPhotoGallery.job_number}
                   </h3>
                   <p className="text-sm text-slate-500 mt-1">{showPhotoGallery.title}</p>
                 </div>
@@ -528,11 +529,11 @@ export default function LiveJobs() {
                       <div key={photo.id} onClick={() => setSelectedPhoto(photo)}
                         className="relative rounded-xl overflow-hidden cursor-pointer group">
                         <img src={photo.photo_url} alt="Photo" className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
-                        <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize text-white ${
+                        <span className={'absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize text-white ' + (
                           photo.photo_type === 'before' ? 'bg-blue-500' :
                           photo.photo_type === 'after' ? 'bg-emerald-500' :
                           photo.photo_type === 'incident' ? 'bg-red-500' : 'bg-slate-500'
-                        }`}>
+                        )}>
                           {photo.photo_type}
                         </span>
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
@@ -553,39 +554,38 @@ export default function LiveJobs() {
         )}
       </AnimatePresence>
 
-      {/* Full Photo Viewer */}
       <AnimatePresence>
         {selectedPhoto && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4"
             onClick={() => setSelectedPhoto(null)}
           >
-            <motion.div 
-              initial={{ scale: 0.9 }} 
-              animate={{ scale: 1 }} 
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="max-w-4xl w-full" 
+              className="max-w-4xl w-full"
               onClick={e => e.stopPropagation()}
             >
-              <img 
-                src={selectedPhoto.photo_url} 
-                alt="Full size" 
+              <img
+                src={selectedPhoto.photo_url}
+                alt="Full size"
                 className="w-full max-h-[75vh] object-contain rounded-2xl"
               />
               <div className="flex justify-center gap-3 mt-4">
-                <a 
-                  href={selectedPhoto.photo_url} 
-                  download 
+                <a
+                  href={selectedPhoto.photo_url}
+                  download
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-5 py-3 bg-white text-slate-800 rounded-xl font-medium flex items-center gap-2 hover:bg-slate-100"
                 >
                   <Download className="w-4 h-4" /> Download
                 </a>
-                <button 
+                <button
                   onClick={() => setSelectedPhoto(null)}
                   className="px-5 py-3 bg-slate-700 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-slate-600"
                 >
