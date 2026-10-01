@@ -244,89 +244,117 @@ export const mobileApi = {
   },
 
   // ═══════════════════════════════════════════════
-  // ✅ COMPLETE JOB - Links invoice to Finance
+  // ✅ COMPLETE JOB — AMENDED: Better error handling + step-by-step
   // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
-    console.log('🔄 Completing job:', jobId, 'Employee:', employeeId)
+    console.log('🔄 [completeJob] START', { jobId, employeeId, lat, lng })
     
-    // 1. Update assignment to completed
-    const { error: assignError } = await supabase
-      .from('field_job_assignments')
-      .update({
+    try {
+      // 1. Update assignment to completed
+      const assignmentUpdates = {
         assignment_status: 'completed',
-        completed_at: new Date().toISOString(),
-        check_out_time: new Date().toISOString(),
-        check_out_latitude: lat,
-        check_out_longitude: lng
-      })
-      .eq('job_id', jobId)
-      .eq('employee_id', employeeId)
+        completed_at: new Date().toISOString()
+      }
+      if (lat) {
+        assignmentUpdates.check_out_latitude = lat
+        assignmentUpdates.check_out_longitude = lng
+        assignmentUpdates.check_out_time = new Date().toISOString()
+      }
 
-    if (assignError) return { success: false, error: assignError.message }
+      const { data: assignData, error: assignError } = await supabase
+        .from('field_job_assignments')
+        .update(assignmentUpdates)
+        .eq('job_id', jobId)
+        .eq('employee_id', employeeId)
+        .select()
 
-    // 2. Get job details
-    const { data: job, error: fetchError } = await supabase
-      .from('jobs')
-      .select('*')
-      .eq('id', jobId)
-      .single()
+      if (assignError) {
+        console.error('❌ [completeJob] Assignment update failed:', assignError)
+        return { success: false, error: `Assignment update failed: ${assignError.message}` }
+      }
+      console.log('✅ [completeJob] Assignment updated:', assignData)
 
-    if (fetchError) return { success: false, error: fetchError.message }
-
-    // Get client info separately
-    let clientInfo = null
-    if (job.client_id) {
-      const { data: client } = await supabase
-        .from('clients')
-        .select('company_name, email, phone, address_line1, city')
-        .eq('id', job.client_id)
+      // 2. Get job details
+      const { data: job, error: fetchError } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('id', jobId)
         .single()
-      clientInfo = client
-    }
 
-    // 3. Mark job as completed
-    const { error: jobError } = await supabase
-      .from('jobs')
-      .update({
-        status: 'completed',
-        actual_end_time: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
-      })
-      .eq('id', jobId)
+      if (fetchError) {
+        console.error('❌ [completeJob] Job fetch failed:', fetchError)
+        return { success: false, error: `Could not load job: ${fetchError.message}` }
+      }
 
-    if (jobError) return { success: false, error: jobError.message }
+      // 3. Mark job as completed
+      const { error: jobError } = await supabase
+        .from('jobs')
+        .update({
+          status: 'completed',
+          actual_end_time: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
+        })
+        .eq('id', jobId)
 
-    // 4. ✅ CREATE INVOICE AND LINK TO JOB
-    let invoiceId = null
-    if (job && job.quoted_amount && job.quoted_amount > 0) {
-      const invoiceResult = await mobileApi.createInvoiceForJob(job, clientInfo)
-      
-      if (invoiceResult.success && invoiceResult.invoice) {
-        invoiceId = invoiceResult.invoice.id
-        
-        // ✅ LINK INVOICE TO JOB
-        const { error: linkError } = await supabase
-          .from('jobs')
-          .update({ invoice_id: invoiceId, updated_at: new Date().toISOString() })
-          .eq('id', jobId)
-        
-        if (linkError) {
-          console.warn('⚠️ Failed to link invoice to job:', linkError.message)
-        } else {
-          console.log('✅ Invoice linked to job:', invoiceResult.invoice.invoice_number)
+      if (jobError) {
+        console.error('❌ [completeJob] Job status update failed:', jobError)
+        return { success: false, error: `Job status update failed: ${jobError.message}` }
+      }
+      console.log('✅ [completeJob] Job marked completed')
+
+      // 4. Get client info (optional)
+      let clientInfo = null
+      if (job.client_id) {
+        const { data: client } = await supabase
+          .from('clients')
+          .select('company_name, email, phone, address_line1, city')
+          .eq('id', job.client_id)
+          .maybeSingle()
+        clientInfo = client
+      }
+
+      // 5. Create invoice (non-blocking — don't fail the whole completion if invoice fails)
+      let invoiceId = null
+      if (job && job.quoted_amount && job.quoted_amount > 0) {
+        try {
+          const invoiceResult = await mobileApi.createInvoiceForJob(job, clientInfo)
+          
+          if (invoiceResult.success && invoiceResult.invoice) {
+            invoiceId = invoiceResult.invoice.id
+            
+            const { error: linkError } = await supabase
+              .from('jobs')
+              .update({ invoice_id: invoiceId, updated_at: new Date().toISOString() })
+              .eq('id', jobId)
+            
+            if (linkError) {
+              console.warn('⚠️ [completeJob] Failed to link invoice to job:', linkError.message)
+            } else {
+              console.log('✅ [completeJob] Invoice linked:', invoiceResult.invoice.invoice_number)
+            }
+          } else {
+            console.warn('⚠️ [completeJob] Invoice not created (non-critical):', invoiceResult.error)
+          }
+        } catch (invoiceErr) {
+          // Don't fail the whole thing if invoice fails
+          console.warn('⚠️ [completeJob] Invoice exception (non-critical):', invoiceErr.message)
         }
       }
+
+      // 6. Log action (non-critical)
+      await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
+
+      console.log('✅ [completeJob] SUCCESS')
+      return { success: true, job: { ...job, invoice_id: invoiceId } }
+    } catch (err) {
+      console.error('❌ [completeJob] Exception:', err)
+      return { success: false, error: err.message || 'Unexpected error while completing job' }
     }
-
-    // 5. Log action
-    await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
-
-    return { success: true, job: { ...job, invoice_id: invoiceId } }
   },
 
   // ═══════════════════════════════════════════════
-  // ✅ CREATE INVOICE - Properly linked with job_id
+  // ✅ CREATE INVOICE — AMENDED: Safer
   // ═══════════════════════════════════════════════
   async createInvoiceForJob(job, clientInfo = null) {
     console.log('📄 Creating invoice for:', job?.job_number)
@@ -371,27 +399,35 @@ export const mobileApi = {
 
       console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
 
-      // Insert invoice item
-      const { error: itemError } = await supabase
-        .from('invoice_items')
-        .insert([{
-          invoice_id: invoice.id,
-          item_number: 1,
-          description: `${job.title || 'Cleaning Service'}`,
-          quantity: 1,
-          unit: 'service',
-          unit_price: amount,
-          tax_percent: taxRate,
-          total_price: amount
-        }])
+      // Insert invoice item (non-critical)
+      try {
+        const { error: itemError } = await supabase
+          .from('invoice_items')
+          .insert([{
+            invoice_id: invoice.id,
+            item_number: 1,
+            description: `${job.title || 'Cleaning Service'}`,
+            quantity: 1,
+            unit: 'service',
+            unit_price: amount,
+            tax_percent: taxRate,
+            total_price: amount
+          }])
 
-      if (itemError) console.error('❌ Invoice item error:', itemError.message)
+        if (itemError) console.error('⚠️ Invoice item error (non-critical):', itemError.message)
+      } catch (itemErr) {
+        console.warn('⚠️ Invoice item exception (non-critical):', itemErr.message)
+      }
 
-      // Update quotation if exists
+      // Update quotation if exists (non-critical)
       if (job.quotation_id) {
-        await supabase.from('quotations').update({
-          status: 'converted', converted_to_invoice: true, invoice_id: invoice.id
-        }).eq('id', job.quotation_id)
+        try {
+          await supabase.from('quotations').update({
+            status: 'converted', converted_to_invoice: true
+          }).eq('id', job.quotation_id)
+        } catch (qErr) {
+          console.warn('⚠️ Quotation update (non-critical):', qErr.message)
+        }
       }
 
       return { success: true, invoice }
