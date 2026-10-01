@@ -58,7 +58,7 @@ export default function MyJobs() {
       toast.success('Job selected!'); 
       setActiveTab('mine') 
     } else { 
-      toast.error('Failed') 
+      toast.error(result.error || 'Failed')
     }
     setUpdatingJob(null)
   }
@@ -76,17 +76,30 @@ export default function MyJobs() {
     })
   }
 
+  // ✅ AMENDED: Shows actual error message + logs to console
   const handleCompleteJob = async (jobId) => {
     if (!window.confirm('Mark job as completed?')) return
-    setUpdatingJob(jobId)
-    const result = await completeJob(jobId, myEmployeeId)
-    if (result.success) { 
-      toast.success('Completed!') 
-      setActiveTab('open') 
-    } else { 
-      toast.error('Failed') 
+    if (!myEmployeeId) {
+      toast.error('Your profile is not linked to an employee record')
+      return
     }
-    setUpdatingJob(null)
+    setUpdatingJob(jobId)
+    try {
+      const result = await completeJob(jobId, myEmployeeId)
+      if (result.success) { 
+        toast.success('✅ Job completed!') 
+        setActiveTab('open') 
+      } else { 
+        // ✅ Show the ACTUAL error, not just "Failed"
+        console.error('❌ Complete job error:', result.error)
+        toast.error(result.error || 'Failed to complete job', { duration: 8000 })
+      }
+    } catch (err) {
+      console.error('❌ Exception:', err)
+      toast.error('Error: ' + (err.message || 'Unknown error'), { duration: 8000 })
+    } finally {
+      setUpdatingJob(null)
+    }
   }
 
   const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' }) : ''
