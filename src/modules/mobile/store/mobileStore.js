@@ -43,9 +43,19 @@ const useMobileStore = create((set, get) => ({
 
   selectJob: async (jobId, eid) => { const r = await mobileApi.selectJob(jobId, eid); if (r.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(eid)]); return r },
   startJob: async (jobId, eid, lat, lng) => { const r = await mobileApi.startJob(jobId, eid, lat, lng); if (r.success) await get().fetchMyJobs(eid); return r },
+  
+  // ✅ AMENDED: passes through the error
   completeJob: async (jobId, eid, lat, lng) => {
     const r = await mobileApi.completeJob(jobId, eid, lat, lng)
-    if (r.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(eid), get().fetchCompletedJobs(eid), get().fetchStats(eid), get().fetchKPIData(eid)])
+    if (r.success) {
+      await Promise.all([
+        get().fetchOpenJobs(), 
+        get().fetchMyJobs(eid), 
+        get().fetchCompletedJobs(eid), 
+        get().fetchStats(eid), 
+        get().fetchKPIData(eid)
+      ])
+    }
     return r
   },
 
