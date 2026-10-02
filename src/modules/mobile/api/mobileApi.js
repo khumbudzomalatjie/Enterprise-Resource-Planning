@@ -22,15 +22,15 @@ export const mobileApi = {
           .order('employee_code', { ascending: false })
           .limit(1)
           .maybeSingle()
-        
+
         let nextNum = 1
         if (lastEmp?.employee_code) {
           const match = lastEmp.employee_code.match(/NG(\d+)/)
           if (match) nextNum = parseInt(match[1]) + 1
         }
-        
+
         const newCode = 'NG' + String(nextNum).padStart(4, '0')
-        
+
         const { data: created } = await supabase.from('employees').insert([{
           user_id: userId, email, first_name: email?.split('@')[0] || 'Worker',
           last_name: '', employment_status: 'active', department: 'Cleaning',
@@ -103,12 +103,12 @@ export const mobileApi = {
       .select('job_id, assignment_status, assigned_at, started_at, completed_at')
       .eq('employee_id', employeeId)
       .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
-    
+
     if (!assignments?.length) return { data: [] }
-    
+
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     if (jobIds.length === 0) return { data: [] }
-    
+
     const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
 
     // Get clients
@@ -118,7 +118,7 @@ export const mobileApi = {
     // Get categories
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
-    
+
     const activeJobs = (jobs || [])
       .filter(j => j.status !== 'completed' && j.status !== 'cancelled')
       .map(j => ({
@@ -138,9 +138,9 @@ export const mobileApi = {
       .eq('assignment_status', 'completed')
       .order('completed_at', { ascending: false })
       .limit(50)
-    
+
     if (!assignments?.length) return { data: [] }
-    
+
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
 
@@ -152,13 +152,13 @@ export const mobileApi = {
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
-    return { 
-      data: (jobs || []).map(j => ({ 
-        ...j, 
+    return {
+      data: (jobs || []).map(j => ({
+        ...j,
         clients: (clients || []).find(c => c.id === j.client_id) || null,
         job_categories: (categories || []).find(c => c.id === j.job_category_id) || null,
-        completed_at: assignments.find(a => a.job_id === j.id)?.completed_at 
-      })) 
+        completed_at: assignments.find(a => a.job_id === j.id)?.completed_at
+      }))
     }
   },
 
@@ -215,20 +215,20 @@ export const mobileApi = {
 
     const { error: aErr } = await supabase
       .from('field_job_assignments')
-      .upsert({ 
-        job_id: jobId, 
-        employee_id: employeeId, 
-        assignment_status: 'assigned', 
-        assigned_at: new Date().toISOString() 
+      .upsert({
+        job_id: jobId,
+        employee_id: employeeId,
+        assignment_status: 'assigned',
+        assigned_at: new Date().toISOString()
       }, { onConflict: 'job_id,employee_id' })
-    
+
     if (aErr) return { success: false, error: aErr.message }
 
     const { error: jobErr } = await supabase
       .from('jobs')
       .update({ status: 'in_progress', updated_at: new Date().toISOString() })
       .eq('id', jobId)
-    
+
     if (jobErr) console.error('Job status update error:', jobErr)
 
     await mobileApi.logAction(employeeId, 'job_selected', 'Selected job', jobId, 'job')
@@ -245,10 +245,11 @@ export const mobileApi = {
 
   // ═══════════════════════════════════════════════
   // ✅ COMPLETE JOB — AMENDED: Better error handling + step-by-step
+  //    + UUID trigger fallback (retry with minimal payload, return warning)
   // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
     console.log('🔄 [completeJob] START', { jobId, employeeId, lat, lng })
-    
+
     try {
       // 1. Update assignment to completed
       const assignmentUpdates = {
@@ -287,21 +288,50 @@ export const mobileApi = {
       }
 
       // 3. Mark job as completed
-      const { error: jobError } = await supabase
+      // ✅ AMENDED: tolerate DB-trigger UUID errors (e.g. 'web_app' cast failure)
+      const nowIso = new Date().toISOString()
+      const fullUpdate = {
+        status: 'completed',
+        actual_end_time: nowIso,
+        updated_at: nowIso,
+        completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
+      }
+
+      let { error: jobError } = await supabase
         .from('jobs')
-        .update({
-          status: 'completed',
-          actual_end_time: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
-        })
+        .update(fullUpdate)
         .eq('id', jobId)
+
+      let jobUpdateWarning = null
 
       if (jobError) {
         console.error('❌ [completeJob] Job status update failed:', jobError)
-        return { success: false, error: `Job status update failed: ${jobError.message}` }
+        const msg = jobError.message || ''
+
+        // ✅ Known issue: a DB trigger on `jobs` casts a non-UUID (e.g. 'web_app')
+        //    into a uuid column when auth.uid() is null. Retry with a minimal
+        //    payload; if it still fails, do NOT abort — the assignment is saved.
+        if (msg.includes('invalid input syntax for type uuid')) {
+          console.warn('⚠️ [completeJob] UUID trigger error detected — retrying minimal update')
+          const { error: retryError } = await supabase
+            .from('jobs')
+            .update({ status: 'completed' })
+            .eq('id', jobId)
+
+          if (retryError) {
+            console.error('❌ [completeJob] Minimal retry also failed:', retryError)
+            jobUpdateWarning =
+              'Job completed on mobile, but the main ERP could not update the job status (DB trigger issue). Please notify admin.'
+          } else {
+            console.log('✅ [completeJob] Job status updated via minimal payload')
+          }
+        } else {
+          // A real, unexpected error — still abort.
+          return { success: false, error: `Job status update failed: ${msg}` }
+        }
+      } else {
+        console.log('✅ [completeJob] Job marked completed')
       }
-      console.log('✅ [completeJob] Job marked completed')
 
       // 4. Get client info (optional)
       let clientInfo = null
@@ -319,15 +349,15 @@ export const mobileApi = {
       if (job && job.quoted_amount && job.quoted_amount > 0) {
         try {
           const invoiceResult = await mobileApi.createInvoiceForJob(job, clientInfo)
-          
+
           if (invoiceResult.success && invoiceResult.invoice) {
             invoiceId = invoiceResult.invoice.id
-            
+
             const { error: linkError } = await supabase
               .from('jobs')
               .update({ invoice_id: invoiceId, updated_at: new Date().toISOString() })
               .eq('id', jobId)
-            
+
             if (linkError) {
               console.warn('⚠️ [completeJob] Failed to link invoice to job:', linkError.message)
             } else {
@@ -345,8 +375,12 @@ export const mobileApi = {
       // 6. Log action (non-critical)
       await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
 
-      console.log('✅ [completeJob] SUCCESS')
-      return { success: true, job: { ...job, invoice_id: invoiceId } }
+      console.log('✅ [completeJob] SUCCESS', jobUpdateWarning ? '(with warning)' : '')
+      return {
+        success: true,
+        job: { ...job, invoice_id: invoiceId },
+        warning: jobUpdateWarning
+      }
     } catch (err) {
       console.error('❌ [completeJob] Exception:', err)
       return { success: false, error: err.message || 'Unexpected error while completing job' }
@@ -358,7 +392,7 @@ export const mobileApi = {
   // ═══════════════════════════════════════════════
   async createInvoiceForJob(job, clientInfo = null) {
     console.log('📄 Creating invoice for:', job?.job_number)
-    
+
     try {
       const yr = new Date().getFullYear().toString().slice(-2)
       const num = String(Math.floor(Math.random() * 99999)).padStart(5, '0')
