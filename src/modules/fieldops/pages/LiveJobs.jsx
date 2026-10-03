@@ -14,6 +14,23 @@ import {
   Wifi, WifiOff, RefreshCw, Camera, Download, X
 } from 'lucide-react'
 
+// ✅ Derive the real status from jobs.status + assignment statuses.
+// If a supervisor assigned the job but the cleaner already hit Start on
+// mobile, jobs.status may still read 'scheduled' — the assignment is the
+// source of truth.
+const getDisplayStatus = (job) => {
+  if (job.status === 'completed' || job.status === 'cancelled') return job.status
+
+  const active = (job.field_job_assignments || [])
+    .filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
+
+  if (active.some(a => a.assignment_status === 'in_progress')) return 'in_progress'
+  if (active.some(a => a.assignment_status === 'accepted'))    return 'accepted'
+  if (active.some(a => a.assignment_status === 'assigned'))    return 'scheduled'
+
+  return job.status || 'pending'
+}
+
 export default function LiveJobs() {
   const {
     liveJobs, myAssignedJobs, fetchLiveJobs, fetchMyAssignedJobs,
@@ -93,7 +110,6 @@ export default function LiveJobs() {
     }
   }
 
-  // ✅ AMENDED: order by created_at (column that exists) + resolve signed URLs
   const loadJobPhotos = async (jobId, force = false) => {
     if (!force && jobPhotos[jobId]) return
     try {
@@ -105,7 +121,6 @@ export default function LiveJobs() {
 
       if (error) throw error
 
-      // Resolve each photo to a signed URL (works for public OR private buckets)
       const withUrls = await Promise.all((data || []).map(async (p) => {
         let displayUrl = p.photo_url
         try {
@@ -139,9 +154,6 @@ export default function LiveJobs() {
   }, [liveJobs])
 
   const jobs = useCallback(() => {
-    // ✅ FIX: hide jobs that are explicitly closed OR whose assignments
-    // are ALL completed (covers stale jobs.status caused by the mobile
-    // "web_app" UUID trigger bug).
     const allJobs = [...(liveJobs || [])].filter(j => {
       if (j.status === 'completed' || j.status === 'cancelled') return false
 
@@ -156,11 +168,15 @@ export default function LiveJobs() {
     })
 
     const myJobIds = new Set((myAssignedJobs || []).map(a => a.job_id || a.jobs?.id))
-    return allJobs.map(job => ({
-      ...job,
-      isMyJob: myJobIds.has(job.id),
-      myAssignment: (myAssignedJobs || []).find(a => (a.job_id || a.jobs?.id) === job.id)
-    }))
+    return allJobs.map(job => {
+      const displayStatus = getDisplayStatus(job)
+      return {
+        ...job,
+        displayStatus,
+        isMyJob: myJobIds.has(job.id),
+        myAssignment: (myAssignedJobs || []).find(a => (a.job_id || a.jobs?.id) === job.id)
+      }
+    })
   }, [liveJobs, myAssignedJobs])()
 
   const filteredJobs = jobs.filter(job => {
@@ -174,19 +190,19 @@ export default function LiveJobs() {
     switch (filterView) {
       case 'mine': return job.isMyJob
       case 'unassigned': return (job.field_job_assignments?.filter(a => a.assignment_status !== 'released').length || 0) === 0
-      case 'in_progress': return job.status === 'in_progress'
+      case 'in_progress': return job.displayStatus === 'in_progress'
       default: return true
     }
   })
 
   const sortedJobs = [...filteredJobs].sort((a, b) => {
     const priorityOrder = { emergency: 0, urgent: 1, high: 2, medium: 3, low: 4 }
-    const statusOrder = { in_progress: 0, scheduled: 1, pending: 2 }
+    const statusOrder = { in_progress: 0, accepted: 1, scheduled: 2, pending: 3 }
     switch (sortBy) {
       case 'priority': return (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5)
       case 'date': return new Date(a.scheduled_date) - new Date(b.scheduled_date)
       case 'client': return (a.clients?.company_name || '').localeCompare(b.clients?.company_name || '')
-      case 'status': return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+      case 'status': return (statusOrder[a.displayStatus] || 4) - (statusOrder[b.displayStatus] || 4)
       default: return 0
     }
   })
@@ -246,6 +262,7 @@ export default function LiveJobs() {
     const c = {
       pending: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
       scheduled: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      accepted: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
       in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 animate-pulse',
     }
     return c[status] || 'bg-slate-100 text-slate-700'
@@ -272,7 +289,7 @@ export default function LiveJobs() {
     : ''
 
   const myJobCount = jobs.filter(j => j.isMyJob).length
-  const inProgressCount = jobs.filter(j => j.status === 'in_progress').length
+  const inProgressCount = jobs.filter(j => j.displayStatus === 'in_progress').length
   const unassignedCount = jobs.filter(j => (j.field_job_assignments?.filter(a => a.assignment_status !== 'released').length || 0) === 0).length
   const highPriorityCount = jobs.filter(j => ['urgent', 'emergency', 'high'].includes(j.priority)).length
 
@@ -372,11 +389,12 @@ export default function LiveJobs() {
             {sortedJobs.map((job) => {
               const activeAssignments = (job.field_job_assignments || []).filter(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
               const photos = jobPhotos[job.id] || []
-              const statusClass = 'px-2 py-0.5 rounded-full text-xs ' + getStatusColor(job.status)
+              const displayStatus = job.displayStatus
+              const statusClass = 'px-2 py-0.5 rounded-full text-xs ' + getStatusColor(displayStatus)
               const priorityClass = 'px-2 py-0.5 rounded-full text-xs ' + getPriorityColor(job.priority)
               const cardClass = 'neu-raised rounded-2xl p-5 transition-all '
                 + (job.isMyJob ? 'border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/5 ' : '')
-                + (job.status === 'in_progress' ? 'border-r-4 border-amber-500' : '')
+                + (displayStatus === 'in_progress' ? 'border-r-4 border-amber-500' : '')
 
               return (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} layout className={cardClass}>
@@ -387,7 +405,7 @@ export default function LiveJobs() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-800 dark:text-white text-lg">{job.job_number}</span>
-                          <span className={statusClass}>{(job.status || '').replace('_', ' ')}</span>
+                          <span className={statusClass}>{displayStatus.replace('_', ' ')}</span>
                           <span className={priorityClass}>{job.priority}</span>
                           {job.isMyJob && <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">My Job</span>}
                         </div>
@@ -402,12 +420,12 @@ export default function LiveJobs() {
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {(job.status === 'scheduled' || job.status === 'pending') && (
+                      {(displayStatus === 'scheduled' || displayStatus === 'pending') && (
                         <button onClick={() => handleStartJob(job.id)} className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200" title="Start Job">
                           <Play className="w-4 h-4" />
                         </button>
                       )}
-                      {job.status === 'in_progress' && (
+                      {displayStatus === 'in_progress' && (
                         <button onClick={() => handleCompleteJob(job.id)} className="p-2 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200" title="Complete Job">
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
@@ -454,6 +472,9 @@ export default function LiveJobs() {
                               {(a.employees?.first_name || '?')[0]}{(a.employees?.last_name || '?')[0]}
                             </div>
                             <span className="font-medium">{(a.employees?.first_name || 'Unknown') + ' ' + (a.employees?.last_name || '')}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/60 dark:bg-slate-600/60 text-slate-600 dark:text-slate-300 capitalize">
+                              {a.assignment_status?.replace('_', ' ')}
+                            </span>
                             <button
                               onClick={() => handleRelease(a.id, (a.employees?.first_name || '') + ' ' + (a.employees?.last_name || ''), job.job_number)}
                               className="ml-1 p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
