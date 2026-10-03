@@ -14,7 +14,6 @@ export const mobileApi = {
         await supabase.from('employees').update({ user_id: userId }).eq('id', byEmail.id)
         data = byEmail
       } else {
-        // ✅ Sequential employee code: NG0001, NG0002, etc.
         const { data: lastEmp } = await supabase
           .from('employees')
           .select('employee_code')
@@ -57,7 +56,6 @@ export const mobileApi = {
   // JOBS
   // ============================================
   async getOpenJobs() {
-    // Get all available jobs
     const { data: availableJobs } = await supabase
       .from('jobs')
       .select('*')
@@ -67,18 +65,14 @@ export const mobileApi = {
 
     if (!availableJobs?.length) return { data: [] }
 
-    // Get job IDs
     const jobIds = availableJobs.map(j => j.id)
 
-    // Get clients separately
     const clientIds = [...new Set(availableJobs.map(j => j.client_id).filter(Boolean))]
     const { data: clients } = await supabase.from('clients').select('id, company_name, phone, city').in('id', clientIds)
 
-    // Get categories separately
     const catIds = [...new Set(availableJobs.map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
-    // Get active assignments
     const { data: activeAssignments } = await supabase
       .from('field_job_assignments')
       .select('job_id, employee_id, assignment_status')
@@ -111,11 +105,9 @@ export const mobileApi = {
 
     const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
 
-    // Get clients
     const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
     const { data: clients } = await supabase.from('clients').select('id, company_name, phone, city').in('id', clientIds)
 
-    // Get categories
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
@@ -144,11 +136,9 @@ export const mobileApi = {
     const jobIds = assignments.map(a => a.job_id).filter(Boolean)
     const { data: jobs } = await supabase.from('jobs').select('*').in('id', jobIds)
 
-    // Get clients
     const clientIds = [...new Set((jobs || []).map(j => j.client_id).filter(Boolean))]
     const { data: clients } = await supabase.from('clients').select('id, company_name').in('id', clientIds)
 
-    // Get categories
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
@@ -166,7 +156,6 @@ export const mobileApi = {
     const { data: job } = await supabase.from('jobs').select('*').eq('id', jobId).single()
     if (!job) return { data: null }
 
-    // Get all related data separately
     const [clientsResult, categoriesResult, assignmentsResult, checklistsResult, photosResult, reportsResult] = await Promise.all([
       job.client_id ? supabase.from('clients').select('*').eq('id', job.client_id).single() : { data: null },
       job.job_category_id ? supabase.from('job_categories').select('*').eq('id', job.job_category_id).single() : { data: null },
@@ -176,7 +165,6 @@ export const mobileApi = {
       supabase.from('job_reports').select('*').eq('job_id', jobId)
     ])
 
-    // Get employee names for assignments
     let assignmentsWithNames = assignmentsResult.data || []
     if (assignmentsWithNames.length > 0) {
       const empIds = [...new Set(assignmentsWithNames.map(a => a.employee_id).filter(Boolean))]
@@ -224,34 +212,61 @@ export const mobileApi = {
 
     if (aErr) return { success: false, error: aErr.message }
 
-    const { error: jobErr } = await supabase
+    // Note: we deliberately do NOT set jobs.status = 'in_progress' here.
+    // Selecting a job = 'assigned'. Actual work starts with startJob().
+    // The jobs row still needs its updated_at touched for the tracker.
+    await supabase
       .from('jobs')
-      .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+      .update({ updated_at: new Date().toISOString() })
       .eq('id', jobId)
-
-    if (jobErr) console.error('Job status update error:', jobErr)
+      .eq('status', 'scheduled')
 
     await mobileApi.logAction(employeeId, 'job_selected', 'Selected job', jobId, 'job')
     return { success: true }
   },
 
+  // ═══════════════════════════════════════════════
+  // ✅ AMENDED: Also updates jobs.status = 'in_progress'
+  // Previously only touched field_job_assignments, so Live Jobs (which
+  // reads jobs.status) kept showing the job as 'scheduled'.
+  // ═══════════════════════════════════════════════
   async startJob(jobId, employeeId, lat, lng) {
+    // 1. Flip the assignment to in_progress
     const updates = { assignment_status: 'in_progress', started_at: new Date().toISOString() }
     if (lat) { updates.check_in_latitude = lat; updates.check_in_longitude = lng; updates.check_in_time = new Date().toISOString() }
-    await supabase.from('field_job_assignments').update(updates).eq('job_id', jobId).eq('employee_id', employeeId)
+
+    await supabase
+      .from('field_job_assignments')
+      .update(updates)
+      .eq('job_id', jobId)
+      .eq('employee_id', employeeId)
+
+    // ✅ 2. Also bump the parent job to in_progress
+    const nowIso = new Date().toISOString()
+    const { error: jobErr } = await supabase
+      .from('jobs')
+      .update({ status: 'in_progress', actual_start_time: nowIso, updated_at: nowIso })
+      .eq('id', jobId)
+      .neq('status', 'completed')
+      .neq('status', 'cancelled')
+
+    if (jobErr) {
+      // Non-fatal — the assignment is already saved. LiveJobs.jsx derives
+      // the display status from assignments too, so the UI stays correct.
+      console.warn('startJob: could not update jobs.status —', jobErr.message)
+    }
+
     await mobileApi.logAction(employeeId, 'job_started', 'Started job', jobId, 'job', lat, lng)
     return { success: true }
   },
 
   // ═══════════════════════════════════════════════
-  // ✅ COMPLETE JOB — AMENDED: Better error handling + step-by-step
-  //    + UUID trigger fallback (retry with minimal payload, return warning)
+  // COMPLETE JOB
   // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
     console.log('🔄 [completeJob] START', { jobId, employeeId, lat, lng })
 
     try {
-      // 1. Update assignment to completed
       const assignmentUpdates = {
         assignment_status: 'completed',
         completed_at: new Date().toISOString()
@@ -275,7 +290,6 @@ export const mobileApi = {
       }
       console.log('✅ [completeJob] Assignment updated:', assignData)
 
-      // 2. Get job details
       const { data: job, error: fetchError } = await supabase
         .from('jobs')
         .select('*')
@@ -287,8 +301,6 @@ export const mobileApi = {
         return { success: false, error: `Could not load job: ${fetchError.message}` }
       }
 
-      // 3. Mark job as completed
-      // ✅ AMENDED: tolerate DB-trigger UUID errors (e.g. 'web_app' cast failure)
       const nowIso = new Date().toISOString()
       const fullUpdate = {
         status: 'completed',
@@ -308,9 +320,6 @@ export const mobileApi = {
         console.error('❌ [completeJob] Job status update failed:', jobError)
         const msg = jobError.message || ''
 
-        // ✅ Known issue: a DB trigger on `jobs` casts a non-UUID (e.g. 'web_app')
-        //    into a uuid column when auth.uid() is null. Retry with a minimal
-        //    payload; if it still fails, do NOT abort — the assignment is saved.
         if (msg.includes('invalid input syntax for type uuid')) {
           console.warn('⚠️ [completeJob] UUID trigger error detected — retrying minimal update')
           const { error: retryError } = await supabase
@@ -326,14 +335,12 @@ export const mobileApi = {
             console.log('✅ [completeJob] Job status updated via minimal payload')
           }
         } else {
-          // A real, unexpected error — still abort.
           return { success: false, error: `Job status update failed: ${msg}` }
         }
       } else {
         console.log('✅ [completeJob] Job marked completed')
       }
 
-      // 4. Get client info (optional)
       let clientInfo = null
       if (job.client_id) {
         const { data: client } = await supabase
@@ -344,7 +351,6 @@ export const mobileApi = {
         clientInfo = client
       }
 
-      // 5. Create invoice (non-blocking — don't fail the whole completion if invoice fails)
       let invoiceId = null
       if (job && job.quoted_amount && job.quoted_amount > 0) {
         try {
@@ -367,12 +373,10 @@ export const mobileApi = {
             console.warn('⚠️ [completeJob] Invoice not created (non-critical):', invoiceResult.error)
           }
         } catch (invoiceErr) {
-          // Don't fail the whole thing if invoice fails
           console.warn('⚠️ [completeJob] Invoice exception (non-critical):', invoiceErr.message)
         }
       }
 
-      // 6. Log action (non-critical)
       await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
 
       console.log('✅ [completeJob] SUCCESS', jobUpdateWarning ? '(with warning)' : '')
@@ -387,9 +391,6 @@ export const mobileApi = {
     }
   },
 
-  // ═══════════════════════════════════════════════
-  // ✅ CREATE INVOICE — AMENDED: Safer
-  // ═══════════════════════════════════════════════
   async createInvoiceForJob(job, clientInfo = null) {
     console.log('📄 Creating invoice for:', job?.job_number)
 
@@ -433,7 +434,6 @@ export const mobileApi = {
 
       console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
 
-      // Insert invoice item (non-critical)
       try {
         const { error: itemError } = await supabase
           .from('invoice_items')
@@ -453,7 +453,6 @@ export const mobileApi = {
         console.warn('⚠️ Invoice item exception (non-critical):', itemErr.message)
       }
 
-      // Update quotation if exists (non-critical)
       if (job.quotation_id) {
         try {
           await supabase.from('quotations').update({
