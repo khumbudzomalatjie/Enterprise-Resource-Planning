@@ -43,7 +43,22 @@ export const fieldOpsApi = {
     const { data: photos } = await supabase.from('job_photos').select('*').in('job_id', jobIds).order('created_at', { ascending: false })
 
     const merged = jobs
-      .filter(job => job.status !== 'cancelled' && job.status !== 'completed')
+      .filter(job => {
+        // Skip explicitly closed jobs
+        if (job.status === 'cancelled' || job.status === 'completed') return false
+
+        // ✅ FIX: hide jobs whose assignments are ALL 'completed'.
+        // Covers the case where the mobile "web_app" UUID trigger bug
+        // blocked the jobs.status UPDATE — the assignment is done, so
+        // the job must not keep appearing on Live Jobs.
+        const jobAssignments = (allAssignments || []).filter(a => a.job_id === job.id)
+        const activeAssignments = jobAssignments.filter(a => a.assignment_status !== 'released')
+        if (activeAssignments.length > 0 && activeAssignments.every(a => a.assignment_status === 'completed')) {
+          return false
+        }
+
+        return true
+      })
       .map(job => ({
         ...job,
         clients: (clients || []).find(c => c.id === job.client_id) || null,
@@ -68,8 +83,7 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ✅ NEW: Fetch all photos for a job with signed display URLs
-  //    (works whether the 'job-photos' bucket is public or private)
+  // ✅ Photos helper (with signed URLs) — used by LiveJobs and JobTracker
   async getJobPhotos(jobId) {
     const { data, error } = await supabase
       .from('job_photos')
@@ -193,7 +207,26 @@ export const fieldOpsApi = {
     const { data: clients } = await supabase.from('clients').select('id, company_name, client_code, phone, city').in('id', clientIds)
     const catIds = [...new Set((jobs || []).map(j => j.job_category_id).filter(Boolean))]
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
-    const activeJobs = data.filter(a => { const job = (jobs || []).find(j => j.id === a.job_id); return job && job.status !== 'completed' && job.status !== 'cancelled' }).map(a => { const job = (jobs || []).find(j => j.id === a.job_id); return { ...a, jobs: job ? { ...job, clients: (clients || []).find(c => c.id === job.client_id) || null, job_categories: (categories || []).find(c => c.id === job.job_category_id) || null } : null } })
+    const activeJobs = data
+      .filter(a => {
+        const job = (jobs || []).find(j => j.id === a.job_id)
+        if (!job) return false
+        if (job.status === 'completed' || job.status === 'cancelled') return false
+        // ✅ Also hide if this specific assignment is completed
+        if (a.assignment_status === 'completed') return false
+        return true
+      })
+      .map(a => {
+        const job = (jobs || []).find(j => j.id === a.job_id)
+        return {
+          ...a,
+          jobs: job ? {
+            ...job,
+            clients: (clients || []).find(c => c.id === job.client_id) || null,
+            job_categories: (categories || []).find(c => c.id === job.job_category_id) || null
+          } : null
+        }
+      })
     return { data: activeJobs }
   },
 
