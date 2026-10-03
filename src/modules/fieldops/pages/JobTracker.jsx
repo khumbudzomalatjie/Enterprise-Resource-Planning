@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
-import { Search, Sun, Moon, Sparkles, ChevronRight, History, Briefcase, RefreshCw } from 'lucide-react'
+import {
+  Search, Sun, Moon, Sparkles, ChevronRight, History, Briefcase,
+  RefreshCw, Camera, X
+} from 'lucide-react'
 
 export default function JobTracker() {
   const { isDark, toggleTheme } = useThemeStore()
@@ -13,6 +16,8 @@ export default function JobTracker() {
   const [jobDetails, setJobDetails] = useState(null)
   const [auditLogs, setAuditLogs] = useState([])
   const [assignments, setAssignments] = useState([])
+  const [photos, setPhotos] = useState([])            // ✅ NEW
+  const [lightboxPhoto, setLightboxPhoto] = useState(null) // ✅ NEW
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dbStatus, setDbStatus] = useState('checking...')
@@ -27,17 +32,17 @@ export default function JobTracker() {
       const { data, error, count } = await supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-      
+
       if (error) {
         setDbStatus('Error: ' + error.message)
         return
       }
-      
+
       if (count === 0) {
         setDbStatus('No jobs found in database')
         return
       }
-      
+
       setDbStatus(`${count} jobs found`)
       loadAllJobs()
     } catch (err) {
@@ -52,13 +57,13 @@ export default function JobTracker() {
       .select('job_number, title, status, clients(company_name), scheduled_date')
       .order('created_at', { ascending: false })
       .limit(100)
-    
+
     if (error) {
       console.error('Load jobs error:', error)
       setError('Failed to load jobs: ' + error.message)
       return
     }
-    
+
     console.log('Jobs loaded:', data)
     setAllJobs(data || [])
     if (data?.length === 0) {
@@ -66,6 +71,25 @@ export default function JobTracker() {
     } else {
       setError('')
     }
+  }
+
+  // ✅ NEW: resolve display URL for a photo row (signed URL works for public or private buckets)
+  const resolvePhotoUrl = async (photo) => {
+    let displayUrl = photo.photo_url
+    try {
+      // Extract storage path after /job-photos/
+      const match = photo.photo_url?.match(/\/job-photos\/(.+?)(?:\?|$)/)
+      if (match) {
+        const path = decodeURIComponent(match[1])
+        const { data: signed } = await supabase.storage
+          .from('job-photos')
+          .createSignedUrl(path, 3600)
+        if (signed?.signedUrl) displayUrl = signed.signedUrl
+      }
+    } catch (e) {
+      console.warn('Signed URL failed for photo', photo.id, e.message)
+    }
+    return { ...photo, display_url: displayUrl }
   }
 
   // Search for a job
@@ -76,7 +100,9 @@ export default function JobTracker() {
     setJobDetails(null)
     setAuditLogs([])
     setAssignments([])
-    
+    setPhotos([])              // ✅ NEW: reset photos
+    setLightboxPhoto(null)     // ✅ NEW
+
     if (!searchInput.trim()) return
 
     setLoading(true)
@@ -121,7 +147,7 @@ export default function JobTracker() {
 
     // Job found! Now get details
     setSelectedJob(foundJob)
-    
+
     // Get client info
     if (foundJob.client_id) {
       const { data: client } = await supabase
@@ -158,6 +184,24 @@ export default function JobTracker() {
       .eq('job_id', foundJob.id)
       .order('created_at', { ascending: true })
     setAuditLogs(auditData || [])
+
+    // ✅ NEW: Get photos
+    const { data: photoData, error: photoError } = await supabase
+      .from('job_photos')
+      .select('*')
+      .eq('job_id', foundJob.id)
+      .order('created_at', { ascending: false })
+
+    if (photoError) {
+      console.warn('Photo fetch error (non-critical):', photoError.message)
+    }
+
+    const photosWithUrls = await Promise.all(
+      (photoData || []).map(resolvePhotoUrl)
+    )
+
+    console.log(`📸 Loaded ${photosWithUrls.length} photos for ${foundJob.job_number}`)
+    setPhotos(photosWithUrls)
 
     setLoading(false)
   }
@@ -289,6 +333,42 @@ export default function JobTracker() {
           </div>
         )}
 
+        {/* ✅ NEW: Photos */}
+        {photos.length > 0 && (
+          <div className="neu-raised rounded-2xl p-4 mb-4">
+            <h2 className="font-bold text-lg mb-3 flex items-center gap-2">
+              <Camera className="w-5 h-5 text-blue-600" />
+              Photos ({photos.length})
+            </h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {photos.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setLightboxPhoto(p)}
+                  className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-700 hover:ring-2 hover:ring-blue-500 transition-all"
+                >
+                  <img
+                    src={p.display_url || p.photo_url}
+                    alt={p.caption || p.photo_type || 'Job photo'}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      console.warn('Image load failed:', p.id, p.display_url || p.photo_url)
+                      e.currentTarget.style.opacity = '0.3'
+                    }}
+                  />
+                  {p.photo_type && (
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] bg-black/60 text-white capitalize">
+                      {p.photo_type}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Audit Logs */}
         {auditLogs.length > 0 && (
           <div className="neu-raised rounded-2xl p-4 mb-4">
@@ -323,6 +403,43 @@ export default function JobTracker() {
           </div>
         )}
       </main>
+
+      {/* ✅ NEW: Lightbox */}
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
+            onClick={(e) => { e.stopPropagation(); setLightboxPhoto(null) }}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="max-w-5xl max-h-[90vh] flex flex-col items-center">
+            <img
+              src={lightboxPhoto.display_url || lightboxPhoto.photo_url}
+              alt={lightboxPhoto.caption || ''}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            {(lightboxPhoto.caption || lightboxPhoto.photo_type || lightboxPhoto.created_at) && (
+              <div className="mt-3 text-center">
+                {lightboxPhoto.photo_type && (
+                  <p className="text-white text-sm font-medium capitalize">{lightboxPhoto.photo_type}</p>
+                )}
+                {lightboxPhoto.caption && (
+                  <p className="text-white/70 text-xs mt-1">{lightboxPhoto.caption}</p>
+                )}
+                {lightboxPhoto.created_at && (
+                  <p className="text-white/50 text-xs mt-1">{formatDateTime(lightboxPhoto.created_at)}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
