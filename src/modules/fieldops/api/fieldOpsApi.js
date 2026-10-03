@@ -68,6 +68,37 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ NEW: Fetch all photos for a job with signed display URLs
+  //    (works whether the 'job-photos' bucket is public or private)
+  async getJobPhotos(jobId) {
+    const { data, error } = await supabase
+      .from('job_photos')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+
+    if (error || !data?.length) return { data: data || [], error }
+
+    const withUrls = await Promise.all(data.map(async (p) => {
+      let displayUrl = p.photo_url
+      try {
+        const match = p.photo_url?.match(/\/job-photos\/(.+?)(?:\?|$)/)
+        if (match) {
+          const path = decodeURIComponent(match[1])
+          const { data: signed } = await supabase.storage
+            .from('job-photos')
+            .createSignedUrl(path, 3600)
+          if (signed?.signedUrl) displayUrl = signed.signedUrl
+        }
+      } catch (e) {
+        console.warn('Signed URL failed for photo', p.id, e.message)
+      }
+      return { ...p, display_url: displayUrl }
+    }))
+
+    return { data: withUrls, error: null }
+  },
+
   async assignEmployeeToJob(jobId, employeeId, teamId = null) {
     const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
@@ -112,7 +143,7 @@ export const fieldOpsApi = {
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
     if (status === 'completed') updates.actual_end_time = new Date().toISOString()
-    
+
     const { data, error } = await supabase
       .from('jobs')
       .update(updates)
@@ -122,20 +153,20 @@ export const fieldOpsApi = {
 
     if (!error && employeeId) {
       const as = status === 'in_progress' ? 'in_progress' : status === 'completed' ? 'completed' : 'assigned'
-      await supabase.from('field_job_assignments').update({ 
+      await supabase.from('field_job_assignments').update({
         assignment_status: as,
         ...(status === 'in_progress' ? { started_at: new Date().toISOString() } : {}),
         ...(status === 'completed' ? { completed_at: new Date().toISOString() } : {})
       }).eq('job_id', jobId).eq('employee_id', employeeId)
     }
-    
+
     if (!error && status === 'completed' && !employeeId) {
-      await supabase.from('field_job_assignments').update({ 
+      await supabase.from('field_job_assignments').update({
         assignment_status: 'completed',
         completed_at: new Date().toISOString()
       }).eq('job_id', jobId).in('assignment_status', ['assigned', 'accepted', 'in_progress'])
     }
-    
+
     return { data, error }
   },
 
