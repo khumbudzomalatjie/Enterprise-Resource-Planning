@@ -93,6 +93,7 @@ export default function LiveJobs() {
     }
   }
 
+  // ✅ AMENDED: order by created_at (column that exists) + resolve signed URLs
   const loadJobPhotos = async (jobId, force = false) => {
     if (!force && jobPhotos[jobId]) return
     try {
@@ -100,10 +101,29 @@ export default function LiveJobs() {
         .from('job_photos')
         .select('*')
         .eq('job_id', jobId)
-        .order('taken_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (error) throw error
-      setJobPhotos(prev => ({ ...prev, [jobId]: data || [] }))
+
+      // Resolve each photo to a signed URL (works for public OR private buckets)
+      const withUrls = await Promise.all((data || []).map(async (p) => {
+        let displayUrl = p.photo_url
+        try {
+          const match = p.photo_url?.match(/\/job-photos\/(.+?)(?:\?|$)/)
+          if (match) {
+            const path = decodeURIComponent(match[1])
+            const { data: signed } = await supabase.storage
+              .from('job-photos')
+              .createSignedUrl(path, 3600)
+            if (signed?.signedUrl) displayUrl = signed.signedUrl
+          }
+        } catch (e) {
+          console.warn('Signed URL failed for photo', p.id, e.message)
+        }
+        return { ...p, display_url: displayUrl }
+      }))
+
+      setJobPhotos(prev => ({ ...prev, [jobId]: withUrls }))
     } catch (err) {
       console.error('Load photos error:', err)
       setJobPhotos(prev => ({ ...prev, [jobId]: [] }))
@@ -462,7 +482,11 @@ export default function LiveJobs() {
                             key={photo.id}
                             onClick={() => setSelectedPhoto(photo)}
                             className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden cursor-pointer group">
-                            <img src={photo.photo_url} alt="Photo" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                            <img
+                              src={photo.display_url || photo.photo_url}
+                              alt="Photo"
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                            />
                             <span className={'absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold text-white ' + (
                               photo.photo_type === 'before' ? 'bg-blue-500' :
                               photo.photo_type === 'after' ? 'bg-emerald-500' :
@@ -540,7 +564,11 @@ export default function LiveJobs() {
                     {(jobPhotos[showPhotoGallery.id] || []).map(photo => (
                       <div key={photo.id} onClick={() => setSelectedPhoto(photo)}
                         className="relative rounded-xl overflow-hidden cursor-pointer group">
-                        <img src={photo.photo_url} alt="Photo" className="w-full h-40 object-cover group-hover:scale-105 transition-transform" />
+                        <img
+                          src={photo.display_url || photo.photo_url}
+                          alt="Photo"
+                          className="w-full h-40 object-cover group-hover:scale-105 transition-transform"
+                        />
                         <span className={'absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize text-white ' + (
                           photo.photo_type === 'before' ? 'bg-blue-500' :
                           photo.photo_type === 'after' ? 'bg-emerald-500' :
@@ -549,7 +577,7 @@ export default function LiveJobs() {
                           {photo.photo_type}
                         </span>
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                          <p className="text-white/60 text-[9px]">{formatDate(photo.taken_at)}</p>
+                          <p className="text-white/60 text-[9px]">{formatDate(photo.created_at)}</p>
                         </div>
                       </div>
                     ))}
@@ -583,13 +611,13 @@ export default function LiveJobs() {
               onClick={e => e.stopPropagation()}
             >
               <img
-                src={selectedPhoto.photo_url}
+                src={selectedPhoto.display_url || selectedPhoto.photo_url}
                 alt="Full size"
                 className="w-full max-h-[75vh] object-contain rounded-2xl"
               />
               <div className="flex justify-center gap-3 mt-4">
                 <a
-                  href={selectedPhoto.photo_url}
+                  href={selectedPhoto.display_url || selectedPhoto.photo_url}
                   download
                   target="_blank"
                   rel="noopener noreferrer"
@@ -607,7 +635,7 @@ export default function LiveJobs() {
               <div className="mt-3 text-center text-white/70 text-sm">
                 <p>Type: <span className="capitalize font-medium text-white">{selectedPhoto.photo_type}</span></p>
                 {selectedPhoto.caption && <p className="mt-1">{selectedPhoto.caption}</p>}
-                <p className="text-xs mt-1">{formatDate(selectedPhoto.taken_at)}</p>
+                <p className="text-xs mt-1">{formatDate(selectedPhoto.created_at)}</p>
               </div>
             </motion.div>
           </motion.div>
