@@ -119,10 +119,22 @@ export default function LiveJobs() {
   }, [liveJobs])
 
   const jobs = useCallback(() => {
-    // Defensive filter: never show completed or cancelled jobs on Live Jobs
-    const allJobs = [...(liveJobs || [])].filter(
-      j => j.status !== 'completed' && j.status !== 'cancelled'
-    )
+    // ✅ FIX: hide jobs that are explicitly closed OR whose assignments
+    // are ALL completed (covers stale jobs.status caused by the mobile
+    // "web_app" UUID trigger bug).
+    const allJobs = [...(liveJobs || [])].filter(j => {
+      if (j.status === 'completed' || j.status === 'cancelled') return false
+
+      const activeAssigns = (j.field_job_assignments || []).filter(
+        a => a.assignment_status !== 'released'
+      )
+      if (activeAssigns.length > 0 && activeAssigns.every(a => a.assignment_status === 'completed')) {
+        return false
+      }
+
+      return true
+    })
+
     const myJobIds = new Set((myAssignedJobs || []).map(a => a.job_id || a.jobs?.id))
     return allJobs.map(job => ({
       ...job,
