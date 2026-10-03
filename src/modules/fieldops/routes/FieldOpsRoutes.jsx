@@ -4,6 +4,7 @@ import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import FieldOpsDashboard from '../pages/FieldOpsDashboard'
 import LiveJobs from '../pages/LiveJobs'
 import JobTracker from '../pages/JobTracker'
+import PhotoGallery from '../pages/PhotoGallery'          // ✅ NEW
 
 // Enterprise Incident Management
 import IncidentDashboard from '../incidents/pages/IncidentDashboard'
@@ -38,7 +39,7 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       {/* LIVE JOBS */}
       <Route path="/live-jobs" element={
         <ProtectedRoute>
@@ -47,12 +48,21 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       {/* JOB TRACKER */}
       <Route path="/job-tracker" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
             <JobTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* ✅ PHOTO GALLERY */}
+      <Route path="/photos" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <PhotoGallery />
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
@@ -88,7 +98,7 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/incidents/report" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -96,7 +106,7 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/incidents/list" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -104,7 +114,7 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/incidents/tracker" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -128,7 +138,7 @@ export default function FieldOpsRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/incidents/:id" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
