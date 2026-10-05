@@ -14,7 +14,7 @@ import {
   Sun, Moon, Shield, Workflow, Activity
 } from 'lucide-react'
 
-// ✅ Tiles to hide from the dashboard.
+// ✅ Tiles to hide from the dashboard GLOBALLY (applies to every user).
 // Add a route path here to hide the tile (module stays accessible via direct URL).
 // Remove the entry to make it visible again.
 const HIDDEN_MODULES = [
@@ -152,8 +152,13 @@ export default function Dashboard() {
   ]
 
   const modules = allModules.filter(module => {
-    // ✅ Skip hidden modules
+    // ✅ Global hides (applies to everyone)
     if (HIDDEN_MODULES.includes(module.path)) return false
+
+    // ✅ Per-user hides — respected even for Super Admins, so an admin can
+    //    declutter their own dashboard. Cleared from User Management.
+    const perUserHidden = Array.isArray(profile?.hidden_modules) ? profile.hidden_modules : []
+    if (perUserHidden.includes(module.path)) return false
 
     if (userRole === USER_ROLES.SUPER_ADMIN) return true
     return module.roles.includes(userRole)
