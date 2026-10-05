@@ -5,6 +5,7 @@ import Navbar from '../../../components/Navbar'
 import useOperationsStore from '../store/operationsStore'
 import useCRMStore from '../../crm/store/crmStore'
 import useThemeStore from '../../../store/themeStore'
+import useAuthStore from '../../../store/authStore'
 import toast from 'react-hot-toast'
 import { Briefcase, Save, Send, Calendar, MapPin, Clock, Users, Sun, Moon, Sparkles, ArrowLeft } from 'lucide-react'
 
@@ -12,6 +13,7 @@ export default function CreateJob() {
   const { createJob, fetchJobCategories, jobCategories } = useOperationsStore()
   const { clients, fetchClients } = useCRMStore()
   const { isDark, toggleTheme } = useThemeStore()
+  const { user } = useAuthStore()
   const navigate = useNavigate()
 
   const [jobData, setJobData] = useState({
@@ -45,10 +47,10 @@ export default function CreateJob() {
     if (!clientsResult.success) {
       toast.error('Failed to load clients')
     }
-    
+
     const categoriesResult = await fetchJobCategories()
     if (!categoriesResult.success) {
-      toast.error('Failed to load job categories')
+      toast.error('Failed to load services')
     }
   }
 
@@ -90,9 +92,13 @@ export default function CreateJob() {
       return
     }
 
+    const selectedClient = clients.find(c => c.id === jobData.client_id)
+
     const submitData = {
       ...jobData,
       status,
+      created_by: user?.id || null,
+      client_name: selectedClient?.company_name || null,
       scheduled_date: jobData.scheduled_date || null,
       scheduled_start_time: jobData.scheduled_start_time || null,
       scheduled_end_time: jobData.scheduled_end_time || null,
@@ -103,7 +109,8 @@ export default function CreateJob() {
       toast.success(status === 'scheduled' ? 'Job created and scheduled!' : 'Job saved as draft!')
       navigate(`/operations/jobs/${result.data.id}`)
     } else {
-      toast.error(result.error || 'Failed to create job')
+      console.error('Create job failed:', result.error)
+      toast.error(result.error || 'Failed to create job', { duration: 8000 })
     }
   }
 
@@ -128,7 +135,6 @@ export default function CreateJob() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/operations" className="text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400">
             Operations
@@ -141,7 +147,6 @@ export default function CreateJob() {
           <span className="text-slate-800 dark:text-white font-medium">New Job</span>
         </div>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
@@ -165,9 +170,9 @@ export default function CreateJob() {
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">
                     Client <span className="text-red-500">*</span>
                   </label>
-                  <select 
-                    value={jobData.client_id} 
-                    onChange={(e) => handleClientSelect(e.target.value)} 
+                  <select
+                    value={jobData.client_id}
+                    onChange={(e) => handleClientSelect(e.target.value)}
                     className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   >
                     <option value="">Select a client...</option>
@@ -182,34 +187,33 @@ export default function CreateJob() {
 
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">
-                    Job Category <span className="text-red-500">*</span>
+                    Service <span className="text-red-500">*</span>
                   </label>
-                  <select 
-                    value={jobData.job_category_id} 
-                    onChange={(e) => handleCategorySelect(e.target.value)} 
+                  <select
+                    value={jobData.job_category_id}
+                    onChange={(e) => handleCategorySelect(e.target.value)}
                     className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   >
-                    <option value="">Select a category...</option>
+                    <option value="">Select a service...</option>
                     {jobCategories.map(cat => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name} {cat.estimated_duration_minutes ? `(${cat.estimated_duration_minutes} min)` : ''}
-                      </option>
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
                   </select>
                   {jobCategories.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">No job categories loaded. Check database.</p>
+                    <p className="text-xs text-amber-600 mt-1">No services loaded. Check Inventory &gt; Services &amp; Pricing.</p>
                   )}
                 </div>
 
+                {/* ✅ CHIP — now shows only the service name */}
                 {jobData.job_category_id && (
                   <div className="md:col-span-2 flex flex-wrap gap-2">
                     {jobCategories.filter(c => c.id === jobData.job_category_id).map(cat => (
-                      <span 
+                      <span
                         key={cat.id}
                         className="px-3 py-1 rounded-full text-xs font-medium"
                         style={{ backgroundColor: cat.color + '20', color: cat.color, border: '1px solid ' + cat.color + '40' }}
                       >
-                        {cat.name} · {cat.estimated_duration_minutes} min · {cat.default_cleaners_required} cleaner(s)
+                        {cat.name}
                       </span>
                     ))}
                   </div>
@@ -219,12 +223,12 @@ export default function CreateJob() {
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">
                     Job Title <span className="text-red-500">*</span>
                   </label>
-                  <input 
-                    type="text" 
-                    value={jobData.title} 
-                    onChange={(e) => setJobData({...jobData, title: e.target.value})} 
-                    placeholder="e.g., Weekly Office Cleaning - Sandton Branch" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.title}
+                    onChange={(e) => setJobData({...jobData, title: e.target.value})}
+                    placeholder="e.g., Weekly Office Cleaning - Sandton Branch"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
 
@@ -232,12 +236,12 @@ export default function CreateJob() {
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">
                     Description
                   </label>
-                  <textarea 
-                    value={jobData.description} 
-                    onChange={(e) => setJobData({...jobData, description: e.target.value})} 
-                    rows={3} 
-                    placeholder="Detailed description of the work to be done..." 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <textarea
+                    value={jobData.description}
+                    onChange={(e) => setJobData({...jobData, description: e.target.value})}
+                    rows={3}
+                    placeholder="Detailed description of the work to be done..."
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
               </div>
@@ -254,62 +258,62 @@ export default function CreateJob() {
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">
                     Site Address <span className="text-red-500">*</span>
                   </label>
-                  <input 
-                    type="text" 
-                    value={jobData.site_address} 
-                    onChange={(e) => setJobData({...jobData, site_address: e.target.value})} 
-                    placeholder="Full street address" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.site_address}
+                    onChange={(e) => setJobData({...jobData, site_address: e.target.value})}
+                    placeholder="Full street address"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">City</label>
-                  <input 
-                    type="text" 
-                    value={jobData.site_city} 
-                    onChange={(e) => setJobData({...jobData, site_city: e.target.value})} 
-                    placeholder="City" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.site_city}
+                    onChange={(e) => setJobData({...jobData, site_city: e.target.value})}
+                    placeholder="City"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Postal Code</label>
-                  <input 
-                    type="text" 
-                    value={jobData.site_postal_code} 
-                    onChange={(e) => setJobData({...jobData, site_postal_code: e.target.value})} 
-                    placeholder="Postal code" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.site_postal_code}
+                    onChange={(e) => setJobData({...jobData, site_postal_code: e.target.value})}
+                    placeholder="Postal code"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Site Contact Name</label>
-                  <input 
-                    type="text" 
-                    value={jobData.site_contact_name} 
-                    onChange={(e) => setJobData({...jobData, site_contact_name: e.target.value})} 
-                    placeholder="Contact person on site" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.site_contact_name}
+                    onChange={(e) => setJobData({...jobData, site_contact_name: e.target.value})}
+                    placeholder="Contact person on site"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Site Contact Phone</label>
-                  <input 
-                    type="text" 
-                    value={jobData.site_contact_phone} 
-                    onChange={(e) => setJobData({...jobData, site_contact_phone: e.target.value})} 
-                    placeholder="Phone number" 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="text"
+                    value={jobData.site_contact_phone}
+                    onChange={(e) => setJobData({...jobData, site_contact_phone: e.target.value})}
+                    placeholder="Phone number"
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Access Instructions</label>
-                  <textarea 
-                    value={jobData.access_instructions} 
-                    onChange={(e) => setJobData({...jobData, access_instructions: e.target.value})} 
-                    rows={2} 
-                    placeholder="Gate code, parking info, key location, security instructions..." 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <textarea
+                    value={jobData.access_instructions}
+                    onChange={(e) => setJobData({...jobData, access_instructions: e.target.value})}
+                    rows={2}
+                    placeholder="Gate code, parking info, key location, security instructions..."
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
               </div>
@@ -324,47 +328,47 @@ export default function CreateJob() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Date</label>
-                  <input 
-                    type="date" 
-                    value={jobData.scheduled_date} 
-                    onChange={(e) => setJobData({...jobData, scheduled_date: e.target.value})} 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="date"
+                    value={jobData.scheduled_date}
+                    onChange={(e) => setJobData({...jobData, scheduled_date: e.target.value})}
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Start Time</label>
-                  <input 
-                    type="time" 
-                    value={jobData.scheduled_start_time} 
-                    onChange={(e) => setJobData({...jobData, scheduled_start_time: e.target.value})} 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="time"
+                    value={jobData.scheduled_start_time}
+                    onChange={(e) => setJobData({...jobData, scheduled_start_time: e.target.value})}
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">End Time</label>
-                  <input 
-                    type="time" 
-                    value={jobData.scheduled_end_time} 
-                    onChange={(e) => setJobData({...jobData, scheduled_end_time: e.target.value})} 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="time"
+                    value={jobData.scheduled_end_time}
+                    onChange={(e) => setJobData({...jobData, scheduled_end_time: e.target.value})}
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Est. Duration (minutes)</label>
-                  <input 
-                    type="number" 
-                    value={jobData.estimated_duration_minutes} 
-                    onChange={(e) => setJobData({...jobData, estimated_duration_minutes: parseInt(e.target.value) || 0})} 
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                  <input
+                    type="number"
+                    value={jobData.estimated_duration_minutes}
+                    onChange={(e) => setJobData({...jobData, estimated_duration_minutes: parseInt(e.target.value) || 0})}
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Priority</label>
-                  <select 
-                    value={jobData.priority} 
-                    onChange={(e) => setJobData({...jobData, priority: e.target.value})} 
+                  <select
+                    value={jobData.priority}
+                    onChange={(e) => setJobData({...jobData, priority: e.target.value})}
                     className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   >
                     <option value="low">Low</option>
@@ -376,12 +380,12 @@ export default function CreateJob() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Cleaners Required</label>
-                  <input 
-                    type="number" 
-                    value={jobData.cleaners_required} 
-                    onChange={(e) => setJobData({...jobData, cleaners_required: parseInt(e.target.value) || 1})} 
+                  <input
+                    type="number"
+                    value={jobData.cleaners_required}
+                    onChange={(e) => setJobData({...jobData, cleaners_required: parseInt(e.target.value) || 1})}
                     min="1"
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
               </div>
@@ -393,33 +397,33 @@ export default function CreateJob() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Quoted Amount (ZAR)</label>
-                  <input 
-                    type="number" 
-                    value={jobData.quoted_amount} 
-                    onChange={(e) => setJobData({...jobData, quoted_amount: parseFloat(e.target.value) || 0})} 
+                  <input
+                    type="number"
+                    value={jobData.quoted_amount}
+                    onChange={(e) => setJobData({...jobData, quoted_amount: parseFloat(e.target.value) || 0})}
                     placeholder="0.00"
                     step="0.01"
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Special Instructions</label>
-                  <textarea 
-                    value={jobData.special_instructions} 
-                    onChange={(e) => setJobData({...jobData, special_instructions: e.target.value})} 
-                    rows={3} 
+                  <textarea
+                    value={jobData.special_instructions}
+                    onChange={(e) => setJobData({...jobData, special_instructions: e.target.value})}
+                    rows={3}
                     placeholder="Special cleaning instructions, areas to focus on, chemicals to use/avoid..."
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 block">Internal Notes</label>
-                  <textarea 
-                    value={jobData.notes} 
-                    onChange={(e) => setJobData({...jobData, notes: e.target.value})} 
-                    rows={2} 
+                  <textarea
+                    value={jobData.notes}
+                    onChange={(e) => setJobData({...jobData, notes: e.target.value})}
+                    rows={2}
                     placeholder="Notes for team and management (not visible to client)..."
-                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50" 
+                    className="w-full p-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50"
                   />
                 </div>
               </div>
@@ -427,21 +431,21 @@ export default function CreateJob() {
 
             {/* Action Buttons */}
             <div className="flex gap-4 justify-end">
-              <button 
+              <button
                 onClick={() => navigate('/operations')}
                 className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-2"
               >
                 Cancel
               </button>
-              <button 
-                onClick={() => handleSubmit('pending')} 
+              <button
+                onClick={() => handleSubmit('pending')}
                 className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-slate-600 text-white hover:bg-slate-700 transition-colors flex items-center gap-2"
               >
                 <Save className="w-5 h-5" />
                 <span>Save as Draft</span>
               </button>
-              <button 
-                onClick={() => handleSubmit('scheduled')} 
+              <button
+                onClick={() => handleSubmit('scheduled')}
                 className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 transition-colors flex items-center gap-2"
               >
                 <Send className="w-5 h-5" />
