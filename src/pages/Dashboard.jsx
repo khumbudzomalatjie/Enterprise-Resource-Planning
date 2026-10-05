@@ -6,13 +6,20 @@ import useThemeStore from '../store/themeStore'
 import Navbar from '../components/Navbar'
 import { USER_ROLES } from '../types/authTypes'
 import toast from 'react-hot-toast'
-import { 
-  Users, Briefcase, TrendingUp, CreditCard, Package, 
+import {
+  Users, Briefcase, TrendingUp, CreditCard, Package,
   ShoppingCart, Landmark, Database, Smartphone,
   FileText, Calendar, FolderOpen, Truck, Clock,
   DollarSign, BarChart3, CheckCircle2, Sparkles,
   Sun, Moon, Shield, Workflow, Activity
 } from 'lucide-react'
+
+// ✅ Tiles to hide from the dashboard.
+// Add a route path here to hide the tile (module stays accessible via direct URL).
+// Remove the entry to make it visible again.
+const HIDDEN_MODULES = [
+  '/workflow',
+]
 
 export default function Dashboard() {
   const { user, profile } = useAuthStore()
@@ -23,121 +30,121 @@ export default function Dashboard() {
   const userRole = profile?.role
 
   const allModules = [
-    { 
-      icon: Users, 
-      label: 'Human Resources', 
+    {
+      icon: Users,
+      label: 'Human Resources',
       description: 'Staff lifecycle, recruitment',
       path: '/hr',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER]
     },
-    { 
-      icon: CreditCard, 
-      label: 'Payroll', 
+    {
+      icon: CreditCard,
+      label: 'Payroll',
       description: 'Salary, taxes, compliance',
       path: '/payroll',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER]
     },
-    { 
-      icon: TrendingUp, 
-      label: 'CRM & Clients', 
+    {
+      icon: TrendingUp,
+      label: 'CRM & Clients',
       description: 'Client management, pipeline',
       path: '/crm',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SALES_AGENT]
     },
-    { 
-      icon: FileText, 
-      label: 'Sales & Quotations', 
+    {
+      icon: FileText,
+      label: 'Sales & Quotations',
       description: 'Quotes, invoices, A4 PDF',
       path: '/sales',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SALES_AGENT, USER_ROLES.FINANCE_OFFICER]
     },
-    { 
-      icon: Briefcase, 
-      label: 'Operations', 
+    {
+      icon: Briefcase,
+      label: 'Operations',
       description: 'Job management, scheduling',
       path: '/operations',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]
     },
-    { 
-      icon: Package, 
-      label: 'Inventory', 
+    {
+      icon: Package,
+      label: 'Inventory',
       description: 'Stock, supplies, warehouses',
       path: '/inventory',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]
     },
-    { 
-      icon: ShoppingCart, 
-      label: 'Procurement', 
+    {
+      icon: ShoppingCart,
+      label: 'Procurement',
       description: 'Purchase orders, vendors, RFQs',
       path: '/procurement',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER]
     },
-    { 
-      icon: Shield, 
-      label: 'Audit Trail', 
+    {
+      icon: Shield,
+      label: 'Audit Trail',
       description: 'Full system activity log',
       path: '/audit',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER]
     },
-    { 
-      icon: Landmark, 
-      label: 'Finance', 
+    {
+      icon: Landmark,
+      label: 'Finance',
       description: 'Accounting, approvals, budgets',
       path: '/finance',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.OPERATIONS_MANAGER]
     },
-    { 
-      icon: Truck, 
-      label: 'Fleet Management', 
+    {
+      icon: Truck,
+      label: 'Fleet Management',
       description: 'Vehicle tracking, fuel, maintenance',
       path: '/fleet',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR]
     },
-    { 
-      icon: BarChart3, 
-      label: 'Reporting & Analytics', 
+    {
+      icon: BarChart3,
+      label: 'Reporting & Analytics',
       description: 'BI dashboards, KPI tracking, export',
       path: '/reports',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER]
     },
-    { 
-      icon: Workflow, 
-      label: 'Workflow Automation', 
+    {
+      icon: Workflow,
+      label: 'Workflow Automation',
       description: 'Approvals, triggers, business processes',
       path: '/workflow',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER]
     },
-    { 
-      icon: FolderOpen, 
-      label: 'Document Management', 
+    {
+      icon: FolderOpen,
+      label: 'Document Management',
       description: 'Contracts, policies, SOPs, storage',
       path: '/documents',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.HR_MANAGER]
     },
-    { 
-      icon: Database, 
-      label: 'Assets Management', 
+    {
+      icon: Database,
+      label: 'Assets Management',
       description: 'Asset register, depreciation, maintenance',
       path: '/assets',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.OPERATIONS_MANAGER]
     },
-    { 
-      icon: Activity, 
-      label: 'Tracker', 
+    {
+      icon: Activity,
+      label: 'Tracker',
       description: 'Track jobs, vendors, POs, inventory, vehicles, staff',
       path: '/tracker',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER, USER_ROLES.SUPERVISOR]
     },
-    { 
-      icon: Smartphone, 
-      label: 'Field Operations', 
+    {
+      icon: Smartphone,
+      label: 'Field Operations',
       description: 'Messages, live jobs, GPS tracking',
       path: '/fieldops',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.SALES_AGENT, USER_ROLES.CLEANER]
     },
-    { 
-      icon: Smartphone, 
-      label: 'Mobile App', 
+    {
+      icon: Smartphone,
+      label: 'Mobile App',
       description: 'Cleaner dashboard, jobs, clock in/out',
       path: '/mobile',
       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.SALES_AGENT, USER_ROLES.CLEANER]
@@ -145,15 +152,18 @@ export default function Dashboard() {
   ]
 
   const modules = allModules.filter(module => {
+    // ✅ Skip hidden modules
+    if (HIDDEN_MODULES.includes(module.path)) return false
+
     if (userRole === USER_ROLES.SUPER_ADMIN) return true
     return module.roles.includes(userRole)
   })
 
   const isModuleBuilt = (module) => {
     const builtModules = [
-      '/hr', '/payroll', '/crm', '/sales', '/operations', 
-      '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
-      '/reports', '/workflow', '/documents', '/assets', 
+      '/hr', '/payroll', '/crm', '/sales', '/operations',
+      '/inventory', '/procurement', '/audit', '/finance', '/fleet',
+      '/reports', '/workflow', '/documents', '/assets',
       '/tracker', '/fieldops', '/mobile'
     ]
     return builtModules.includes(module.path)
@@ -161,12 +171,12 @@ export default function Dashboard() {
 
   const handleModuleClick = (module) => {
     const availableModules = [
-      '/hr', '/payroll', '/crm', '/sales', '/operations', 
-      '/inventory', '/procurement', '/audit', '/finance', '/fleet', 
-      '/reports', '/workflow', '/documents', '/assets', 
+      '/hr', '/payroll', '/crm', '/sales', '/operations',
+      '/inventory', '/procurement', '/audit', '/finance', '/fleet',
+      '/reports', '/workflow', '/documents', '/assets',
       '/tracker', '/fieldops', '/mobile', '/dashboard', '/users'
     ]
-    
+
     if (availableModules.includes(module.path)) {
       navigate(module.path)
     } else {
