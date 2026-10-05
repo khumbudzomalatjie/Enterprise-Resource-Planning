@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 
 export default function RoleBasedRoute({ children, requiredRoles = [] }) {
-  const { user, profile, loading } = useAuthStore()
+  const { user, profile, loading, signOut } = useAuthStore()
 
   if (loading) {
     return (
@@ -19,16 +19,20 @@ export default function RoleBasedRoute({ children, requiredRoles = [] }) {
     return <Navigate to="/login" replace />
   }
 
-  // Only check roles if requiredRoles is provided and not empty
+  // ✅ Block deactivated / deleted users — sign them out and send to login
+  const blocked = profile && (profile.is_active === false || profile.deleted_at)
+  if (blocked) {
+    // Fire-and-forget signOut (don't await — we're inside render)
+    setTimeout(() => signOut(), 0)
+    return <Navigate to="/login" replace />
+  }
+
   if (requiredRoles.length > 0 && profile) {
     const hasRequiredRole = requiredRoles.includes(profile.role)
-    
     if (!hasRequiredRole) {
-      // If cleaner tries to access restricted page, send them to mobile
       if (profile.role === 'cleaner') {
         return <Navigate to="/mobile" replace />
       }
-      // Other roles go to unauthorized page
       return <Navigate to="/unauthorized" replace />
     }
   }
