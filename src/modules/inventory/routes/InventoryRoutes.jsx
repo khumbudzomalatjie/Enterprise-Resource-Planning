@@ -11,6 +11,7 @@ import ServiceList from '../pages/ServiceList'
 import ServiceForm from '../pages/ServiceForm'
 import ProductList from '../pages/ProductList'
 import ConsumableProducts from '../pages/ConsumableProducts'
+import ItemTracker from '../pages/ItemTracker'          // ✅ NEW
 import { USER_ROLES } from '../../../types/authTypes'
 
 export default function InventoryRoutes() {
@@ -18,9 +19,7 @@ export default function InventoryRoutes() {
 
   return (
     <Routes>
-      {/* ============================================ */}
-      {/* INVENTORY DASHBOARD                          */}
-      {/* ============================================ */}
+      {/* DASHBOARD */}
       <Route path="/" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -28,10 +27,8 @@ export default function InventoryRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
-      {/* ============================================ */}
-      {/* STOCK IN / STOCK OUT                         */}
-      {/* ============================================ */}
+
+      {/* STOCK IN / STOCK OUT */}
       <Route path="/stock-in" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -39,7 +36,7 @@ export default function InventoryRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/stock-out" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -48,9 +45,24 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ============================================ */}
-      {/* STOCK / ITEMS                                */}
-      {/* ============================================ */}
+      {/* ✅ ITEM TRACKER — audit trail */}
+      <Route path="/item-tracker" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <ItemTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/item-tracker/:id" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allowedRoles}>
+            <ItemTracker />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
+      {/* STOCK / ITEMS */}
       <Route path="/items" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -58,8 +70,7 @@ export default function InventoryRoutes() {
           </RoleBasedRoute>
         </ProtectedRoute>
       } />
-      
-      {/* Add Item Page */}
+
       <Route path="/items/new" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -68,7 +79,6 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* Stock Detail Page */}
       <Route path="/items/:id" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -77,7 +87,6 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* Edit Item Page */}
       <Route path="/items/:id/edit" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -86,7 +95,6 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* Stock Movements Page */}
       <Route path="/movements" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -95,9 +103,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ============================================ */}
-      {/* SERVICES & PRICING                           */}
-      {/* ============================================ */}
+      {/* SERVICES & PRICING */}
       <Route path="/services" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -120,9 +126,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ============================================ */}
-      {/* CONSUMABLE PRODUCTS                          */}
-      {/* ============================================ */}
+      {/* CONSUMABLE PRODUCTS */}
       <Route path="/consumables" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
@@ -131,9 +135,7 @@ export default function InventoryRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ============================================ */}
-      {/* PRODUCTS (GENERAL)                           */}
-      {/* ============================================ */}
+      {/* PRODUCTS (GENERAL) */}
       <Route path="/products" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allowedRoles}>
