@@ -9,7 +9,7 @@ import {
   Search, Package, ChevronRight, Sparkles, Sun, Moon,
   ArrowDown, ArrowUp, Sparkles as SparkleIcon, Tag,
   Briefcase, User, Calendar, Hash, Loader2, TrendingUp,
-  DollarSign, BarChart3, Clock
+  DollarSign, BarChart3, Clock, UserCircle2
 } from 'lucide-react'
 
 export default function ItemTracker() {
@@ -85,14 +85,12 @@ export default function ItemTracker() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-6 text-sm flex-wrap">
           <Link to="/inventory" className="text-slate-500 hover:text-emerald-600">Inventory</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
           <span className="text-slate-800 dark:text-white font-medium">Item Tracker</span>
         </div>
 
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <Clock className="w-8 h-8 text-emerald-600" />Item Tracker
@@ -103,7 +101,7 @@ export default function ItemTracker() {
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ═══════ LEFT: ITEM PICKER ═══════ */}
+          {/* ITEM PICKER */}
           <div className="lg:col-span-1">
             <div className="neu-raised rounded-3xl p-4 sticky top-24">
               <div className="relative mb-3">
@@ -150,7 +148,7 @@ export default function ItemTracker() {
             </div>
           </div>
 
-          {/* ═══════ RIGHT: TIMELINE ═══════ */}
+          {/* TIMELINE */}
           <div className="lg:col-span-2">
             {!selectedId ? (
               <div className="text-center py-20 neu-raised rounded-3xl">
@@ -169,7 +167,7 @@ export default function ItemTracker() {
               </div>
             ) : (
               <div className="space-y-5">
-                {/* Item header card */}
+                {/* Item header */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                   className="neu-raised rounded-3xl p-5 border-l-4 border-emerald-500"
@@ -201,7 +199,6 @@ export default function ItemTracker() {
                     </button>
                   </div>
 
-                  {/* Stat strip */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
                     <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10">
                       <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 mb-1">
@@ -251,12 +248,13 @@ export default function ItemTracker() {
                     <p className="text-center text-slate-500 py-8">No events recorded yet</p>
                   ) : (
                     <div className="relative">
-                      {/* Vertical line */}
                       <div className="absolute left-5 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700"></div>
 
                       <div className="space-y-3">
                         {events.map((event, idx) => {
                           const style = getEventStyle(event)
+                          const actor = event.performedBy
+
                           return (
                             <motion.div
                               key={event.id}
@@ -265,12 +263,10 @@ export default function ItemTracker() {
                               transition={{ delay: idx * 0.02 }}
                               className="relative flex gap-3 pl-0"
                             >
-                              {/* Icon bubble */}
                               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center z-10 ring-4 ring-white dark:ring-slate-800 ${style.bg}`}>
                                 {style.icon}
                               </div>
 
-                              {/* Card */}
                               <div className="flex-1 bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
                                 <div className="flex items-start justify-between gap-2 flex-wrap">
                                   <div className="flex-1 min-w-0">
@@ -298,24 +294,39 @@ export default function ItemTracker() {
                                   )}
                                 </div>
 
-                                <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500 flex-wrap">
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />{formatDateTime(event.timestamp)}
-                                  </span>
-                                  {event.performedBy && (
-                                    <span className="flex items-center gap-1">
-                                      <User className="w-3 h-3" />
-                                      {event.performedBy.first_name} {event.performedBy.last_name}
-                                      {event.performedBy.employee_code && ` (${event.performedBy.employee_code})`}
+                                {/* ✅ ACTOR ROW — prominently shows WHO did it */}
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                  {actor ? (
+                                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                      actor.source === 'employee'
+                                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                        : actor.source === 'profile'
+                                          ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
+                                          : 'bg-slate-100 text-slate-500 dark:bg-slate-700/50 dark:text-slate-400'
+                                    }`}>
+                                      <UserCircle2 className="w-3 h-3" />
+                                      <span>{actor.name}</span>
+                                      {actor.code && <span className="opacity-75">({actor.code})</span>}
+                                      {actor.role && <span className="opacity-75">· {actor.role}</span>}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-700/50 dark:text-slate-400">
+                                      <UserCircle2 className="w-3 h-3" />System
                                     </span>
                                   )}
+
+                                  <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                                    <Calendar className="w-3 h-3" />{formatDateTime(event.timestamp)}
+                                  </span>
+
                                   {event.metadata?.job_number && (
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-[10px] text-slate-500">
                                       <Briefcase className="w-3 h-3" />{event.metadata.job_number}
                                     </span>
                                   )}
+
                                   {event.metadata?.unit_cost != null && (
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-[10px] text-slate-500">
                                       <DollarSign className="w-3 h-3" />{formatCurrency(event.metadata.unit_cost)}
                                     </span>
                                   )}
