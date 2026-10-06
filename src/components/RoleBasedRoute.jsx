@@ -1,8 +1,9 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 
 export default function RoleBasedRoute({ children, requiredRoles = [] }) {
   const { user, profile, loading, signOut } = useAuthStore()
+  const location = useLocation()
 
   if (loading) {
     return (
@@ -19,17 +20,25 @@ export default function RoleBasedRoute({ children, requiredRoles = [] }) {
     return <Navigate to="/login" replace />
   }
 
-  // ✅ Block deactivated / deleted users — sign them out and send to login
+  // Block deactivated / deleted users — sign them out and send to login
   const blocked = profile && (profile.is_active === false || profile.deleted_at)
   if (blocked) {
-    // Fire-and-forget signOut (don't await — we're inside render)
     setTimeout(() => signOut(), 0)
     return <Navigate to="/login" replace />
   }
 
   if (requiredRoles.length > 0 && profile) {
     const hasRequiredRole = requiredRoles.includes(profile.role)
-    if (!hasRequiredRole) {
+
+    // ✅ Extra grants — admin can give a user access beyond their role
+    const extraGranted = Array.isArray(profile.extra_modules) ? profile.extra_modules : []
+    const path = location.pathname
+    const hasExtraGrant = extraGranted.some(
+      p => path === p || path.startsWith(p + '/')
+    )
+
+    if (!hasRequiredRole && !hasExtraGrant) {
+      // If cleaner tries to access restricted page, send them to mobile
       if (profile.role === 'cleaner') {
         return <Navigate to="/mobile" replace />
       }
