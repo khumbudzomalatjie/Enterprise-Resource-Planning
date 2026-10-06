@@ -4,6 +4,7 @@ import { inventoryApi } from '../api/inventoryApi'
 const useInventoryStore = create((set, get) => ({
   items: [],
   selectedItem: null,
+  itemAuditTrail: null,      // ✅ NEW
   stockMovements: [],
   warehouses: [],
   categories: [],
@@ -28,6 +29,20 @@ const useInventoryStore = create((set, get) => ({
     set({ selectedItem: data })
     return { success: true, data }
   },
+
+  // ✅ NEW
+  fetchItemAuditTrail: async (itemId) => {
+    set({ loading: true, error: null })
+    const { data, error } = await inventoryApi.getItemAuditTrail(itemId)
+    if (error) {
+      set({ error: error.message, loading: false })
+      return { success: false, error: error.message }
+    }
+    set({ itemAuditTrail: data, loading: false })
+    return { success: true, data }
+  },
+
+  clearItemAuditTrail: () => set({ itemAuditTrail: null }),
 
   createItem: async (itemData) => {
     const { data, error } = await inventoryApi.createItem(itemData)
