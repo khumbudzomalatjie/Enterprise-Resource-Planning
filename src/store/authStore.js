@@ -7,26 +7,27 @@ const useAuthStore = create((set, get) => ({
   session: null,
   loading: true,
   error: null,
+  _profileChannel: null,   // ✅ internal — realtime channel handle
 
+  // ============================================================
+  // INITIALIZE
+  // ============================================================
   initialize: async () => {
     try {
       set({ loading: true, error: null })
-      
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
+
       if (sessionError) {
         console.error('Session error:', sessionError)
         set({ loading: false })
         return
       }
-      
+
       if (session?.user) {
-        set({ 
-          user: session.user, 
-          session,
-          loading: false 
-        })
+        set({ user: session.user, session, loading: false })
         await get().fetchProfile(session.user.id)
+        get().subscribeToProfileChanges(session.user.id)   // ✅ realtime
       } else {
         set({ loading: false })
       }
@@ -36,20 +37,18 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ============================================================
+  // FETCH PROFILE (unchanged logic)
+  // ============================================================
   fetchProfile: async (userId) => {
     try {
-      console.log('Fetching profile for user:', userId)
-      
-      // First try to get existing profile
       let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single()
 
-      // If profile doesn't exist, create one
       if (error && error.code === 'PGRST116') {
-        console.log('Profile not found, creating new profile...')
         const user = get().user
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
@@ -65,7 +64,7 @@ const useAuthStore = create((set, get) => ({
 
         if (createError) {
           console.error('Error creating profile:', createError)
-          set({ 
+          set({
             profile: {
               id: userId,
               email: user?.email || '',
@@ -75,12 +74,11 @@ const useAuthStore = create((set, get) => ({
           })
           return
         }
-        
         data = newProfile
       } else if (error) {
         console.error('Error fetching profile:', error)
         const user = get().user
-        set({ 
+        set({
           profile: {
             id: userId,
             email: user?.email || '',
@@ -90,34 +88,74 @@ const useAuthStore = create((set, get) => ({
         })
         return
       }
-      
-      console.log('Profile loaded:', data)
+
       set({ profile: data })
     } catch (error) {
       console.error('Error in fetchProfile:', error)
     }
   },
 
+  // ============================================================
+  // ✅ REALTIME: subscribe to changes on THIS user's profile row
+  // Fires whenever a Super Admin edits role / hidden_modules /
+  // is_active / deleted_at in User Management.
+  // ============================================================
+  subscribeToProfileChanges: (userId) => {
+    // Unsubscribe any previous channel first
+    const existing = get()._profileChannel
+    if (existing) {
+      try { supabase.removeChannel(existing) } catch {}
+    }
+
+    const channel = supabase
+      .channel(`profile-changes-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${userId}`
+        },
+        (payload) => {
+          const updated = payload.new
+          if (!updated) return
+          console.log('🔔 Profile updated in real time:', updated)
+          set({ profile: updated })
+
+          // ✅ If we've been deactivated or deleted, sign out immediately
+          if (updated.is_active === false || updated.deleted_at) {
+            console.warn('🚫 Your account has been deactivated. Signing out...')
+            // Import here to avoid a circular dependency
+            import('react-hot-toast').then(({ default: toast }) => {
+              toast.error('Your account has been deactivated. Please contact an administrator.')
+            }).catch(() => {})
+            setTimeout(() => {
+              try { get().signOut() } catch {}
+            }, 250)
+          }
+        }
+      )
+      .subscribe()
+
+    set({ _profileChannel: channel })
+    console.log(`📡 Subscribed to realtime profile changes for ${userId}`)
+  },
+
+  // ============================================================
+  // SIGN IN (unchanged, plus realtime subscribe)
+  // ============================================================
   signIn: async (email, password) => {
     try {
       set({ loading: true, error: null })
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
 
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
 
-      set({ 
-        user: data.user, 
-        session: data.session,
-        loading: false 
-      })
-      
+      set({ user: data.user, session: data.session, loading: false })
       await get().fetchProfile(data.user.id)
-      
-      // AUDIT: Log login
+      get().subscribeToProfileChanges(data.user.id)   // ✅ realtime
+
       try {
         await supabase.rpc('log_audit', {
           p_module: 'Authentication',
@@ -129,13 +167,12 @@ const useAuthStore = create((set, get) => ({
       } catch (auditError) {
         console.error('Audit log error (non-critical):', auditError.message)
       }
-      
+
       return { success: true }
     } catch (error) {
       console.error('Sign in error:', error)
       set({ error: error.message, loading: false })
-      
-      // AUDIT: Log failed login
+
       try {
         await supabase.rpc('log_audit', {
           p_module: 'Authentication',
@@ -147,21 +184,30 @@ const useAuthStore = create((set, get) => ({
       } catch (auditError) {
         console.error('Audit log error (non-critical):', auditError.message)
       }
-      
+
       return { success: false, error: error.message }
     }
   },
 
+  // ============================================================
+  // SIGN OUT (unchanged, plus channel cleanup)
+  // ============================================================
   signOut: async () => {
     try {
       const userEmail = get().user?.email
-      
+
+      // ✅ Tear down the realtime channel before signing out
+      const channel = get()._profileChannel
+      if (channel) {
+        try { supabase.removeChannel(channel) } catch {}
+        set({ _profileChannel: null })
+      }
+
       set({ loading: true })
-      
+
       const { error } = await supabase.auth.signOut()
       if (error) throw error
 
-      // AUDIT: Log logout
       if (userEmail) {
         try {
           await supabase.rpc('log_audit', {
@@ -176,13 +222,7 @@ const useAuthStore = create((set, get) => ({
         }
       }
 
-      set({ 
-        user: null, 
-        profile: null, 
-        session: null,
-        loading: false 
-      })
-      
+      set({ user: null, profile: null, session: null, loading: false, _profileChannel: null })
       return { success: true }
     } catch (error) {
       console.error('Sign out error:', error)
@@ -191,19 +231,20 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ============================================================
+  // FORGOT PASSWORD (unchanged)
+  // ============================================================
   forgotPassword: async (email) => {
     try {
       set({ loading: true, error: null })
-      
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
-
       if (error) throw error
 
       set({ loading: false })
-      
-      // AUDIT: Log password reset request
+
       try {
         await supabase.rpc('log_audit', {
           p_module: 'Authentication',
@@ -215,7 +256,7 @@ const useAuthStore = create((set, get) => ({
       } catch (auditError) {
         console.error('Audit log error (non-critical):', auditError.message)
       }
-      
+
       return { success: true }
     } catch (error) {
       console.error('Forgot password error:', error)
@@ -224,19 +265,18 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ============================================================
+  // RESET PASSWORD (unchanged)
+  // ============================================================
   resetPassword: async (newPassword) => {
     try {
       set({ loading: true, error: null })
-      
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      })
 
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) throw error
 
       set({ loading: false })
-      
-      // AUDIT: Log password changed
+
       try {
         await supabase.rpc('log_audit', {
           p_module: 'Authentication',
@@ -248,7 +288,7 @@ const useAuthStore = create((set, get) => ({
       } catch (auditError) {
         console.error('Audit log error (non-critical):', auditError.message)
       }
-      
+
       return { success: true }
     } catch (error) {
       console.error('Reset password error:', error)
@@ -257,6 +297,9 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ============================================================
+  // UPDATE PROFILE (unchanged — used for self-edits)
+  // ============================================================
   updateProfile: async (userId, updates) => {
     try {
       const { data, error } = await supabase
@@ -268,8 +311,7 @@ const useAuthStore = create((set, get) => ({
 
       if (error) throw error
       set({ profile: data })
-      
-      // AUDIT: Log profile update
+
       try {
         await supabase.rpc('log_audit', {
           p_module: 'Authentication',
@@ -281,7 +323,7 @@ const useAuthStore = create((set, get) => ({
       } catch (auditError) {
         console.error('Audit log error (non-critical):', auditError.message)
       }
-      
+
       return { success: true, data }
     } catch (error) {
       console.error('Update profile error:', error)
@@ -289,6 +331,9 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ============================================================
+  // GET ALL USERS (unchanged)
+  // ============================================================
   getAllUsers: async () => {
     try {
       const { data, error } = await supabase
