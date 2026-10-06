@@ -4,35 +4,60 @@ import Navbar from '../components/Navbar'
 import useAuthStore from '../store/authStore'
 import useThemeStore from '../store/themeStore'
 import { userAdminApi } from '../lib/userAdminApi'
+import { supabase } from '../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import { USER_ROLES, ROLE_LABELS } from '../types/authTypes'
 import {
   Users, Search, Edit, Trash2, Plus, X, Check, Sun, Moon,
-  Sparkles, RefreshCw, Shield, AlertCircle, Eye, EyeOff,
-  RotateCcw, Sliders
+  Sparkles, RefreshCw, AlertCircle, Eye, EyeOff,
+  RotateCcw, Sliders, Lock, ShieldCheck
 } from 'lucide-react'
 
-// Every module that can appear on the Dashboard
+// ═══════════════════════════════════════════════
+// Every module + its role access (SAME as Dashboard.jsx)
+// ═══════════════════════════════════════════════
 const ALL_MODULES = [
-  { path: '/hr',           label: 'Human Resources' },
-  { path: '/payroll',      label: 'Payroll' },
-  { path: '/crm',          label: 'CRM & Clients' },
-  { path: '/sales',        label: 'Sales & Quotations' },
-  { path: '/operations',   label: 'Operations' },
-  { path: '/inventory',    label: 'Inventory' },
-  { path: '/procurement',  label: 'Procurement' },
-  { path: '/audit',        label: 'Audit Trail' },
-  { path: '/finance',      label: 'Finance' },
-  { path: '/fleet',        label: 'Fleet Management' },
-  { path: '/reports',      label: 'Reporting & Analytics' },
-  { path: '/workflow',     label: 'Workflow Automation' },
-  { path: '/documents',    label: 'Document Management' },
-  { path: '/assets',       label: 'Assets Management' },
-  { path: '/tracker',      label: 'Tracker' },
-  { path: '/fieldops',     label: 'Field Operations' },
-  { path: '/mobile',       label: 'Mobile App' },
-  { path: '/users',        label: 'User Management' },
+  { path: '/hr',         label: 'Human Resources',         roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.HR_MANAGER, USER_ROLES.OPERATIONS_MANAGER] },
+  { path: '/payroll',    label: 'Payroll',                 roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER] },
+  { path: '/crm',        label: 'CRM & Clients',           roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SALES_AGENT] },
+  { path: '/sales',      label: 'Sales & Quotations',      roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SALES_AGENT, USER_ROLES.FINANCE_OFFICER] },
+  { path: '/operations', label: 'Operations',              roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR] },
+  { path: '/inventory',  label: 'Inventory',               roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR] },
+  { path: '/procurement',label: 'Procurement',             roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER] },
+  { path: '/audit',      label: 'Audit Trail',             roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER] },
+  { path: '/finance',    label: 'Finance',                 roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.OPERATIONS_MANAGER] },
+  { path: '/fleet',      label: 'Fleet Management',        roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR] },
+  { path: '/reports',    label: 'Reporting & Analytics',   roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER] },
+  { path: '/workflow',   label: 'Workflow Automation',     roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER] },
+  { path: '/documents',  label: 'Document Management',     roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.HR_MANAGER] },
+  { path: '/assets',     label: 'Assets Management',       roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.FINANCE_OFFICER, USER_ROLES.OPERATIONS_MANAGER] },
+  { path: '/tracker',    label: 'Tracker',                 roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.HR_MANAGER, USER_ROLES.SUPERVISOR] },
+  { path: '/fieldops',   label: 'Field Operations',        roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.SALES_AGENT, USER_ROLES.CLEANER] },
+  { path: '/mobile',     label: 'Mobile App',              roles: [USER_ROLES.SUPER_ADMIN, USER_ROLES.OPERATIONS_MANAGER, USER_ROLES.SUPERVISOR, USER_ROLES.HR_MANAGER, USER_ROLES.FINANCE_OFFICER, USER_ROLES.SALES_AGENT, USER_ROLES.CLEANER] },
+  { path: '/users',      label: 'User Management',         roles: [USER_ROLES.SUPER_ADMIN] },
 ]
+
+// ═══════════════════════════════════════════════
+// Compute what a user can ACTUALLY see
+// = modules their role allows, minus per-user hidden_modules
+// ═══════════════════════════════════════════════
+const getEffectiveAccess = (user) => {
+  if (!user) return { visible: 0, roleAllowed: 0, hidden: 0, blocked: 0, total: ALL_MODULES.length }
+
+  const roleAllowed = ALL_MODULES.filter(m =>
+    user.role === USER_ROLES.SUPER_ADMIN || m.roles.includes(user.role)
+  )
+  const hiddenList = Array.isArray(user.hidden_modules) ? user.hidden_modules : []
+  const visible = roleAllowed.filter(m => !hiddenList.includes(m.path))
+
+  return {
+    visible: visible.length,
+    roleAllowed: roleAllowed.length,
+    hidden: roleAllowed.length - visible.length,
+    blocked: ALL_MODULES.length - roleAllowed.length,
+    total: ALL_MODULES.length
+  }
+}
 
 const roleOptions = [
   { value: 'super_admin',        label: 'Super Admin' },
@@ -54,17 +79,14 @@ export default function UserManagement() {
   const [selectedRole, setSelectedRole] = useState('all')
   const [showDeleted, setShowDeleted] = useState(false)
 
-  // Role editing
   const [editingUser, setEditingUser] = useState(null)
   const [editRole, setEditRole] = useState('')
   const [savingRole, setSavingRole] = useState(false)
 
-  // Customize access
   const [customizingUser, setCustomizingUser] = useState(null)
   const [hiddenModules, setHiddenModules] = useState([])
   const [savingAccess, setSavingAccess] = useState(false)
 
-  // Add modal
   const [showAddModal, setShowAddModal] = useState(false)
   const [newUser, setNewUser] = useState({ email: '', password: '', full_name: '', role: 'cleaner' })
 
@@ -80,7 +102,6 @@ export default function UserManagement() {
       console.error('Load error:', error)
       toast.error(`Failed to load users: ${error.message}`)
     } else {
-      console.log(`📊 Loaded ${data.length} users${showDeleted ? ' (incl. deleted)' : ''}`)
       setUsers(data)
     }
     setLoading(false)
@@ -122,7 +143,7 @@ export default function UserManagement() {
   }
 
   // ============================================
-  // SOFT DELETE
+  // SOFT DELETE / RESTORE
   // ============================================
   const handleSoftDelete = async (user) => {
     if (!window.confirm(`Delete ${user.full_name || user.email}?\n\nThis hides the user and blocks their login. You can restore them from "Show Deleted".`)) return
@@ -167,22 +188,35 @@ export default function UserManagement() {
   const handleSaveAccess = async () => {
     if (!customizingUser) return
     setSavingAccess(true)
-    const { success, error } = await userAdminApi.setHiddenModules(customizingUser.id, hiddenModules)
+
+    // ✅ Only store hides for modules the role actually permits.
+    //    Modules blocked by role are not our business here — they're
+    //    enforced by RoleBasedRoute independently.
+    const roleAllowedPaths = ALL_MODULES
+      .filter(m => customizingUser.role === USER_ROLES.SUPER_ADMIN || m.roles.includes(customizingUser.role))
+      .map(m => m.path)
+
+    const cleanHiddenList = hiddenModules.filter(p => roleAllowedPaths.includes(p))
+
+    const { success, error } = await userAdminApi.setHiddenModules(customizingUser.id, cleanHiddenList)
     if (!success) {
       toast.error(error?.message || 'Failed')
     } else {
       setUsers(prev => prev.map(u => u.id === customizingUser.id
-        ? { ...u, hidden_modules: hiddenModules }
+        ? { ...u, hidden_modules: cleanHiddenList }
         : u))
-      toast.success(`Access customized — ${hiddenModules.length} module(s) hidden`)
+      toast.success(
+        cleanHiddenList.length === 0
+          ? 'Access reset — user sees all role-permitted modules'
+          : `Access updated — ${cleanHiddenList.length} module(s) hidden`
+      )
       setCustomizingUser(null)
     }
     setSavingAccess(false)
   }
 
   // ============================================
-  // ADD USER (uses upsert on profiles as fallback —
-  // real auth creation needs the Edge Function)
+  // ADD USER
   // ============================================
   const handleAddUser = async () => {
     if (!newUser.email) {
@@ -190,7 +224,6 @@ export default function UserManagement() {
       return
     }
     try {
-      // Attempt to create the auth user via the Edge Function
       const { data, error } = await supabase.functions.invoke('admin-user-ops', {
         body: {
           action: 'create',
@@ -203,8 +236,7 @@ export default function UserManagement() {
 
       if (error || data?.error) {
         console.error('Admin create error:', error || data?.error)
-        // Fallback: just add a profile row
-        toast.error('Could not create auth user. Use Supabase dashboard or deploy admin-user-ops Edge Function.')
+        toast.error('Could not create auth user. Deploy the admin-user-ops Edge Function or use the Supabase dashboard.')
         return
       }
 
@@ -243,6 +275,15 @@ export default function UserManagement() {
     return colors[role] || 'bg-slate-100 text-slate-600'
   }
 
+  // The customize modal's per-module state
+  const getModuleState = (user, mod) => {
+    const roleOk = user.role === USER_ROLES.SUPER_ADMIN || mod.roles.includes(user.role)
+    const isHidden = hiddenModules.includes(mod.path)
+    if (!roleOk) return 'blocked'      // ⚪ role prevents
+    if (isHidden) return 'hidden'      // 🟡 admin hid it
+    return 'visible'                    // 🟢 active
+  }
+
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -258,7 +299,6 @@ export default function UserManagement() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
@@ -301,7 +341,6 @@ export default function UserManagement() {
           <button
             onClick={() => setShowDeleted(v => !v)}
             className={`px-4 py-3 neu-inset rounded-xl flex items-center gap-2 text-sm font-medium ${showDeleted ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-400'}`}
-            title={showDeleted ? 'Hide deleted users' : 'Show deleted users'}
           >
             {showDeleted ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             <span>{showDeleted ? 'Hide Deleted' : 'Show Deleted'}</span>
@@ -330,7 +369,17 @@ export default function UserManagement() {
                 <tbody>
                   {filteredUsers.map(user => {
                     const isDeleted = !!user.deleted_at
-                    const hiddenCount = Array.isArray(user.hidden_modules) ? user.hidden_modules.length : 0
+                    const access = getEffectiveAccess(user)
+                    // Chip colour reflects how limited the user is
+                    const accessChip =
+                      access.visible === access.total
+                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                        : access.visible === 0
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : access.hidden > 0
+                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+
                     return (
                       <tr key={user.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${isDeleted ? 'opacity-50' : ''}`}>
                         <td className="py-3 px-4">
@@ -394,17 +443,17 @@ export default function UserManagement() {
                           </span>
                         </td>
                         <td className="py-3 px-4">
+                          {/* ✅ NEW: reflects role-limit ∩ hidden_modules */}
                           <button
                             onClick={() => openCustomize(user)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                              hiddenCount > 0
-                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                            }`}
-                            title="Customize which modules this user sees"
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${accessChip}`}
+                            title={`Visible: ${access.visible}/${access.total} · Role-limited: ${access.blocked} · Admin-hidden: ${access.hidden}`}
                           >
                             <Sliders className="w-3 h-3" />
-                            {hiddenCount > 0 ? `${hiddenCount} hidden` : 'Full'}
+                            <span>{access.visible}/{access.total}</span>
+                            {access.hidden > 0 && (
+                              <span className="text-[10px] opacity-75">· {access.hidden} hidden</span>
+                            )}
                           </button>
                         </td>
                         <td className="py-3 px-4">
@@ -454,7 +503,7 @@ export default function UserManagement() {
       </main>
 
       {/* ═══════════════════════════════════════════════
-          CUSTOMIZE ACCESS MODAL
+          CUSTOMIZE ACCESS MODAL — shows 3 states
       ═══════════════════════════════════════════════ */}
       <AnimatePresence>
         {customizingUser && (
@@ -476,6 +525,10 @@ export default function UserManagement() {
                   </h3>
                   <p className="text-sm text-slate-500 mt-1">
                     {customizingUser.full_name || customizingUser.email}
+                    {' · '}
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${getRoleBadge(customizingUser.role)}`}>
+                      {ROLE_LABELS[customizingUser.role] || customizingUser.role}
+                    </span>
                   </p>
                 </div>
                 <button
@@ -486,39 +539,81 @@ export default function UserManagement() {
                 </button>
               </div>
 
-              <div className="mb-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div>
-                  <strong>Unchecked</strong> modules will be hidden from this user's dashboard.
-                  Their role still determines what they can <em>do</em>; this controls what they <em>see</em>.
-                  Super Admins always see everything.
+              {/* Legend */}
+              <div className="mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/30 text-xs space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-emerald-500"></span>
+                  <span className="text-slate-600 dark:text-slate-300"><strong>Allowed</strong> — user can see this module</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-amber-500"></span>
+                  <span className="text-slate-600 dark:text-slate-300"><strong>Hidden by admin</strong> — role permits it, but you've hidden it</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-slate-400"></span>
+                  <span className="text-slate-600 dark:text-slate-300"><strong>Blocked by role</strong> — change the role to enable</span>
                 </div>
               </div>
+
+              {/* Summary */}
+              {(() => {
+                const access = getEffectiveAccess({ ...customizingUser, hidden_modules: hiddenModules })
+                return (
+                  <div className="mb-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                    <span>
+                      <strong>{access.visible}</strong> of <strong>{access.total}</strong> modules visible
+                      {' · '}
+                      <strong>{access.blocked}</strong> blocked by role
+                      {access.hidden > 0 && <> · <strong>{access.hidden}</strong> hidden by admin</>}
+                    </span>
+                  </div>
+                )
+              })()}
 
               <div className="flex-1 overflow-y-auto mb-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {ALL_MODULES.map(mod => {
-                    const isHidden = hiddenModules.includes(mod.path)
+                    const state = getModuleState(customizingUser, mod)
+                    const isBlocked = state === 'blocked'
+                    const isHidden  = state === 'hidden'
+                    const isVisible = state === 'visible'
+
+                    const bg = isBlocked
+                      ? 'bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 opacity-60'
+                      : isHidden
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+
                     return (
                       <label
                         key={mod.path}
-                        className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors border ${
-                          isHidden
-                            ? 'bg-slate-100 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
-                            : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                        }`}
+                        className={`flex items-center gap-3 p-3 rounded-xl transition-colors border ${bg} ${isBlocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        title={isBlocked ? 'Your role does not permit this module. Change the role to enable.' : ''}
                       >
                         <input
                           type="checkbox"
-                          checked={!isHidden}
-                          onChange={() => toggleHiddenModule(mod.path)}
-                          className="w-4 h-4 rounded accent-emerald-600"
+                          checked={isVisible}
+                          disabled={isBlocked}
+                          onChange={() => !isBlocked && toggleHiddenModule(mod.path)}
+                          className="w-4 h-4 rounded accent-emerald-600 disabled:opacity-40"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${isHidden ? 'text-slate-500 dark:text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>
-                            {mod.label}
+                          <div className="flex items-center gap-1.5">
+                            {isBlocked && <Lock className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+                            <p className={`text-sm font-medium truncate ${
+                              isBlocked ? 'text-slate-400 dark:text-slate-500' :
+                              isHidden ? 'text-amber-700 dark:text-amber-400 line-through' :
+                              'text-slate-800 dark:text-white'
+                            }`}>
+                              {mod.label}
+                            </p>
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {mod.path}
+                            {isBlocked && ' — role-restricted'}
+                            {isHidden && ' — hidden'}
                           </p>
-                          <p className="text-[10px] text-slate-400 truncate">{mod.path}</p>
                         </div>
                       </label>
                     )
@@ -531,7 +626,7 @@ export default function UserManagement() {
                   onClick={() => setHiddenModules([])}
                   className="px-4 py-2 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
                 >
-                  Reset (show everything)
+                  Reset (show all role-permitted)
                 </button>
                 <div className="flex gap-2">
                   <button
@@ -556,7 +651,7 @@ export default function UserManagement() {
       </AnimatePresence>
 
       {/* ═══════════════════════════════════════════════
-          ADD USER MODAL
+          ADD USER MODAL (unchanged)
       ═══════════════════════════════════════════════ */}
       <AnimatePresence>
         {showAddModal && (
