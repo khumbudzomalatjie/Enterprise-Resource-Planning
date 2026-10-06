@@ -9,7 +9,7 @@ import {
   TrendingDown, DollarSign, BarChart3, Plus,
   ArrowDown, ArrowUp, Truck, Clock,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  Wrench, Briefcase, Tag
+  Wrench, Briefcase, Tag, Activity
 } from 'lucide-react'
 
 export default function InventoryDashboard() {
@@ -69,6 +69,10 @@ export default function InventoryDashboard() {
             <p className="text-slate-500 dark:text-slate-400 ml-11">Stock control, services pricing, products, and suppliers</p>
           </div>
           <div className="flex gap-3 flex-wrap">
+            {/* ✅ NEW: Item Tracker button */}
+            <button onClick={() => navigate('/inventory/item-tracker')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2 text-sm">
+              <Activity className="w-5 h-5" /><span>Item Tracker</span>
+            </button>
             <button onClick={() => navigate('/inventory/stock-in')} className="neu-raised neu-btn px-4 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2 text-sm">
               <ArrowDown className="w-5 h-5" /><span>Stock In</span>
             </button>
@@ -124,16 +128,23 @@ export default function InventoryDashboard() {
           </motion.div>
         </div>
 
-        {/* Quick Links Row */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* Quick Links Row — ✅ Item Tracker added */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {[
+            { label: 'Item Tracker', icon: Activity, path: '/inventory/item-tracker', highlight: true },
             { label: 'All Services', icon: Briefcase, path: '/inventory/services' },
             { label: 'Add Service', icon: Plus, path: '/inventory/services/new' },
             { label: 'Consumables', icon: Package, path: '/inventory/consumables' },
             { label: 'Stock Items', icon: Tag, path: '/inventory/items' },
           ].map(action => (
-            <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform">
-              <action.icon className="w-6 h-6 text-emerald-600" />
+            <button
+              key={action.label}
+              onClick={() => navigate(action.path)}
+              className={`neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105 transition-transform ${
+                action.highlight ? 'ring-2 ring-purple-500/40' : ''
+              }`}
+            >
+              <action.icon className={`w-6 h-6 ${action.highlight ? 'text-purple-600' : 'text-emerald-600'}`} />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{action.label}</span>
             </button>
           ))}
@@ -152,7 +163,6 @@ export default function InventoryDashboard() {
 
         {/* Low Stock & Movements */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Low Stock Alert */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -162,7 +172,7 @@ export default function InventoryDashboard() {
             </div>
             <div className="space-y-3">
               {lowStockItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 cursor-pointer" onClick={() => navigate(`/inventory/items/${item.id}`)}>
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors" onClick={() => navigate(`/inventory/item-tracker/${item.id}`)}>
                   <div>
                     <p className="font-medium text-slate-800 dark:text-white text-sm">{item.name}</p>
                     <p className="text-xs text-slate-500">{item.item_code} · {item.item_categories?.name}</p>
@@ -177,7 +187,6 @@ export default function InventoryDashboard() {
             </div>
           </motion.div>
 
-          {/* Recent Movements */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="neu-raised rounded-3xl p-6">
             <div className="flex justify-between mb-4">
               <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -187,7 +196,7 @@ export default function InventoryDashboard() {
             </div>
             <div className="space-y-2">
               {stats.recentMovements?.map(m => (
-                <div key={m.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/30 text-sm">
+                <div key={m.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/30 text-sm cursor-pointer" onClick={() => navigate(`/inventory/item-tracker/${m.item_id}`)}>
                   <div className="flex items-center gap-2">
                     {m.movement_type === 'purchase' || m.movement_type === 'return' || m.movement_type === 'transfer_in' ? 
                       <ArrowDown className="w-4 h-4 text-emerald-600" /> : 
