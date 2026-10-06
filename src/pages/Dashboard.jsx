@@ -15,8 +15,7 @@ import {
 } from 'lucide-react'
 
 // ✅ Tiles to hide from the dashboard GLOBALLY (applies to every user).
-// Add a route path here to hide the tile (module stays accessible via direct URL).
-// Remove the entry to make it visible again.
+// Add a route path here to hide the tile. Remove the entry to re-show it.
 const HIDDEN_MODULES = [
   '/workflow',
 ]
@@ -155,12 +154,16 @@ export default function Dashboard() {
     // ✅ Global hides (applies to everyone)
     if (HIDDEN_MODULES.includes(module.path)) return false
 
-    // ✅ Per-user hides — respected even for Super Admins, so an admin can
-    //    declutter their own dashboard. Cleared from User Management.
+    // ✅ Per-user hides — respected even for Super Admins
     const perUserHidden = Array.isArray(profile?.hidden_modules) ? profile.hidden_modules : []
     if (perUserHidden.includes(module.path)) return false
 
     if (userRole === USER_ROLES.SUPER_ADMIN) return true
+
+    // ✅ Admin grant — overrides role restriction
+    const extraGranted = Array.isArray(profile?.extra_modules) ? profile.extra_modules : []
+    if (extraGranted.includes(module.path)) return true
+
     return module.roles.includes(userRole)
   })
 
