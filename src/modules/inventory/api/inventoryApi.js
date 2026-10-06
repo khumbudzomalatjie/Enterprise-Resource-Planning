@@ -76,12 +76,12 @@ export const inventoryApi = {
   },
 
   // ═══════════════════════════════════════════════
-  // ✅ NEW: Full audit trail for a single item
-  // Merges creation, movements, job usage, and batches
-  // into a single chronological timeline.
+  // FULL AUDIT TRAIL
+  // Merges creation, movements, job usage, batches.
+  // ✅ Resolves the acting user from employees OR profiles
+  //    (employees preferred; profiles fallback for admins).
   // ═══════════════════════════════════════════════
   async getItemAuditTrail(itemId) {
-    // 1. The item itself
     const { data: item, error: itemError } = await supabase
       .from('inventory_items')
       .select('*')
@@ -90,7 +90,6 @@ export const inventoryApi = {
 
     if (itemError || !item) return { data: null, error: itemError || new Error('Item not found') }
 
-    // 2. All related rows in parallel
     const [movementsRes, jobUsageRes, batchesRes, catRes, whRes, supRes] = await Promise.all([
       supabase.from('stock_movements').select('*').eq('item_id', itemId).order('created_at', { ascending: true }),
       supabase.from('job_supplies_used').select('*').eq('supply_id', itemId).order('used_at', { ascending: true }),
@@ -104,7 +103,7 @@ export const inventoryApi = {
     const jobUsage  = jobUsageRes.data || []
     const batches   = batchesRes.data || []
 
-    // 3. Get referenced jobs (for job_number display)
+    // Jobs referenced by job usage
     const jobIds = [...new Set(jobUsage.map(u => u.job_id).filter(Boolean))]
     let jobs = []
     if (jobIds.length > 0) {
@@ -112,35 +111,83 @@ export const inventoryApi = {
       jobs = data || []
     }
 
-    // 4. Get referenced employees (used_by / performed_by are user_ids)
+    // ───────────────────────────────────────────────
+    // ✅ Resolve acting users from BOTH employees and profiles
+    // performed_by on stock_movements is typically auth.uid()
+    // used_by on job_supplies_used is also auth.uid()
+    // ───────────────────────────────────────────────
     const userIds = [...new Set([
-      ...jobUsage.map(u => u.used_by),
-      ...movements.map(m => m.performed_by)
+      ...movements.map(m => m.performed_by),
+      ...jobUsage.map(u => u.used_by)
     ].filter(Boolean))]
 
     let employees = []
+    let profiles = []
+
     if (userIds.length > 0) {
-      const { data } = await supabase
-        .from('employees')
-        .select('id, user_id, first_name, last_name, employee_code')
-        .in('user_id', userIds)
-      employees = data || []
+      const [empRes, profRes] = await Promise.all([
+        // Employees can be matched by id OR user_id (both patterns exist in the codebase)
+        supabase.from('employees')
+          .select('id, user_id, first_name, last_name, employee_code, email, position')
+          .or(`id.in.(${userIds.join(',')}),user_id.in.(${userIds.join(',')})`),
+        supabase.from('profiles')
+          .select('id, full_name, email, role')
+          .in('id', userIds)
+      ])
+      employees = empRes.data || []
+      profiles = profRes.data || []
     }
 
-    const findEmployee = (uid) => employees.find(e => e.user_id === uid || e.id === uid) || null
+    const findActor = (uid) => {
+      if (!uid) return null
+      const emp = employees.find(e => e.user_id === uid || e.id === uid)
+      if (emp) {
+        const name = [emp.first_name, emp.last_name].filter(Boolean).join(' ').trim()
+        return {
+          id: emp.id,
+          name: name || emp.email || 'Employee',
+          code: emp.employee_code || null,
+          role: emp.position || 'Employee',
+          email: emp.email || null,
+          source: 'employee'
+        }
+      }
+      const prof = profiles.find(p => p.id === uid)
+      if (prof) {
+        return {
+          id: prof.id,
+          name: prof.full_name || prof.email || 'User',
+          code: null,
+          role: prof.role ? prof.role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'User',
+          email: prof.email || null,
+          source: 'profile'
+        }
+      }
+      return {
+        id: uid,
+        name: 'Unknown user',
+        code: null,
+        role: null,
+        email: null,
+        source: 'unknown'
+      }
+    }
 
-    // 5. Build unified event list
+    // ───────────────────────────────────────────────
+    // Build unified event timeline
+    // ───────────────────────────────────────────────
     const events = []
 
-    // 5a. Creation
+    // Creation
     if (item.created_at) {
       events.push({
         id: `create-${item.id}`,
         type: 'created',
         timestamp: item.created_at,
         title: 'Item Created',
-        description: `Item added to inventory system`,
+        description: 'Item added to inventory system',
         direction: 'neutral',
+        performedBy: findActor(item.created_by),
         metadata: {
           item_code: item.item_code,
           unit: item.unit,
@@ -150,7 +197,7 @@ export const inventoryApi = {
       })
     }
 
-    // 5b. Stock movements
+    // Stock movements
     movements.forEach(m => {
       const inTypes  = ['purchase', 'return', 'transfer_in', 'adjustment_in', 'opening_stock']
       const outTypes = ['sale', 'usage', 'job_usage', 'transfer_out', 'adjustment_out', 'wastage', 'write_off']
@@ -167,7 +214,7 @@ export const inventoryApi = {
         description: m.notes || `Stock ${direction === 'in' ? 'added' : direction === 'out' ? 'removed' : 'adjusted'}`,
         quantity: Math.abs(m.quantity || 0),
         direction,
-        performedBy: findEmployee(m.performed_by),
+        performedBy: findActor(m.performed_by),
         metadata: {
           unit_cost: m.unit_cost,
           status: m.status,
@@ -178,7 +225,7 @@ export const inventoryApi = {
       })
     })
 
-    // 5c. Job usage
+    // Job usage
     jobUsage.forEach(u => {
       const job = jobs.find(j => j.id === u.job_id)
       events.push({
@@ -189,7 +236,7 @@ export const inventoryApi = {
         description: job ? `Consumed on ${job.job_number}${job.title ? ' — ' + job.title : ''}` : (u.notes || 'Consumed on a job'),
         quantity: Math.abs(u.quantity_used || 0),
         direction: 'out',
-        performedBy: findEmployee(u.used_by),
+        performedBy: findActor(u.used_by),
         metadata: {
           job_number: job?.job_number,
           job_title: job?.title,
@@ -198,7 +245,7 @@ export const inventoryApi = {
       })
     })
 
-    // 5d. Batches
+    // Batches
     batches.forEach(b => {
       events.push({
         id: `batch-${b.id}`,
@@ -208,6 +255,7 @@ export const inventoryApi = {
         description: `Batch ${b.batch_number || b.id?.slice(0, 8)}${b.expiry_date ? ' — expires ' + b.expiry_date : ''}`,
         quantity: Math.abs(b.quantity || 0),
         direction: 'in',
+        performedBy: findActor(b.received_by || b.created_by),
         metadata: {
           batch_number: b.batch_number,
           expiry_date: b.expiry_date,
@@ -216,10 +264,10 @@ export const inventoryApi = {
       })
     })
 
-    // 6. Sort newest first
+    // Sort newest first
     events.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
 
-    // 7. Aggregate stats
+    // Aggregate stats
     const totalIn  = events.filter(e => e.direction === 'in').reduce((s, e) => s + (e.quantity || 0), 0)
     const totalOut = events.filter(e => e.direction === 'out').reduce((s, e) => s + (e.quantity || 0), 0)
 
@@ -250,7 +298,8 @@ export const inventoryApi = {
         jobUsage,
         batches,
         jobs,
-        employees
+        employees,
+        profiles
       },
       error: null
     }
@@ -261,6 +310,14 @@ export const inventoryApi = {
     if (cleanedData.category_id === '') cleanedData.category_id = null
     if (cleanedData.default_warehouse_id === '') cleanedData.default_warehouse_id = null
     if (cleanedData.preferred_supplier_id === '') cleanedData.preferred_supplier_id = null
+
+    // ✅ Auto-attach the current user as creator
+    if (!cleanedData.created_by) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.id) cleanedData.created_by = user.id
+      } catch {}
+    }
 
     const { data, error } = await supabase
       .from('inventory_items')
@@ -316,11 +373,22 @@ export const inventoryApi = {
     return { data: merged, error: null }
   },
 
+  // ✅ AMENDED: auto-attach performed_by from the current user
   async createStockMovement(movementData) {
     const cleanedData = { ...movementData }
     if (cleanedData.warehouse_id === '') cleanedData.warehouse_id = null
     if (cleanedData.batch_id === '') cleanedData.batch_id = null
     if (cleanedData.job_id === '') cleanedData.job_id = null
+
+    // Auto-attach the acting user
+    if (!cleanedData.performed_by) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.id) cleanedData.performed_by = user.id
+      } catch (err) {
+        console.warn('createStockMovement: could not resolve user —', err.message)
+      }
+    }
 
     const { data, error } = await supabase
       .from('stock_movements')
@@ -412,14 +480,12 @@ export const inventoryApi = {
     const { count: totalSuppliers } = await supabase.from('suppliers').select('*', { count: 'exact', head: true })
     const { data: recentMovements } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(5)
 
-    // Low stock computed in JS (Supabase can't compare two columns easily)
     const { data: allItems } = await supabase.from('inventory_items').select('current_stock, reorder_point, unit_cost')
     const lowStockItems = (allItems || []).filter(i =>
       i.current_stock > 0 && i.current_stock <= (i.reorder_point || 10)
     ).length
     const totalStockValue = (allItems || []).reduce((sum, item) => sum + (item.current_stock || 0) * (item.unit_cost || 0), 0)
 
-    // Enrich recent movements with item names
     const itemIds = [...new Set((recentMovements || []).map(m => m.item_id).filter(Boolean))]
     let items = []
     if (itemIds.length > 0) {
