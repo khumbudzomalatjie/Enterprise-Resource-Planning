@@ -2,9 +2,7 @@ import { supabase } from './supabaseClient'
 
 // ═══════════════════════════════════════════════
 // USER ADMIN API
-// All writes to public.profiles for admin purposes.
-// True auth.users deletion needs an Edge Function
-// (see the end of this file for the optional deploy).
+// Centralizes all writes to public.profiles for admin purposes.
 // ═══════════════════════════════════════════════
 export const userAdminApi = {
   // ---------------------------------------------------------------
@@ -48,13 +46,26 @@ export const userAdminApi = {
   },
 
   // ---------------------------------------------------------------
-  // CUSTOMIZE WHAT A USER SEES
-  // hidden_modules: array of route paths to hide, e.g. ['/workflow', '/assets']
+  // CUSTOMIZE WHAT A USER SEES (hides)
+  // hidden_modules: array of route paths to hide, e.g. ['/workflow']
   // ---------------------------------------------------------------
   async setHiddenModules(userId, hiddenModules) {
     const { error } = await supabase
       .from('profiles')
       .update({ hidden_modules: hiddenModules || [] })
+      .eq('id', userId)
+    return { success: !error, error }
+  },
+
+  // ---------------------------------------------------------------
+  // EXTRA MODULE GRANTS
+  // Array of route paths to allow on top of the user's role.
+  // Example: give a cleaner access to /inventory
+  // ---------------------------------------------------------------
+  async setExtraModules(userId, extraModules) {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ extra_modules: extraModules || [] })
       .eq('id', userId)
     return { success: !error, error }
   },
@@ -88,8 +99,7 @@ export const userAdminApi = {
   },
 
   // ---------------------------------------------------------------
-  // HARD DELETE — requires the Edge Function "admin-user-ops" to be deployed.
-  // Returns success=false with a helpful message if not deployed.
+  // HARD DELETE — requires the Edge Function "admin-user-ops"
   // ---------------------------------------------------------------
   async hardDelete(userId) {
     try {
@@ -100,7 +110,7 @@ export const userAdminApi = {
         return {
           success: false,
           error: error.message,
-          hint: 'Deploy the "admin-user-ops" Edge Function (see docs) or use soft delete instead.'
+          hint: 'Deploy the "admin-user-ops" Edge Function or use soft delete instead.'
         }
       }
       return { success: true, data }
