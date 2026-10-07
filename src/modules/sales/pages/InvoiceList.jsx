@@ -70,11 +70,8 @@ export default function InvoiceList() {
   const handleViewInvoice = (invoice) => setViewingInvoice(invoice)
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ BULLETPROOF 1-PAGE PDF
-  //   • html2canvas renders the element to a fixed-size canvas
-  //   • jsPDF places that canvas exactly onto ONE A4 page
-  //   • Bypasses html2pdf's page-breaking entirely — impossible
-  //     to spill onto page 2
+  // ✅ BULLETPROOF 1-PAGE PDF — canvas + jsPDF direct
+  //    scale: 3 for crisp logo and text
   // ═══════════════════════════════════════════════════════════
   const handleDownloadInvoice = async (invoice) => {
     setDownloadingInvoice(invoice.id)
@@ -86,15 +83,14 @@ export default function InvoiceList() {
         return
       }
 
-      // 1. Render element to canvas at 2x for crispness
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3,                    // ✅ 3x for crisp logo
         useCORS: true,
         letterRendering: false,
         scrollX: 0,
         scrollY: 0,
         width: 794,
-        height: 1122,             // 297mm at 96dpi, rounded down
+        height: 1122,
         windowWidth: 794,
         windowHeight: 1122,
         backgroundColor: '#ffffff',
@@ -103,7 +99,6 @@ export default function InvoiceList() {
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98)
 
-      // 2. Create a single-page A4 PDF and place the image to fill it exactly
       const pdf = new jsPDF({
         unit: 'mm',
         format: 'a4',
@@ -111,15 +106,7 @@ export default function InvoiceList() {
         compress: true
       })
 
-      pdf.addImage(
-        imgData,
-        'JPEG',
-        0, 0,                    // x, y
-        210, 297,                // width, height in mm — exactly A4
-        undefined,
-        'FAST'
-      )
-
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
       pdf.save(`Invoice_${invoice.invoice_number || invoice.id}.pdf`)
       toast.success('Invoice downloaded! 📄')
     } catch (error) {
