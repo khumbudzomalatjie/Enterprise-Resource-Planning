@@ -1,141 +1,26 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import html2pdf from 'html2pdf.js'
-import { 
-  Receipt, Search, Eye, Download, ChevronRight, 
-  Sun, Moon, Sparkles, ArrowLeft, RefreshCw,
-  DollarSign, X
+import InvoicePDF from '../components/InvoicePDF'
+import {
+  Receipt, Search, Eye, Download, ChevronRight,
+  Sun, Moon, Sparkles, RefreshCw, X
 } from 'lucide-react'
-
-// A4 Invoice Template (Compact - Single Page)
-function InvoiceTemplate({ invoice }) {
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
-  }
-  const formatDate = (date) => {
-    if (!date) return ''
-    return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-
-  const colors = {
-    main: '#1B5080',
-    dark: '#0D2D4A',
-    lightBg: '#e8f0f8',
-    lightBorder: '#c5d5e8',
-    totalBg: '#eaf1f8'
-  }
-
-  return (
-    <div style={{
-      width: '794px',
-      height: '1123px',
-      padding: '35px 45px',
-      backgroundColor: 'white',
-      fontFamily: 'Inter, Arial, sans-serif',
-      color: '#1e293b',
-      boxSizing: 'border-box',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `3px solid ${colors.main}`, paddingBottom: '10px', marginBottom: '15px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '55px', height: '55px', borderRadius: '50%', backgroundColor: colors.lightBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', border: `2px solid ${colors.lightBorder}` }}>
-            <img src="/logo.png" alt="Logo" style={{ width: '85%', height: '85%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:20px;font-weight:bold;color:${colors.main}">NG</span>` }} />
-          </div>
-          <div>
-            <h1 style={{ fontSize: '16px', fontWeight: 'bold', color: colors.dark, margin: '0' }}>NDANDULENI GROUP</h1>
-            <p style={{ fontSize: '8px', color: '#64748b', margin: '2px 0' }}>Professional Cleaning & Hygiene Services</p>
-            <p style={{ fontSize: '7px', color: '#94a3b8', margin: '0' }}>2220 Manthata Street, Midrand | Tel: 070 419 9457</p>
-          </div>
-        </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: colors.dark, margin: '0', letterSpacing: '2px' }}>INVOICE</h2>
-          <p style={{ fontSize: '13px', color: colors.main, margin: '2px 0', fontWeight: 'bold' }}>#{invoice?.invoice_number || 'N/A'}</p>
-          <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>Date: {formatDate(invoice?.invoice_date)}</p>
-          <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>Due: {formatDate(invoice?.due_date)}</p>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: '15px', flexShrink: 0 }}>
-        <h3 style={{ fontSize: '8px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Bill To:</h3>
-        <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{invoice?.client_name || 'Client'}</p>
-        {invoice?.client_email && <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>{invoice.client_email}</p>}
-        <p style={{ fontSize: '8px', color: '#64748b', margin: '1px 0' }}>{invoice?.client_address || ''}</p>
-      </div>
-
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px', flexShrink: 0 }}>
-        <thead>
-          <tr style={{ backgroundColor: colors.main, color: 'white' }}>
-            <th style={{ padding: '5px 8px', textAlign: 'left', fontSize: '8px', fontWeight: 'bold' }}>Description</th>
-            <th style={{ padding: '5px 8px', textAlign: 'center', fontSize: '8px', fontWeight: 'bold' }}>Qty</th>
-            <th style={{ padding: '5px 8px', textAlign: 'right', fontSize: '8px', fontWeight: 'bold' }}>Unit Price</th>
-            <th style={{ padding: '5px 8px', textAlign: 'right', fontSize: '8px', fontWeight: 'bold' }}>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', fontWeight: '500' }}>{invoice?.notes || 'Cleaning Service'}</td>
-            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'center' }}>1</td>
-            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'right' }}>{formatCurrency(invoice?.subtotal)}</td>
-            <td style={{ padding: '5px 8px', fontSize: '8px', color: '#1e293b', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(invoice?.subtotal)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px', flexShrink: 0 }}>
-        <div style={{ width: '220px', border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '8px', backgroundColor: '#f8fafc' }}>
-            <span style={{ color: '#64748b' }}>Subtotal:</span>
-            <span>{formatCurrency(invoice?.subtotal)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid #e2e8f0', fontSize: '8px', backgroundColor: '#f8fafc' }}>
-            <span style={{ color: '#64748b' }}>VAT (15%):</span>
-            <span>{formatCurrency(invoice?.tax_amount)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', fontSize: '11px', fontWeight: 'bold', backgroundColor: colors.totalBg }}>
-            <span style={{ color: colors.dark }}>TOTAL DUE:</span>
-            <span style={{ color: colors.dark }}>{formatCurrency(invoice?.total_amount)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: '6px 12px', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '15px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: '20px', fontSize: '7px', color: '#64748b', flexWrap: 'wrap' }}>
-          <span><strong>Bank:</strong> Capitec Business</span>
-          <span><strong>Account:</strong> 1054498946</span>
-          <span><strong>Branch:</strong> 450105</span>
-          <span><strong>Ref:</strong> {invoice?.invoice_number}</span>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 'auto', borderTop: `2px solid ${colors.main}`, paddingTop: '8px', textAlign: 'center', flexShrink: 0 }}>
-        <p style={{ fontSize: '6px', color: '#94a3b8', margin: '0' }}>
-          Ndanduleni Group (Pty) Ltd | 2220 Manthata Street, Midrand | Tel: 070 419 9457
-        </p>
-        <p style={{ fontSize: '10px', color: colors.main, margin: '4px 0 0 0', fontWeight: 'bold' }}>
-          Thank you for your business!
-        </p>
-      </div>
-    </div>
-  )
-}
 
 export default function InvoiceList() {
   const { isDark, toggleTheme } = useThemeStore()
-  const navigate = useNavigate()
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [viewingInvoice, setViewingInvoice] = useState(null)
   const [downloadingInvoice, setDownloadingInvoice] = useState(null)
+  const downloadRefs = useRef({})
 
   useEffect(() => {
     loadInvoices()
@@ -144,9 +29,10 @@ export default function InvoiceList() {
   const loadInvoices = async () => {
     setLoading(true)
     try {
+      // ✅ Fetch invoices WITH their line items
       let query = supabase
         .from('invoices')
-        .select('*')
+        .select('*, invoice_items(*), clients(company_name)')
         .order('created_at', { ascending: false })
         .limit(100)
 
@@ -163,9 +49,8 @@ export default function InvoiceList() {
     }
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
-  }
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
 
   const formatDate = (date) => {
     if (!date) return 'N/A'
@@ -178,26 +63,41 @@ export default function InvoiceList() {
     if (status === 'sent') return 'bg-blue-100 text-blue-700'
     if (status === 'overdue') return 'bg-red-100 text-red-700'
     if (status === 'partially_paid') return 'bg-amber-100 text-amber-700'
+    if (status === 'draft') return 'bg-slate-100 text-slate-600'
     return 'bg-slate-100 text-slate-600'
   }
 
-  const handleViewInvoice = (invoice) => {
-    setViewingInvoice(invoice)
-  }
+  const handleViewInvoice = (invoice) => setViewingInvoice(invoice)
 
+  // ───────────────────────────────────────────────────────────
+  // ✅ Guaranteed one-page PDF using QuotationPDF's layout
+  // ───────────────────────────────────────────────────────────
   const handleDownloadInvoice = async (invoice) => {
     setDownloadingInvoice(invoice.id)
     try {
-      const element = document.getElementById(`invoice-download-${invoice.id}`)
-      if (!element) { toast.error('Preview not found'); setDownloadingInvoice(null); return }
+      const element = downloadRefs.current[invoice.id]
+      if (!element) {
+        toast.error('Preview not ready — try again in a moment')
+        setDownloadingInvoice(null)
+        return
+      }
 
       const opt = {
-        margin: [0, 0, 0, 0],
-        filename: `Invoice_${invoice.invoice_number}.pdf`,
-        image: { type: 'jpeg', quality: 1 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 794, windowHeight: 1123 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] }
+        margin: 0,
+        filename: `Invoice_${invoice.invoice_number || invoice.id}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: false,   // ✅ critical — prevents row splitting
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 794,
+          windowHeight: 1123,
+          backgroundColor: '#ffffff'
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+        pagebreak: { mode: ['css'] }  // ✅ respects page-break-inside: avoid
       }
 
       await html2pdf().set(opt).from(element).save()
@@ -273,10 +173,21 @@ export default function InvoiceList() {
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by invoice # or client..." className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by invoice # or client..."
+              className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-sm"
+            />
           </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-3 neu-inset rounded-xl text-sm">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-4 py-3 neu-inset rounded-xl text-sm"
+          >
             <option value="all">All Status</option>
+            <option value="draft">Draft</option>
             <option value="sent">Sent</option>
             <option value="paid">Paid</option>
             <option value="overdue">Overdue</option>
@@ -322,11 +233,19 @@ export default function InvoiceList() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => handleViewInvoice(inv)} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View Invoice">
+                          <button
+                            onClick={() => handleViewInvoice(inv)}
+                            className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600"
+                            title="View Invoice"
+                          >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDownloadInvoice(inv)} disabled={downloadingInvoice === inv.id}
-                            className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600 disabled:opacity-50" title="Download PDF">
+                          <button
+                            onClick={() => handleDownloadInvoice(inv)}
+                            disabled={downloadingInvoice === inv.id}
+                            className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600 disabled:opacity-50"
+                            title="Download PDF"
+                          >
                             {downloadingInvoice === inv.id ? (
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
                             ) : (
@@ -343,11 +262,27 @@ export default function InvoiceList() {
           </div>
         )}
 
-        {/* Hidden invoice templates for download */}
-        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        {/* ✅ Hidden renders for PDF capture — fixed off-screen at 794px */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: '-10000px',
+            width: '794px',
+            pointerEvents: 'none',
+            zIndex: -1
+          }}
+        >
           {invoices.map(inv => (
-            <div key={`hidden-${inv.id}`} id={`invoice-download-${inv.id}`}>
-              <InvoiceTemplate invoice={inv} />
+            <div
+              key={`hidden-${inv.id}`}
+              ref={el => { if (el) downloadRefs.current[inv.id] = el }}
+            >
+              <InvoicePDF
+                invoice={inv}
+                items={inv.invoice_items || []}
+              />
             </div>
           ))}
         </div>
@@ -356,30 +291,39 @@ export default function InvoiceList() {
       {/* Invoice View Modal */}
       <AnimatePresence>
         {viewingInvoice && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" 
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
             onClick={() => setViewingInvoice(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" 
+              className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
-                <h3 className="font-bold text-lg">Invoice - {viewingInvoice.invoice_number}</h3>
+                <h3 className="font-bold text-lg">Invoice — {viewingInvoice.invoice_number}</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleDownloadInvoice(viewingInvoice)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-blue-700">
+                  <button
+                    onClick={() => handleDownloadInvoice(viewingInvoice)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm flex items-center gap-2 hover:bg-blue-700"
+                  >
                     <Download className="w-4 h-4" /> PDF
                   </button>
-                  <button onClick={() => setViewingInvoice(null)} className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300">
+                  <button
+                    onClick={() => setViewingInvoice(null)}
+                    className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300"
+                  >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
-              <div className="p-4 bg-slate-100">
-                <div className="bg-white shadow-lg" id={`invoice-view-${viewingInvoice.id}`}>
-                  <InvoiceTemplate invoice={viewingInvoice} />
+              <div className="p-4 bg-slate-100 overflow-x-auto">
+                <div className="mx-auto" style={{ width: '794px', transform: 'scale(0.9)', transformOrigin: 'top center' }}>
+                  <InvoicePDF
+                    invoice={viewingInvoice}
+                    items={viewingInvoice.invoice_items || []}
+                  />
                 </div>
               </div>
             </motion.div>
