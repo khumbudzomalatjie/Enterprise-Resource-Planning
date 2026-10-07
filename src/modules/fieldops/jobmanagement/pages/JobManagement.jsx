@@ -8,11 +8,11 @@ import useAuthStore from '../../../../store/authStore'
 import JobEditorModal from '../components/JobEditorModal'
 import toast from 'react-hot-toast'
 import {
-  Briefcase, Search, Filter, ArrowLeft, ChevronRight,
-  Calendar, Clock, User, Users, MapPin, AlertTriangle,
+  Briefcase, Search, Filter, ChevronRight,
+  Calendar, Clock, User, MapPin,
   CheckCircle2, XCircle, Edit, RotateCcw, Pause,
   UserCog, Flag, Eye, History, Sun, Moon, Sparkles,
-  Loader2, X, Save, TrendingUp, RefreshCw, Hash, ArrowRight
+  Loader2, X, Save, Hash, ArrowRight
 } from 'lucide-react'
 
 export default function JobManagement() {
@@ -33,17 +33,14 @@ export default function JobManagement() {
   const [dateTo, setDateTo] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // ✅ lookup state
   const [lookupInput, setLookupInput] = useState('')
   const [lookupResults, setLookupResults] = useState([])
   const [lookupLoading, setLookupLoading] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
 
-  // Modal states
   const [showActionModal, setShowActionModal] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
 
-  // Form state
   const [editForm, setEditForm] = useState({})
   const [rescheduleForm, setRescheduleForm] = useState({ newDate: '', newTime: '', reason: '', notes: '' })
   const [postponeForm, setPostponeForm] = useState({ reason: '', notes: '', expectedDate: '' })
@@ -76,11 +73,30 @@ export default function JobManagement() {
     fetchStats()
   }
 
-  const handleSearch = (e) => { e.preventDefault(); loadData() }
+  const handleSearch = async (e) => {
+    e.preventDefault()
+    const q = search.trim()
+    if (!q) { loadData(); return }
 
-  // ============================================
-  // LOOKUP HANDLERS
-  // ============================================
+    setLookupLoading(true)
+    const result = await searchByJobNumber(q)
+    setLookupLoading(false)
+
+    if (!result.success) {
+      toast.error('Search failed: ' + (result.error || 'unknown'))
+      return
+    }
+
+    if ((result.data || []).length === 0) {
+      toast.error(`No job matches "${q}"`)
+      return
+    }
+
+    setLookupResults(result.data)
+    setLookupInput(q)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleLookup = async () => {
     const query = lookupInput.trim()
     if (!query) { toast.error('Enter a job number'); return }
@@ -90,7 +106,7 @@ export default function JobManagement() {
     setLookupLoading(false)
 
     if (!result.success) {
-      toast.error('Lookup failed')
+      toast.error('Lookup failed: ' + (result.error || 'unknown'))
       return
     }
 
@@ -101,20 +117,10 @@ export default function JobManagement() {
       return
     }
 
-    // Exact match → open editor directly
     const exact = matches.find(m => m.job_number?.toUpperCase() === query.toUpperCase())
-    if (exact) {
-      await openEditor(exact.id)
-      return
-    }
+    if (exact) { await openEditor(exact.id); return }
+    if (matches.length === 1) { await openEditor(matches[0].id); return }
 
-    // One match → open editor directly
-    if (matches.length === 1) {
-      await openEditor(matches[0].id)
-      return
-    }
-
-    // Multiple → show picker
     setLookupResults(matches)
   }
 
@@ -307,9 +313,6 @@ export default function JobManagement() {
           <p className="text-slate-500 mt-1 ml-11">Look up a job, edit services, change schedule</p>
         </motion.div>
 
-        {/* ═══════════════════════════════════════════════ */}
-        {/* ✅ JOB LOOKUP BAR                               */}
-        {/* ═══════════════════════════════════════════════ */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="neu-raised rounded-3xl p-5 mb-6 border-l-4 border-emerald-500"
@@ -343,7 +346,6 @@ export default function JobManagement() {
             </button>
           </div>
 
-          {/* Results picker */}
           {lookupResults.length > 0 && (
             <div className="mt-4 neu-inset rounded-2xl p-3 max-h-72 overflow-y-auto">
               <p className="text-xs text-slate-500 mb-2">{lookupResults.length} matches — pick one:</p>
@@ -371,7 +373,6 @@ export default function JobManagement() {
           )}
         </motion.div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {statCards.map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * i }}
@@ -385,7 +386,6 @@ export default function JobManagement() {
           ))}
         </div>
 
-        {/* Filters */}
         <div className="neu-raised rounded-2xl p-4 mb-6">
           <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="relative lg:col-span-2">
@@ -574,9 +574,7 @@ export default function JobManagement() {
         </div>
       </main>
 
-      {/* ═══════════════════════════════════════════════ */}
-      {/* ✅ JOB EDITOR MODAL — full details + services + schedule */}
-      {/* ═══════════════════════════════════════════════ */}
+      {/* JOB EDITOR MODAL */}
       <AnimatePresence>
         {showEditor && editingJob && (
           <JobEditorModal
@@ -589,9 +587,7 @@ export default function JobManagement() {
         )}
       </AnimatePresence>
 
-      {/* ═══════════════════════════════════════════════ */}
-      {/* EXISTING ACTION MODALS (unchanged)              */}
-      {/* ═══════════════════════════════════════════════ */}
+      {/* ACTION MODALS */}
       <AnimatePresence>
         {showActionModal && selectedJob && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -601,7 +597,6 @@ export default function JobManagement() {
               className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}>
 
-              {/* EDIT */}
               {showActionModal === 'edit' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -624,7 +619,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* RESCHEDULE */}
               {showActionModal === 'reschedule' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -659,7 +653,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* POSTPONE */}
               {showActionModal === 'postpone' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -690,7 +683,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* REASSIGN */}
               {showActionModal === 'reassign' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -727,7 +719,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* CHANGE PRIORITY */}
               {showActionModal === 'priority' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -749,7 +740,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* CANCEL */}
               {showActionModal === 'cancel' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -776,7 +766,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* VIEW */}
               {showActionModal === 'view' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
@@ -831,7 +820,6 @@ export default function JobManagement() {
                 </>
               )}
 
-              {/* HISTORY */}
               {showActionModal === 'history' && (
                 <>
                   <div className="flex items-center justify-between mb-4">
