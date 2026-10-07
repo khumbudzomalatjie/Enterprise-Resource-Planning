@@ -9,6 +9,48 @@ const normalizeService = (s) => ({
   description: s.description || s.notes || s.name || 'Service'
 })
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Reliable actor name resolver
+// Tries: passed-in full_name → passed-in email → profiles table →
+//        auth user email → user_metadata.full_name → "User"
+// ═══════════════════════════════════════════════════════════════
+async function resolveActorName(currentUser) {
+  // 1. Fast path — client already provided a real name
+  if (currentUser?.full_name && String(currentUser.full_name).trim()) {
+    return currentUser.full_name
+  }
+  if (currentUser?.name && String(currentUser.name).trim()) {
+    return currentUser.name
+  }
+
+  // 2. Fetch from auth + profiles
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      // Still fall back to whatever client passed
+      return currentUser?.email || 'Unknown'
+    }
+
+    // Try profiles table
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.full_name && String(profile.full_name).trim()) return profile.full_name
+    if (profile?.email) return profile.email
+    if (user.user_metadata?.full_name) return user.user_metadata.full_name
+    if (user.email) return user.email
+
+    // Absolute fallback — never write null
+    return currentUser?.email || 'User'
+  } catch (err) {
+    console.warn('resolveActorName error:', err.message)
+    return currentUser?.email || 'Unknown'
+  }
+}
+
 // ─────────────────────────────────────────────
 // Reusable fetch-by-IDs helpers
 // ─────────────────────────────────────────────
@@ -47,13 +89,28 @@ async function fetchEmployeesByIds(ids) {
   return map
 }
 
+// Central helper: build a job_history row with a guaranteed name
+async function buildHistoryEntry({ jobId, actionType, description, currentUser, extra = {} }) {
+  const actorName = await resolveActorName(currentUser)
+  const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+  const actorId = currentUser?.id || user?.id || null
+
+  return {
+    job_id: jobId,
+    action_type: actionType,
+    action_description: description,
+    performed_by: actorId,
+    performed_by_name: actorName,
+    performed_by_role: currentUser?.role || null,
+    ...extra
+  }
+}
+
 export const jobManagementApi = {
   // ============================================
   // GET ALL JOBS — no embeds, no jobs.team_id
-  // Team is derived from the active assignment
   // ============================================
   async getJobs(filters = {}) {
-    // 1. Base jobs query — plain select
     let query = supabase
       .from('jobs')
       .select('*')
@@ -79,7 +136,6 @@ export const jobManagementApi = {
     const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))]
     const catIds = [...new Set(jobs.map(j => j.job_category_id).filter(Boolean))]
 
-    // 2. Fetch related tables separately
     const [clients, categories, assignRes] = await Promise.all([
       fetchClientsByIds(clientIds),
       fetchCategoriesByIds(catIds),
@@ -91,7 +147,6 @@ export const jobManagementApi = {
 
     const assignments = assignRes.data || []
 
-    // 3. Employees + teams (from assignments)
     const empIds = [...new Set(assignments.map(a => a.employee_id).filter(Boolean))]
     const teamIds = [...new Set(assignments.map(a => a.team_id).filter(Boolean))]
 
@@ -100,13 +155,11 @@ export const jobManagementApi = {
       fetchTeamsByIds(teamIds)
     ])
 
-    // 4. Merge
     const merged = jobs.map(job => {
       const jobAssignments = assignments
         .filter(a => a.job_id === job.id)
         .map(a => ({ ...a, employees: employees[a.employee_id] || null }))
 
-      // Team = team of the first non-released/non-completed assignment
       const activeAssign = jobAssignments.find(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
       const team = activeAssign?.team_id ? (teams[activeAssign.team_id] || null) : null
 
@@ -123,7 +176,7 @@ export const jobManagementApi = {
   },
 
   // ============================================
-  // GET ONE JOB — no embeds, no jobs.team_id
+  // GET ONE JOB
   // ============================================
   async getJob(id) {
     const [jobRes, assignRes] = await Promise.all([
@@ -167,7 +220,7 @@ export const jobManagementApi = {
   },
 
   // ============================================
-  // SEARCH BY JOB NUMBER — no embeds
+  // SEARCH BY JOB NUMBER
   // ============================================
   async searchByJobNumber(query) {
     if (!query || !query.trim()) return { data: [], error: null }
@@ -204,7 +257,7 @@ export const jobManagementApi = {
   },
 
   // ============================================
-  // FULL LOAD FOR EDITOR — no embeds
+  // FULL LOAD FOR EDITOR
   // ============================================
   async getJobWithItems(jobId) {
     const [jobRes, itemsRes] = await Promise.all([
@@ -303,7 +356,7 @@ export const jobManagementApi = {
     const { data: oldJob } = await supabase.from('jobs').select('*').eq('id', jobId).single()
     if (!oldJob) return { error: 'Job not found' }
 
-    // Never allow team_id in the patch — it lives on the assignment, not the job
+    // Never allow team_id in the patch — it lives on the assignment
     const { team_id, ...safeUpdates } = updates || {}
 
     const { error } = await supabase
@@ -318,14 +371,13 @@ export const jobManagementApi = {
 
     if (error) return { error }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'edited',
-      action_description: 'Job details edited',
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'edited',
+      description: 'Job details edited',
+      currentUser
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
@@ -340,7 +392,6 @@ export const jobManagementApi = {
         return sum + line
       }, 0)
 
-      // Strip team_id if it snuck in — it doesn't exist on jobs
       const { team_id, ...safeJobData } = jobData || {}
 
       const jobPatch = {
@@ -398,14 +449,13 @@ export const jobManagementApi = {
         }).eq('id', it.id)
       }
 
-      await supabase.from('job_history').insert([{
-        job_id: jobId,
-        action_type: 'edited',
-        action_description: `Job details, services and schedule updated (${(items || []).length} items, R${subtotal.toFixed(2)})`,
-        performed_by: currentUser?.id,
-        performed_by_name: currentUser?.full_name || currentUser?.email,
-        performed_by_role: currentUser?.role
-      }])
+      const historyEntry = await buildHistoryEntry({
+        jobId,
+        actionType: 'edited',
+        description: `Job details, services and schedule updated (${(items || []).length} items, R${subtotal.toFixed(2)})`,
+        currentUser
+      })
+      await supabase.from('job_history').insert([historyEntry])
 
       return { success: true, subtotal }
     } catch (err) {
@@ -441,18 +491,19 @@ export const jobManagementApi = {
 
     if (error) return { error }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'rescheduled',
-      action_description: `Rescheduled from ${oldDateTime} to ${newDateTime}`,
-      old_value: oldDateTime,
-      new_value: newDateTime,
-      reason: reason,
-      notes: notes,
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'rescheduled',
+      description: `Rescheduled from ${oldDateTime} to ${newDateTime}`,
+      currentUser,
+      extra: {
+        old_value: oldDateTime,
+        new_value: newDateTime,
+        reason: reason,
+        notes: notes
+      }
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
@@ -477,25 +528,25 @@ export const jobManagementApi = {
 
     if (error) return { error }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'postponed',
-      action_description: `Job postponed${expectedDate ? '. Expected new date: ' + expectedDate : ''}`,
-      reason: reason,
-      notes: notes,
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'postponed',
+      description: `Job postponed${expectedDate ? '. Expected new date: ' + expectedDate : ''}`,
+      currentUser,
+      extra: {
+        reason: reason,
+        notes: notes
+      }
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
 
   // ============================================
-  // REASSIGN — team lives on the ASSIGNMENT, not the job
+  // REASSIGN — team lives on the ASSIGNMENT
   // ============================================
   async reassignJob(jobId, { newTeamId, newEmployeeId, reason }, currentUser) {
-    // Update job status
     const { error: jobError } = await supabase
       .from('jobs')
       .update({
@@ -508,7 +559,6 @@ export const jobManagementApi = {
 
     if (jobError) return { error: jobError }
 
-    // Update the assignment's team + insert employee if chosen
     if (newEmployeeId) {
       const { error: assignError } = await supabase
         .from('field_job_assignments')
@@ -523,7 +573,6 @@ export const jobManagementApi = {
 
       if (assignError) console.warn('Assignment upsert warning:', assignError.message)
     } else if (newTeamId) {
-      // Team-only change: update existing active assignments
       const { error: updateErr } = await supabase
         .from('field_job_assignments')
         .update({ team_id: newTeamId })
@@ -533,15 +582,14 @@ export const jobManagementApi = {
       if (updateErr) console.warn('Assignment team update warning:', updateErr.message)
     }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'reassigned',
-      action_description: `Job reassigned${newTeamId ? ' to new team' : ''}${newEmployeeId ? ' and new cleaner' : ''}`,
-      reason: reason,
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'reassigned',
+      description: `Job reassigned${newTeamId ? ' to new team' : ''}${newEmployeeId ? ' and new cleaner' : ''}`,
+      currentUser,
+      extra: { reason }
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
@@ -565,16 +613,17 @@ export const jobManagementApi = {
 
     if (error) return { error }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'priority_changed',
-      action_description: `Priority changed from ${oldJob.priority} to ${newPriority}`,
-      old_value: oldJob.priority,
-      new_value: newPriority,
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'priority_changed',
+      description: `Priority changed from ${oldJob.priority} to ${newPriority}`,
+      currentUser,
+      extra: {
+        old_value: oldJob.priority,
+        new_value: newPriority
+      }
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
@@ -596,16 +645,17 @@ export const jobManagementApi = {
 
     if (error) return { error }
 
-    await supabase.from('job_history').insert([{
-      job_id: jobId,
-      action_type: 'cancelled',
-      action_description: `Job cancelled`,
-      reason: reason,
-      notes: notes,
-      performed_by: currentUser?.id,
-      performed_by_name: currentUser?.full_name || currentUser?.email,
-      performed_by_role: currentUser?.role
-    }])
+    const historyEntry = await buildHistoryEntry({
+      jobId,
+      actionType: 'cancelled',
+      description: `Job cancelled`,
+      currentUser,
+      extra: {
+        reason: reason,
+        notes: notes
+      }
+    })
+    await supabase.from('job_history').insert([historyEntry])
 
     return { success: true }
   },
