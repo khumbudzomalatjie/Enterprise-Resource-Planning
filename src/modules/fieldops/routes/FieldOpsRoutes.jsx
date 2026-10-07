@@ -4,9 +4,9 @@ import RoleBasedRoute from '../../../components/RoleBasedRoute'
 import FieldOpsDashboard from '../pages/FieldOpsDashboard'
 import LiveJobs from '../pages/LiveJobs'
 import JobTracker from '../pages/JobTracker'
-import PhotoGallery from '../pages/PhotoGallery'          // ✅ NEW
+import JobList from '../pages/JobList'
+import PhotoGallery from '../pages/PhotoGallery'
 
-// Enterprise Incident Management
 import IncidentDashboard from '../incidents/pages/IncidentDashboard'
 import ReportIncident from '../incidents/pages/ReportIncident'
 import IncidentList from '../incidents/pages/IncidentList'
@@ -15,10 +15,7 @@ import IncidentTracker from '../incidents/pages/IncidentTracker'
 import MyIncidents from '../incidents/pages/MyIncidents'
 import AllCapas from '../incidents/pages/AllCapas'
 
-// ✅ Job Management
 import JobManagementRoutes from '../jobmanagement/routes/JobManagementRoutes'
-
-// Field Ops Messaging System
 import Messages from '../messages/pages/Messages'
 
 import { USER_ROLES } from '../../../types/authTypes'
@@ -31,7 +28,6 @@ export default function FieldOpsRoutes() {
 
   return (
     <Routes>
-      {/* MAIN DASHBOARD */}
       <Route path="/" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -40,7 +36,14 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* LIVE JOBS */}
+      <Route path="/job-list" element={
+        <ProtectedRoute>
+          <RoleBasedRoute requiredRoles={allRoles}>
+            <JobList />
+          </RoleBasedRoute>
+        </ProtectedRoute>
+      } />
+
       <Route path="/live-jobs" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -49,7 +52,6 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* JOB TRACKER */}
       <Route path="/job-tracker" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -58,7 +60,6 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ PHOTO GALLERY */}
       <Route path="/photos" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -67,7 +68,6 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ✅ JOB MANAGEMENT */}
       <Route path="/job-management/*" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={[
@@ -81,7 +81,6 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* MESSAGING */}
       <Route path="/messages" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
@@ -90,7 +89,6 @@ export default function FieldOpsRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* ENTERPRISE INCIDENT MANAGEMENT */}
       <Route path="/incidents" element={
         <ProtectedRoute>
           <RoleBasedRoute requiredRoles={allRoles}>
