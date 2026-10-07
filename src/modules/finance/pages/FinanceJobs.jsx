@@ -48,7 +48,6 @@ export default function FinanceJobs() {
       if (jobsError) { setError(jobsError.message); setLoading(false); return }
       if (!allJobs || allJobs.length === 0) { setJobs([]); setLoading(false); return }
 
-      // ✅ Fetch invoices WITH their items
       const { data: allInvoices } = await supabase
         .from('invoices')
         .select('*, invoice_items(*)')
@@ -136,7 +135,8 @@ export default function FinanceJobs() {
   const handleViewInvoice = (job) => setViewingInvoice(job)
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ BULLETPROOF 1-PAGE PDF (same fix as Sales)
+  // ✅ BULLETPROOF 1-PAGE PDF — canvas + jsPDF direct
+  //    scale: 3 for crisp logo and text
   // ═══════════════════════════════════════════════════════════
   const handleDownloadInvoice = async (job) => {
     setDownloadingInvoice(job.id)
@@ -145,7 +145,7 @@ export default function FinanceJobs() {
       if (!element) { toast.error('Preview not ready'); setDownloadingInvoice(null); return }
 
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3,                    // ✅ 3x for crisp logo
         useCORS: true,
         letterRendering: false,
         scrollX: 0,
@@ -374,7 +374,6 @@ export default function FinanceJobs() {
         )}
       </main>
 
-      {/* Invoice View Modal */}
       <AnimatePresence>
         {viewingInvoice && (
           <motion.div
@@ -411,7 +410,6 @@ export default function FinanceJobs() {
         )}
       </AnimatePresence>
 
-      {/* Hidden renders for PDF capture */}
       <div
         aria-hidden="true"
         style={{
