@@ -11,20 +11,20 @@ const normalizeService = (s) => ({
 
 export const jobManagementApi = {
   // ============================================
-  // GET ALL JOBS WITH DETAILS
+  // GET ALL JOBS — split queries, no deep embed
+  // (PostgREST rejects the nested employees() embed inside
+  //  field_job_assignments, so we fetch each table separately
+  //  and merge in JS)
   // ============================================
   async getJobs(filters = {}) {
+    // 1. Base jobs query — shallow embeds only
     let query = supabase
       .from('jobs')
       .select(`
         *,
-        clients(id, company_name, phone, email, address_line1, city, contact_person),
+        clients(id, company_name, phone, email, address_line1, city),
         job_categories(name, color),
-        teams(id, team_name),
-        field_job_assignments(
-          id, employee_id, assignment_status, assigned_at,
-          employees(id, first_name, last_name, employee_code, phone, user_id)
-        )
+        teams(id, team_name)
       `)
       .order('created_at', { ascending: false })
       .limit(200)
@@ -38,49 +38,140 @@ export const jobManagementApi = {
       query = query.or(`job_number.ilike.%${filters.search}%,title.ilike.%${filters.search}%,site_address.ilike.%${filters.search}%`)
     }
 
-    const { data, error } = await query
-    return { data: data || [], error }
+    const { data: jobs, error } = await query
+    if (error) {
+      console.error('getJobs error:', error.message, error.details, error.hint)
+      return { data: [], error }
+    }
+    if (!jobs || jobs.length === 0) return { data: [], error: null }
+
+    // 2. Assignments for these jobs
+    const jobIds = jobs.map(j => j.id)
+    const { data: assignments } = await supabase
+      .from('field_job_assignments')
+      .select('id, job_id, employee_id, assignment_status, assigned_at')
+      .in('job_id', jobIds)
+
+    // 3. Employees for those assignments
+    const empIds = [...new Set((assignments || []).map(a => a.employee_id).filter(Boolean))]
+    let employees = []
+    if (empIds.length > 0) {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code, phone, user_id')
+        .in('id', empIds)
+      employees = data || []
+    }
+
+    // 4. Merge
+    const empMap = {}
+    employees.forEach(e => { empMap[e.id] = e })
+
+    const merged = jobs.map(job => ({
+      ...job,
+      field_job_assignments: (assignments || [])
+        .filter(a => a.job_id === job.id)
+        .map(a => ({ ...a, employees: empMap[a.employee_id] || null }))
+    }))
+
+    return { data: merged, error: null }
   },
 
   async getJob(id) {
-    const { data, error } = await supabase
-      .from('jobs')
-      .select(`
-        *,
-        clients(*),
-        job_categories(*),
-        teams(*),
-        field_job_assignments(*, employees(*))
-      `)
-      .eq('id', id)
-      .single()
-    return { data, error }
+    const [jobRes, assignRes] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select(`
+          *,
+          clients(*),
+          job_categories(*),
+          teams(*)
+        `)
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('field_job_assignments')
+        .select('*')
+        .eq('job_id', id)
+    ])
+
+    if (jobRes.error) return { data: null, error: jobRes.error }
+
+    // Attach employees to each assignment
+    const assignments = assignRes.data || []
+    const empIds = [...new Set(assignments.map(a => a.employee_id).filter(Boolean))]
+    let employees = []
+    if (empIds.length > 0) {
+      const { data } = await supabase.from('employees').select('*').in('id', empIds)
+      employees = data || []
+    }
+    const empMap = {}
+    employees.forEach(e => { empMap[e.id] = e })
+
+    return {
+      data: {
+        ...jobRes.data,
+        field_job_assignments: assignments.map(a => ({ ...a, employees: empMap[a.employee_id] || null }))
+      },
+      error: null
+    }
   },
 
   // ============================================
-  // ✅ NEW: search jobs by number for lookup
+  // SEARCH BY JOB NUMBER (split queries — no deep embed)
   // ============================================
   async searchByJobNumber(query) {
     if (!query || !query.trim()) return { data: [], error: null }
     const trimmed = query.trim().toUpperCase()
 
-    const { data, error } = await supabase
+    // 1. Base job query
+    const { data: jobs, error } = await supabase
       .from('jobs')
-      .select(`
-        id, job_number, title, status, priority,
-        scheduled_date, scheduled_start_time, quoted_amount,
-        clients(company_name),
-        job_categories(name, color)
-      `)
+      .select('id, job_number, title, status, priority, scheduled_date, scheduled_start_time, quoted_amount, client_id, job_category_id')
       .ilike('job_number', `%${trimmed}%`)
       .order('created_at', { ascending: false })
       .limit(15)
 
-    return { data: data || [], error }
+    if (error) {
+      console.error('searchByJobNumber error:', error.message, error.details)
+      return { data: [], error }
+    }
+    if (!jobs || jobs.length === 0) return { data: [], error: null }
+
+    // 2. Fetch clients
+    const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))]
+    let clients = []
+    if (clientIds.length > 0) {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, company_name')
+        .in('id', clientIds)
+      clients = data || []
+    }
+
+    // 3. Fetch categories
+    const catIds = [...new Set(jobs.map(j => j.job_category_id).filter(Boolean))]
+    let categories = []
+    if (catIds.length > 0) {
+      const { data } = await supabase
+        .from('job_categories')
+        .select('id, name, color')
+        .in('id', catIds)
+      categories = data || []
+    }
+
+    // 4. Merge
+    const merged = jobs.map(j => ({
+      ...j,
+      clients: clients.find(c => c.id === j.client_id) || null,
+      job_categories: categories.find(c => c.id === j.job_category_id) || null
+    }))
+
+    return { data: merged, error: null }
   },
 
   // ============================================
-  // ✅ NEW: full load with items — used by editor
+  // FULL LOAD FOR EDITOR (job + items)
   // ============================================
   async getJobWithItems(jobId) {
     const [jobRes, itemsRes] = await Promise.all([
@@ -102,23 +193,20 @@ export const jobManagementApi = {
     ])
 
     if (jobRes.error) return { data: null, error: jobRes.error }
+
     if (itemsRes.error) {
-      // job_items might not exist — degrade gracefully
       console.warn('job_items fetch failed:', itemsRes.error.message)
       return { data: { ...jobRes.data, job_items: [] }, error: null }
     }
 
     return {
-      data: {
-        ...jobRes.data,
-        job_items: itemsRes.data || []
-      },
+      data: { ...jobRes.data, job_items: itemsRes.data || [] },
       error: null
     }
   },
 
   // ============================================
-  // ✅ NEW: available services (for the picker)
+  // AVAILABLE SERVICES (for the picker)
   // ============================================
   async getAvailableServices() {
     const { data, error } = await supabase
@@ -126,7 +214,6 @@ export const jobManagementApi = {
       .select('*')
 
     if (error) {
-      // Fallback to job_categories if products_services isn't there
       const fb = await supabase
         .from('job_categories')
         .select('*')
@@ -211,17 +298,15 @@ export const jobManagementApi = {
   },
 
   // ============================================
-  // ✅ NEW: save full job (details + items + schedule)
+  // SAVE FULL JOB (details + items + schedule)
   // ============================================
   async saveFullJob(jobId, { jobData, items, originalItemIds, schedule }, currentUser) {
     try {
-      // 1. Compute subtotal from items
       const subtotal = (items || []).reduce((sum, it) => {
         const line = (parseFloat(it.quantity) || 0) * (parseFloat(it.unit_price) || 0)
         return sum + line
       }, 0)
 
-      // 2. Update job row (details + schedule + totals)
       const jobPatch = {
         ...(jobData || {}),
         ...(schedule || {}),
@@ -231,7 +316,6 @@ export const jobManagementApi = {
         last_updated_at: new Date().toISOString()
       }
 
-      // Remove undefined
       Object.keys(jobPatch).forEach(k => jobPatch[k] === undefined && delete jobPatch[k])
 
       const { error: jobError } = await supabase
@@ -241,7 +325,6 @@ export const jobManagementApi = {
 
       if (jobError) return { error: jobError }
 
-      // 3. Diff items
       const originalIds = originalItemIds || []
       const currentRealIds = (items || []).filter(i => i.id && !String(i.id).startsWith('temp-')).map(i => i.id)
 
@@ -279,7 +362,6 @@ export const jobManagementApi = {
         }).eq('id', it.id)
       }
 
-      // 4. History log
       await supabase.from('job_history').insert([{
         job_id: jobId,
         action_type: 'edited',
