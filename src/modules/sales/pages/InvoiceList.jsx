@@ -5,7 +5,8 @@ import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
-import html2pdf from 'html2pdf.js'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 import InvoicePDF from '../components/InvoicePDF'
 import {
   Receipt, Search, Eye, Download, ChevronRight,
@@ -69,10 +70,11 @@ export default function InvoiceList() {
   const handleViewInvoice = (invoice) => setViewingInvoice(invoice)
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ FIXED: force exactly one A4 page
-  //   • Explicit width/height on html2canvas → clips to A4
-  //   • pagebreak.mode: [] → no automatic page breaks at all
-  //   • removeContainer: true → clean up the off-screen clone
+  // ✅ BULLETPROOF 1-PAGE PDF
+  //   • html2canvas renders the element to a fixed-size canvas
+  //   • jsPDF places that canvas exactly onto ONE A4 page
+  //   • Bypasses html2pdf's page-breaking entirely — impossible
+  //     to spill onto page 2
   // ═══════════════════════════════════════════════════════════
   const handleDownloadInvoice = async (invoice) => {
     setDownloadingInvoice(invoice.id)
@@ -84,34 +86,41 @@ export default function InvoiceList() {
         return
       }
 
-      const opt = {
-        margin: 0,
-        filename: `Invoice_${invoice.invoice_number || invoice.id}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: false,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: 794,
-          windowHeight: 1123,
-          width: 794,          // ✅ clip to exactly A4 width
-          height: 1123,        // ✅ clip to exactly A4 height — kills page 2
-          backgroundColor: '#ffffff',
-          removeContainer: true
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-          compress: true,
-          precision: 16
-        },
-        pagebreak: { mode: [] }   // ✅ no auto page breaks — we control size
-      }
+      // 1. Render element to canvas at 2x for crispness
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        letterRendering: false,
+        scrollX: 0,
+        scrollY: 0,
+        width: 794,
+        height: 1122,             // 297mm at 96dpi, rounded down
+        windowWidth: 794,
+        windowHeight: 1122,
+        backgroundColor: '#ffffff',
+        logging: false
+      })
 
-      await html2pdf().set(opt).from(element).save()
+      const imgData = canvas.toDataURL('image/jpeg', 0.98)
+
+      // 2. Create a single-page A4 PDF and place the image to fill it exactly
+      const pdf = new jsPDF({
+        unit: 'mm',
+        format: 'a4',
+        orientation: 'portrait',
+        compress: true
+      })
+
+      pdf.addImage(
+        imgData,
+        'JPEG',
+        0, 0,                    // x, y
+        210, 297,                // width, height in mm — exactly A4
+        undefined,
+        'FAST'
+      )
+
+      pdf.save(`Invoice_${invoice.invoice_number || invoice.id}.pdf`)
       toast.success('Invoice downloaded! 📄')
     } catch (error) {
       console.error('Download error:', error)
@@ -270,7 +279,7 @@ export default function InvoiceList() {
           </div>
         )}
 
-        {/* ✅ Hidden renders — wrapper clipped to A4 so nothing escapes */}
+        {/* Hidden renders — clipped to A4 so nothing leaks */}
         <div
           aria-hidden="true"
           style={{
@@ -288,8 +297,8 @@ export default function InvoiceList() {
               ref={el => { if (el) downloadRefs.current[inv.id] = el }}
               style={{
                 width: '794px',
-                height: '1123px',    // ✅ clip to A4 height
-                overflow: 'hidden',  // ✅ no scroll content leaks out
+                height: '1122px',
+                overflow: 'hidden',
                 position: 'relative'
               }}
             >
