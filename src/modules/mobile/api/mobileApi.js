@@ -56,10 +56,12 @@ export const mobileApi = {
   // JOBS
   // ============================================
   async getOpenJobs() {
+    // ✅ Only jobs explicitly released to the pool
     const { data: availableJobs } = await supabase
       .from('jobs')
       .select('*')
       .in('status', ['pending', 'scheduled'])
+      .eq('released_to_pool', true)
       .order('scheduled_date')
       .limit(50)
 
@@ -212,9 +214,6 @@ export const mobileApi = {
 
     if (aErr) return { success: false, error: aErr.message }
 
-    // Note: we deliberately do NOT set jobs.status = 'in_progress' here.
-    // Selecting a job = 'assigned'. Actual work starts with startJob().
-    // The jobs row still needs its updated_at touched for the tracker.
     await supabase
       .from('jobs')
       .update({ updated_at: new Date().toISOString() })
@@ -225,13 +224,7 @@ export const mobileApi = {
     return { success: true }
   },
 
-  // ═══════════════════════════════════════════════
-  // ✅ AMENDED: Also updates jobs.status = 'in_progress'
-  // Previously only touched field_job_assignments, so Live Jobs (which
-  // reads jobs.status) kept showing the job as 'scheduled'.
-  // ═══════════════════════════════════════════════
   async startJob(jobId, employeeId, lat, lng) {
-    // 1. Flip the assignment to in_progress
     const updates = { assignment_status: 'in_progress', started_at: new Date().toISOString() }
     if (lat) { updates.check_in_latitude = lat; updates.check_in_longitude = lng; updates.check_in_time = new Date().toISOString() }
 
@@ -241,7 +234,6 @@ export const mobileApi = {
       .eq('job_id', jobId)
       .eq('employee_id', employeeId)
 
-    // ✅ 2. Also bump the parent job to in_progress
     const nowIso = new Date().toISOString()
     const { error: jobErr } = await supabase
       .from('jobs')
@@ -250,19 +242,12 @@ export const mobileApi = {
       .neq('status', 'completed')
       .neq('status', 'cancelled')
 
-    if (jobErr) {
-      // Non-fatal — the assignment is already saved. LiveJobs.jsx derives
-      // the display status from assignments too, so the UI stays correct.
-      console.warn('startJob: could not update jobs.status —', jobErr.message)
-    }
+    if (jobErr) console.warn('startJob: could not update jobs.status —', jobErr.message)
 
     await mobileApi.logAction(employeeId, 'job_started', 'Started job', jobId, 'job', lat, lng)
     return { success: true }
   },
 
-  // ═══════════════════════════════════════════════
-  // COMPLETE JOB
-  // ═══════════════════════════════════════════════
   async completeJob(jobId, employeeId, lat, lng) {
     console.log('🔄 [completeJob] START', { jobId, employeeId, lat, lng })
 
@@ -288,113 +273,55 @@ export const mobileApi = {
         console.error('❌ [completeJob] Assignment update failed:', assignError)
         return { success: false, error: `Assignment update failed: ${assignError.message}` }
       }
-      console.log('✅ [completeJob] Assignment updated:', assignData)
-
-      const { data: job, error: fetchError } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('id', jobId)
-        .single()
-
-      if (fetchError) {
-        console.error('❌ [completeJob] Job fetch failed:', fetchError)
-        return { success: false, error: `Could not load job: ${fetchError.message}` }
-      }
 
       const nowIso = new Date().toISOString()
-      const fullUpdate = {
-        status: 'completed',
-        actual_end_time: nowIso,
-        updated_at: nowIso,
-        completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
-      }
-
-      let { error: jobError } = await supabase
+      const { error: jobError } = await supabase
         .from('jobs')
-        .update(fullUpdate)
+        .update({
+          status: 'completed',
+          actual_end_time: nowIso,
+          updated_at: nowIso,
+          completion_notes: `Completed via mobile on ${new Date().toLocaleString()}`
+        })
         .eq('id', jobId)
-
-      let jobUpdateWarning = null
 
       if (jobError) {
         console.error('❌ [completeJob] Job status update failed:', jobError)
-        const msg = jobError.message || ''
-
-        if (msg.includes('invalid input syntax for type uuid')) {
-          console.warn('⚠️ [completeJob] UUID trigger error detected — retrying minimal update')
-          const { error: retryError } = await supabase
-            .from('jobs')
-            .update({ status: 'completed' })
-            .eq('id', jobId)
-
-          if (retryError) {
-            console.error('❌ [completeJob] Minimal retry also failed:', retryError)
-            jobUpdateWarning =
-              'Job completed on mobile, but the main ERP could not update the job status (DB trigger issue). Please notify admin.'
-          } else {
-            console.log('✅ [completeJob] Job status updated via minimal payload')
-          }
-        } else {
-          return { success: false, error: `Job status update failed: ${msg}` }
-        }
-      } else {
-        console.log('✅ [completeJob] Job marked completed')
+        return { success: false, error: `Job status update failed: ${jobError.message}` }
       }
 
-      let clientInfo = null
-      if (job.client_id) {
-        const { data: client } = await supabase
-          .from('clients')
-          .select('company_name, email, phone, address_line1, city')
-          .eq('id', job.client_id)
-          .maybeSingle()
-        clientInfo = client
+      await mobileApi.logAction(employeeId, 'job_completed', `Completed job ${jobId}`, jobId, 'job', lat, lng)
+
+      let invoiceNumber = null
+      try {
+        const { data: jobRow } = await supabase
+          .from('jobs')
+          .select('invoice_id, invoices:invoice_id(invoice_number)')
+          .eq('id', jobId)
+          .single()
+        invoiceNumber = jobRow?.invoices?.invoice_number || null
+      } catch (readErr) {
+        console.warn('Could not read back invoice (non-critical):', readErr.message)
       }
 
-      let invoiceId = null
-      if (job && job.quoted_amount && job.quoted_amount > 0) {
-        try {
-          const invoiceResult = await mobileApi.createInvoiceForJob(job, clientInfo)
-
-          if (invoiceResult.success && invoiceResult.invoice) {
-            invoiceId = invoiceResult.invoice.id
-
-            const { error: linkError } = await supabase
-              .from('jobs')
-              .update({ invoice_id: invoiceId, updated_at: new Date().toISOString() })
-              .eq('id', jobId)
-
-            if (linkError) {
-              console.warn('⚠️ [completeJob] Failed to link invoice to job:', linkError.message)
-            } else {
-              console.log('✅ [completeJob] Invoice linked:', invoiceResult.invoice.invoice_number)
-            }
-          } else {
-            console.warn('⚠️ [completeJob] Invoice not created (non-critical):', invoiceResult.error)
-          }
-        } catch (invoiceErr) {
-          console.warn('⚠️ [completeJob] Invoice exception (non-critical):', invoiceErr.message)
-        }
-      }
-
-      await mobileApi.logAction(employeeId, 'job_completed', `Completed ${job?.job_number || jobId}`, jobId, 'job', lat, lng)
-
-      console.log('✅ [completeJob] SUCCESS', jobUpdateWarning ? '(with warning)' : '')
-      return {
-        success: true,
-        job: { ...job, invoice_id: invoiceId },
-        warning: jobUpdateWarning
-      }
+      return { success: true, invoiceNumber, warning: null }
     } catch (err) {
-      console.error('❌ [completeJob] Exception:', err)
       return { success: false, error: err.message || 'Unexpected error while completing job' }
     }
   },
 
   async createInvoiceForJob(job, clientInfo = null) {
-    console.log('📄 Creating invoice for:', job?.job_number)
-
     try {
+      const { data: existing } = await supabase
+        .from('invoices')
+        .select('id, invoice_number')
+        .eq('job_id', job.id)
+        .maybeSingle()
+
+      if (existing) {
+        return { success: true, invoice: existing, alreadyExists: true }
+      }
+
       const yr = new Date().getFullYear().toString().slice(-2)
       const num = String(Math.floor(Math.random() * 99999)).padStart(5, '0')
       const invoiceNumber = `INV-${yr}${num}`
@@ -421,51 +348,31 @@ export const mobileApi = {
           tax_amount: taxAmount,
           total_amount: totalAmount,
           amount_paid: 0,
-          status: 'sent',
+          status: 'draft',
           notes: `Job: ${job.job_number} - ${job.title || 'Cleaning Service'}`
         }])
         .select()
         .single()
 
-      if (error) {
-        console.error('❌ Invoice insert error:', error.message)
-        return { success: false, error: error.message }
-      }
-
-      console.log('✅ Invoice created:', invoice?.invoice_number, 'Amount: R', totalAmount)
+      if (error) return { success: false, error: error.message }
 
       try {
-        const { error: itemError } = await supabase
-          .from('invoice_items')
-          .insert([{
-            invoice_id: invoice.id,
-            item_number: 1,
-            description: `${job.title || 'Cleaning Service'}`,
-            quantity: 1,
-            unit: 'service',
-            unit_price: amount,
-            tax_percent: taxRate,
-            total_price: amount
-          }])
+        await supabase.from('invoice_items').insert([{
+          invoice_id: invoice.id,
+          item_number: 1,
+          description: `${job.title || 'Cleaning Service'}`,
+          quantity: 1,
+          unit: 'service',
+          unit_price: amount,
+          tax_percent: taxRate,
+          total_price: amount
+        }])
+      } catch (itemErr) {}
 
-        if (itemError) console.error('⚠️ Invoice item error (non-critical):', itemError.message)
-      } catch (itemErr) {
-        console.warn('⚠️ Invoice item exception (non-critical):', itemErr.message)
-      }
-
-      if (job.quotation_id) {
-        try {
-          await supabase.from('quotations').update({
-            status: 'converted', converted_to_invoice: true
-          }).eq('id', job.quotation_id)
-        } catch (qErr) {
-          console.warn('⚠️ Quotation update (non-critical):', qErr.message)
-        }
-      }
+      await supabase.from('jobs').update({ invoice_id: invoice.id, updated_at: new Date().toISOString() }).eq('id', job.id)
 
       return { success: true, invoice }
     } catch (err) {
-      console.error('❌ Invoice exception:', err)
       return { success: false, error: err.message }
     }
   },
