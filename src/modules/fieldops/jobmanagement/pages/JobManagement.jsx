@@ -8,8 +8,8 @@ import useAuthStore from '../../../../store/authStore'
 import JobEditorModal from '../components/JobEditorModal'
 import toast from 'react-hot-toast'
 import {
-  Briefcase, Search, Filter, ChevronRight,
-  Calendar, Clock, User, MapPin,
+  Briefcase, Search, ChevronRight,
+  Calendar, Clock,
   CheckCircle2, XCircle, Edit, RotateCcw, Pause,
   UserCog, Flag, Eye, History, Sun, Moon, Sparkles,
   Loader2, X, Save, Hash, ArrowRight
@@ -17,8 +17,8 @@ import {
 
 export default function JobManagement() {
   const {
-    jobs, stats, jobHistory, teams, employees, availableServices, editingJob,
-    fetchJobs, fetchStats, fetchJobHistory, fetchTeams, fetchEmployees,
+    jobHistory, teams, employees, availableServices, editingJob,
+    fetchStats, fetchJobHistory, fetchTeams, fetchEmployees,
     editJob, rescheduleJob, postponeJob, reassignJob, changePriority, cancelJob,
     searchByJobNumber, loadJobForEditing, clearEditingJob, fetchAvailableServices,
     saveFullJob
@@ -26,11 +26,6 @@ export default function JobManagement() {
   const { isDark, toggleTheme } = useThemeStore()
   const { user, profile } = useAuthStore()
 
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [priorityFilter, setPriorityFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [saving, setSaving] = useState(false)
 
   const [lookupInput, setLookupInput] = useState('')
@@ -56,46 +51,12 @@ export default function JobManagement() {
   const canChangePriority = ['super_admin', 'operations_manager', 'supervisor'].includes(userRole)
 
   useEffect(() => {
-    loadData()
+    // Preload lookups the modals need
+    fetchStats()
     fetchTeams()
     fetchEmployees()
     fetchAvailableServices()
-  }, [statusFilter, priorityFilter, dateFrom, dateTo])
-
-  const loadData = () => {
-    fetchJobs({
-      search,
-      status: statusFilter,
-      priority: priorityFilter,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-    })
-    fetchStats()
-  }
-
-  const handleSearch = async (e) => {
-    e.preventDefault()
-    const q = search.trim()
-    if (!q) { loadData(); return }
-
-    setLookupLoading(true)
-    const result = await searchByJobNumber(q)
-    setLookupLoading(false)
-
-    if (!result.success) {
-      toast.error('Search failed: ' + (result.error || 'unknown'))
-      return
-    }
-
-    if ((result.data || []).length === 0) {
-      toast.error(`No job matches "${q}"`)
-      return
-    }
-
-    setLookupResults(result.data)
-    setLookupInput(q)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  }, [])
 
   const handleLookup = async () => {
     const query = lookupInput.trim()
@@ -150,7 +111,6 @@ export default function JobManagement() {
     if (result.success) {
       closeEditor()
       setLookupInput('')
-      loadData()
     } else {
       toast.error(result.error || 'Save failed')
     }
@@ -177,7 +137,7 @@ export default function JobManagement() {
       })
     }
     if (action === 'postpone') setPostponeForm({ reason: '', notes: '', expectedDate: '' })
-    if (action === 'reassign') setReassignForm({ newTeamId: job.team_id || '', newEmployeeId: '', reason: '' })
+    if (action === 'reassign') setReassignForm({ newTeamId: job.teams?.id || '', newEmployeeId: '', reason: '' })
     if (action === 'cancel') setCancelForm({ reason: '', notes: '' })
     if (action === 'history') fetchJobHistory(job.id)
     setShowActionModal(action)
@@ -267,24 +227,6 @@ export default function JobManagement() {
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
-  const filteredJobs = jobs.filter(j => {
-    if (!search) return true
-    const s = search.toLowerCase()
-    return j.job_number?.toLowerCase().includes(s) ||
-           j.title?.toLowerCase().includes(s) ||
-           j.clients?.company_name?.toLowerCase().includes(s) ||
-           j.site_address?.toLowerCase().includes(s)
-  })
-
-  const statCards = [
-    { label: 'Total', value: stats.total || 0, icon: Briefcase, color: 'text-slate-600', bg: 'bg-slate-100 dark:bg-slate-800' },
-    { label: 'Scheduled', value: stats.scheduled || 0, icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-    { label: 'Rescheduled', value: stats.rescheduled || 0, icon: RotateCcw, color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
-    { label: 'Postponed', value: stats.postponed || 0, icon: Pause, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
-    { label: 'Completed', value: stats.completed || 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-    { label: 'Cancelled', value: stats.cancelled || 0, icon: XCircle, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-  ]
-
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -299,32 +241,35 @@ export default function JobManagement() {
         </button>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/fieldops" className="text-slate-500 hover:text-emerald-600">Field Ops</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
           <span className="text-slate-800 dark:text-white font-medium">Job Management</span>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <Briefcase className="w-8 h-8 text-emerald-600" />Job Management
           </h1>
-          <p className="text-slate-500 mt-1 ml-11">Look up a job, edit services, change schedule</p>
+          <p className="text-slate-500 mt-1 ml-11">Look up a job to edit, reschedule, or manage</p>
         </motion.div>
 
+        {/* Lookup Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="neu-raised rounded-3xl p-5 mb-6 border-l-4 border-emerald-500"
+          className="neu-raised rounded-3xl p-6 border-l-4 border-emerald-500"
         >
           <div className="flex items-center gap-2 mb-3">
             <Hash className="w-5 h-5 text-emerald-600" />
-            <h2 className="font-bold text-slate-800 dark:text-white">Look Up a Job to Edit</h2>
+            <h2 className="font-bold text-slate-800 dark:text-white">Look Up a Job</h2>
           </div>
-          <p className="text-xs text-slate-500 mb-4">
-            Type a job number → edit details, add/remove services, change dates & times.
+          <p className="text-sm text-slate-500 mb-5">
+            Type a job number to open the editor. You'll be able to update details,
+            add or remove services, and change the schedule.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
+
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -334,6 +279,7 @@ export default function JobManagement() {
                 placeholder="e.g. JOB-2610-0004 or 2610"
                 className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 font-mono"
                 autoComplete="off"
+                autoFocus
               />
             </div>
             <button
@@ -346,9 +292,12 @@ export default function JobManagement() {
             </button>
           </div>
 
+          {/* Results picker */}
           {lookupResults.length > 0 && (
-            <div className="mt-4 neu-inset rounded-2xl p-3 max-h-72 overflow-y-auto">
-              <p className="text-xs text-slate-500 mb-2">{lookupResults.length} matches — pick one:</p>
+            <div className="mt-5 neu-inset rounded-2xl p-3 max-h-96 overflow-y-auto">
+              <p className="text-xs text-slate-500 mb-2 px-1">
+                {lookupResults.length} match{lookupResults.length !== 1 ? 'es' : ''} — pick one:
+              </p>
               <div className="space-y-1">
                 {lookupResults.map(r => (
                   <button
@@ -358,11 +307,18 @@ export default function JobManagement() {
                   >
                     <div className="min-w-0">
                       <p className="font-mono font-bold text-slate-800 dark:text-white text-sm">{r.job_number}</p>
-                      <p className="text-xs text-slate-500 truncate">{r.title} · {r.clients?.company_name || 'No client'}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {r.title}
+                        {r.clients?.company_name && <> · {r.clients.company_name}</>}
+                        {r.scheduled_date && <> · {formatDate(r.scheduled_date)}</>}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getStatusColor(r.status)}`}>
                         {r.status?.replace('_', ' ')}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getPriorityColor(r.priority)}`}>
+                        {r.priority}
                       </span>
                       <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
@@ -372,209 +328,9 @@ export default function JobManagement() {
             </div>
           )}
         </motion.div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-          {statCards.map((s, i) => (
-            <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * i }}
-              className="neu-raised rounded-2xl p-4 text-center">
-              <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mx-auto mb-2`}>
-                <s.icon className={`w-5 h-5 ${s.color}`} />
-              </div>
-              <p className="text-2xl font-bold text-slate-800 dark:text-white">{s.value}</p>
-              <p className="text-xs text-slate-500 mt-1">{s.label}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="neu-raised rounded-2xl p-4 mb-6">
-          <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search by job#, customer, address..."
-                className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300" />
-            </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
-              <option value="all">All Status</option>
-              <option value="draft">Draft</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="assigned">Assigned</option>
-              <option value="in_progress">In Progress</option>
-              <option value="rescheduled">Rescheduled</option>
-              <option value="postponed">Postponed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-              className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300">
-              <option value="all">All Priority</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-            <button type="submit" className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white flex items-center justify-center gap-2">
-              <Filter className="w-4 h-4" /> Apply
-            </button>
-          </form>
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">From:</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                className="flex-1 px-3 py-2 neu-inset rounded-xl text-sm" />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">To:</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                className="flex-1 px-3 py-2 neu-inset rounded-xl text-sm" />
-            </div>
-          </div>
-        </div>
-
-        {/* DESKTOP TABLE */}
-        <div className="hidden lg:block neu-raised rounded-3xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/50">
-                <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Job ID</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Customer</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Service</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Location</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Cleaner/Team</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Date</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Time</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Status</th>
-                  <th className="text-left py-3 px-3 text-slate-500 font-medium">Priority</th>
-                  <th className="text-right py-3 px-3 text-slate-500 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredJobs.map(job => {
-                  const activeAssignment = (job.field_job_assignments || []).find(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
-                  return (
-                    <tr key={job.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                      <td className="py-3 px-3">
-                        <button
-                          onClick={() => openEditor(job.id)}
-                          className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline font-mono"
-                          title="Open full editor"
-                        >
-                          {job.job_number}
-                        </button>
-                      </td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{job.clients?.company_name || '—'}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{job.title}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 max-w-xs truncate">{job.site_address || '—'}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
-                        {activeAssignment?.employees ? `${activeAssignment.employees.first_name} ${activeAssignment.employees.last_name}` : (job.teams?.team_name || '—')}
-                      </td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{formatDate(job.scheduled_date)}</td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{job.scheduled_start_time?.slice(0,5) || '—'}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(job.status)}`}>
-                          {job.status?.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getPriorityColor(job.priority)}`}>
-                          {job.priority}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => openEditor(job.id)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Full">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => openAction(job, 'view')} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {canReschedule && (
-                            <button onClick={() => openAction(job, 'reschedule')} className="p-2 rounded-lg hover:bg-orange-100 text-slate-400 hover:text-orange-600" title="Reschedule">
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canPostpone && (
-                            <button onClick={() => openAction(job, 'postpone')} className="p-2 rounded-lg hover:bg-yellow-100 text-slate-400 hover:text-yellow-600" title="Postpone">
-                              <Pause className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canReassign && (
-                            <button onClick={() => openAction(job, 'reassign')} className="p-2 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Reassign">
-                              <UserCog className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canChangePriority && (
-                            <button onClick={() => openAction(job, 'priority')} className="p-2 rounded-lg hover:bg-amber-100 text-slate-400 hover:text-amber-600" title="Change Priority">
-                              <Flag className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canCancel && (
-                            <button onClick={() => openAction(job, 'cancel')} className="p-2 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600" title="Cancel">
-                              <XCircle className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button onClick={() => openAction(job, 'history')} className="p-2 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700" title="History">
-                            <History className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {filteredJobs.length === 0 && (
-                  <tr><td colSpan="10" className="text-center py-12 text-slate-400">No jobs found</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* MOBILE CARDS */}
-        <div className="lg:hidden space-y-4">
-          {filteredJobs.map(job => (
-            <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="neu-raised rounded-2xl p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <button onClick={() => openEditor(job.id)} className="font-bold text-emerald-600 hover:underline font-mono">
-                    {job.job_number}
-                  </button>
-                  <p className="text-xs text-slate-500">{job.clients?.company_name || '—'}</p>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusColor(job.status)}`}>
-                  {job.status?.replace('_', ' ')}
-                </span>
-              </div>
-              <h3 className="font-semibold text-slate-800 dark:text-white mb-2">{job.title}</h3>
-              <div className="space-y-1 text-xs text-slate-500 mb-3">
-                <p className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.site_address || '—'}</p>
-                <p className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(job.scheduled_date)} at {job.scheduled_start_time?.slice(0,5) || '—'}</p>
-                <p className="flex items-center gap-1"><User className="w-3 h-3" />{job.teams?.team_name || 'No team'}</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => openEditor(job.id)} className="flex-1 py-2 rounded-xl bg-emerald-100 text-emerald-700 text-xs font-medium flex items-center justify-center gap-1">
-                  <Edit className="w-3 h-3" /> Edit Full
-                </button>
-                {canReschedule && (
-                  <button onClick={() => openAction(job, 'reschedule')} className="flex-1 py-2 rounded-xl bg-orange-100 text-orange-700 text-xs font-medium flex items-center justify-center gap-1">
-                    <RotateCcw className="w-3 h-3" /> Reschedule
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          ))}
-          {filteredJobs.length === 0 && (
-            <div className="text-center py-12 neu-raised rounded-3xl">
-              <Briefcase className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">No jobs found</p>
-            </div>
-          )}
-        </div>
       </main>
 
-      {/* JOB EDITOR MODAL */}
+      {/* Job Editor Modal */}
       <AnimatePresence>
         {showEditor && editingJob && (
           <JobEditorModal
@@ -587,7 +343,7 @@ export default function JobManagement() {
         )}
       </AnimatePresence>
 
-      {/* ACTION MODALS */}
+      {/* Action Modals */}
       <AnimatePresence>
         {showActionModal && selectedJob && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -838,7 +594,9 @@ export default function JobManagement() {
                         </div>
                         <p className="text-sm text-slate-700 dark:text-slate-300">{h.action_description}</p>
                         {h.reason && <p className="text-xs text-slate-500 mt-1">Reason: {h.reason}</p>}
-                        <p className="text-xs text-slate-500 mt-1">By: {h.performed_by_name || 'System'}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          By: <span className="font-medium text-slate-700 dark:text-slate-300">{h.performed_by_name || 'Unknown'}</span>
+                        </p>
                       </div>
                     ))}
                     {jobHistory.length === 0 && <p className="text-center text-slate-400 py-8">No history yet</p>}
