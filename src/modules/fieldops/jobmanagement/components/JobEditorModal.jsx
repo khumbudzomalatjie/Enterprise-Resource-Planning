@@ -3,8 +3,7 @@ import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
   X, Save, Plus, Trash2, Briefcase, MapPin, Calendar,
-  Clock, DollarSign, Loader2, AlertCircle, ListPlus,
-  Tag, ChevronDown
+  Clock, Loader2, AlertCircle, ListPlus, Tag, ChevronDown
 } from 'lucide-react'
 
 const emptyItem = () => ({
@@ -119,7 +118,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
         className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full my-8 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-slate-800 rounded-t-3xl border-b border-slate-200 dark:border-slate-700 p-5 z-10 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
@@ -136,9 +134,7 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-6">
-          {/* ─── Section 1: Job Details ─── */}
           <section>
             <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2">
               <Tag className="w-4 h-4" /> Job Details
@@ -214,7 +210,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
             </div>
           </section>
 
-          {/* ─── Section 2: Services & Items ─── */}
           <section>
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-2">
@@ -305,7 +300,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
               ))}
             </div>
 
-            {/* Totals */}
             <div className="mt-3 flex justify-end">
               <div className="w-full sm:w-64 space-y-1 text-sm">
                 <div className="flex justify-between text-slate-600 dark:text-slate-400">
@@ -324,7 +318,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
             </div>
           </section>
 
-          {/* ─── Section 3: Schedule ─── */}
           <section>
             <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2">
               <Calendar className="w-4 h-4" /> Schedule
@@ -364,7 +357,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
             </div>
           </section>
 
-          {/* Info banner */}
           <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/10 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
@@ -374,7 +366,6 @@ export default function JobEditorModal({ job, services, onClose, onSave, saving 
           </div>
         </div>
 
-        {/* Footer */}
         <div className="sticky bottom-0 bg-white dark:bg-slate-800 rounded-b-3xl border-t border-slate-200 dark:border-slate-700 p-5 flex justify-end gap-2 z-10">
           <button
             onClick={onClose}
