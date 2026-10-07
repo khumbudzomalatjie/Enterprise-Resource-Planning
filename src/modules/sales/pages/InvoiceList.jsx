@@ -29,7 +29,6 @@ export default function InvoiceList() {
   const loadInvoices = async () => {
     setLoading(true)
     try {
-      // ✅ Fetch invoices WITH their line items
       let query = supabase
         .from('invoices')
         .select('*, invoice_items(*), clients(company_name)')
@@ -69,9 +68,12 @@ export default function InvoiceList() {
 
   const handleViewInvoice = (invoice) => setViewingInvoice(invoice)
 
-  // ───────────────────────────────────────────────────────────
-  // ✅ Guaranteed one-page PDF using QuotationPDF's layout
-  // ───────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // ✅ FIXED: force exactly one A4 page
+  //   • Explicit width/height on html2canvas → clips to A4
+  //   • pagebreak.mode: [] → no automatic page breaks at all
+  //   • removeContainer: true → clean up the off-screen clone
+  // ═══════════════════════════════════════════════════════════
   const handleDownloadInvoice = async (invoice) => {
     setDownloadingInvoice(invoice.id)
     try {
@@ -89,15 +91,24 @@ export default function InvoiceList() {
         html2canvas: {
           scale: 2,
           useCORS: true,
-          letterRendering: false,   // ✅ critical — prevents row splitting
+          letterRendering: false,
           scrollX: 0,
           scrollY: 0,
           windowWidth: 794,
           windowHeight: 1123,
-          backgroundColor: '#ffffff'
+          width: 794,          // ✅ clip to exactly A4 width
+          height: 1123,        // ✅ clip to exactly A4 height — kills page 2
+          backgroundColor: '#ffffff',
+          removeContainer: true
         },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-        pagebreak: { mode: ['css'] }  // ✅ respects page-break-inside: avoid
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+          compress: true,
+          precision: 16
+        },
+        pagebreak: { mode: [] }   // ✅ no auto page breaks — we control size
       }
 
       await html2pdf().set(opt).from(element).save()
@@ -153,7 +164,6 @@ export default function InvoiceList() {
           </button>
         </motion.div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="neu-raised rounded-2xl p-4 text-center">
             <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(totalAmount)}</p>
@@ -169,7 +179,6 @@ export default function InvoiceList() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="neu-raised rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -195,7 +204,6 @@ export default function InvoiceList() {
           </select>
         </div>
 
-        {/* Invoices Table */}
         {loading ? (
           <div className="text-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div></div>
         ) : filteredInvoices.length === 0 ? (
@@ -262,7 +270,7 @@ export default function InvoiceList() {
           </div>
         )}
 
-        {/* ✅ Hidden renders for PDF capture — fixed off-screen at 794px */}
+        {/* ✅ Hidden renders — wrapper clipped to A4 so nothing escapes */}
         <div
           aria-hidden="true"
           style={{
@@ -278,6 +286,12 @@ export default function InvoiceList() {
             <div
               key={`hidden-${inv.id}`}
               ref={el => { if (el) downloadRefs.current[inv.id] = el }}
+              style={{
+                width: '794px',
+                height: '1123px',    // ✅ clip to A4 height
+                overflow: 'hidden',  // ✅ no scroll content leaks out
+                position: 'relative'
+              }}
             >
               <InvoicePDF
                 invoice={inv}
@@ -288,7 +302,6 @@ export default function InvoiceList() {
         </div>
       </main>
 
-      {/* Invoice View Modal */}
       <AnimatePresence>
         {viewingInvoice && (
           <motion.div
