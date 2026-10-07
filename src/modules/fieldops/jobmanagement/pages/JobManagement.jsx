@@ -5,20 +5,23 @@ import Navbar from '../../../../components/Navbar'
 import useJobManagementStore from '../store/jobManagementStore'
 import useThemeStore from '../../../../store/themeStore'
 import useAuthStore from '../../../../store/authStore'
+import JobEditorModal from '../components/JobEditorModal'
 import toast from 'react-hot-toast'
 import {
   Briefcase, Search, Filter, ArrowLeft, ChevronRight,
   Calendar, Clock, User, Users, MapPin, AlertTriangle,
-  CheckCircle2, XCircle, Edit, RotateCcw, Pause, 
+  CheckCircle2, XCircle, Edit, RotateCcw, Pause,
   UserCog, Flag, Eye, History, Sun, Moon, Sparkles,
-  Loader2, X, Save, TrendingUp, RefreshCw
+  Loader2, X, Save, TrendingUp, RefreshCw, Hash, ArrowRight
 } from 'lucide-react'
 
 export default function JobManagement() {
   const {
-    jobs, stats, jobHistory, teams, employees,
+    jobs, stats, jobHistory, teams, employees, availableServices, editingJob,
     fetchJobs, fetchStats, fetchJobHistory, fetchTeams, fetchEmployees,
-    editJob, rescheduleJob, postponeJob, reassignJob, changePriority, cancelJob
+    editJob, rescheduleJob, postponeJob, reassignJob, changePriority, cancelJob,
+    searchByJobNumber, loadJobForEditing, clearEditingJob, fetchAvailableServices,
+    saveFullJob
   } = useJobManagementStore()
   const { isDark, toggleTheme } = useThemeStore()
   const { user, profile } = useAuthStore()
@@ -30,8 +33,14 @@ export default function JobManagement() {
   const [dateTo, setDateTo] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // ✅ lookup state
+  const [lookupInput, setLookupInput] = useState('')
+  const [lookupResults, setLookupResults] = useState([])
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
+
   // Modal states
-  const [showActionModal, setShowActionModal] = useState(null) // 'edit' | 'reschedule' | 'postpone' | 'reassign' | 'priority' | 'cancel' | 'view' | 'history'
+  const [showActionModal, setShowActionModal] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
 
   // Form state
@@ -41,7 +50,6 @@ export default function JobManagement() {
   const [reassignForm, setReassignForm] = useState({ newTeamId: '', newEmployeeId: '', reason: '' })
   const [cancelForm, setCancelForm] = useState({ reason: '', notes: '' })
 
-  // RBAC
   const userRole = profile?.role
   const canEdit = ['super_admin', 'operations_manager'].includes(userRole)
   const canReschedule = ['super_admin', 'operations_manager', 'supervisor'].includes(userRole)
@@ -54,6 +62,7 @@ export default function JobManagement() {
     loadData()
     fetchTeams()
     fetchEmployees()
+    fetchAvailableServices()
   }, [statusFilter, priorityFilter, dateFrom, dateTo])
 
   const loadData = () => {
@@ -68,6 +77,78 @@ export default function JobManagement() {
   }
 
   const handleSearch = (e) => { e.preventDefault(); loadData() }
+
+  // ============================================
+  // LOOKUP HANDLERS
+  // ============================================
+  const handleLookup = async () => {
+    const query = lookupInput.trim()
+    if (!query) { toast.error('Enter a job number'); return }
+
+    setLookupLoading(true)
+    const result = await searchByJobNumber(query)
+    setLookupLoading(false)
+
+    if (!result.success) {
+      toast.error('Lookup failed')
+      return
+    }
+
+    const matches = result.data || []
+    if (matches.length === 0) {
+      toast.error(`No job found matching "${query}"`)
+      setLookupResults([])
+      return
+    }
+
+    // Exact match → open editor directly
+    const exact = matches.find(m => m.job_number?.toUpperCase() === query.toUpperCase())
+    if (exact) {
+      await openEditor(exact.id)
+      return
+    }
+
+    // One match → open editor directly
+    if (matches.length === 1) {
+      await openEditor(matches[0].id)
+      return
+    }
+
+    // Multiple → show picker
+    setLookupResults(matches)
+  }
+
+  const openEditor = async (jobId) => {
+    setLookupLoading(true)
+    const result = await loadJobForEditing(jobId)
+    setLookupLoading(false)
+    if (!result.success) {
+      toast.error(result.error || 'Failed to load job')
+      return
+    }
+    setLookupResults([])
+    setShowEditor(true)
+  }
+
+  const closeEditor = () => {
+    setShowEditor(false)
+    clearEditingJob()
+  }
+
+  const handleSaveEditor = async (payload) => {
+    if (!editingJob?.id) return
+    setSaving(true)
+    const currentUser = { ...user, ...profile }
+    const result = await saveFullJob(editingJob.id, payload, currentUser)
+    setSaving(false)
+    if (result.success) {
+      closeEditor()
+      setLookupInput('')
+      loadData()
+    } else {
+      toast.error(result.error || 'Save failed')
+    }
+  }
 
   const openAction = (job, action) => {
     setSelectedJob(job)
@@ -219,11 +300,75 @@ export default function JobManagement() {
           <span className="text-slate-800 dark:text-white font-medium">Job Management</span>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <Briefcase className="w-8 h-8 text-emerald-600" />Job Management
           </h1>
-          <p className="text-slate-500 mt-1 ml-11">Edit, reschedule, postpone, reassign and track jobs</p>
+          <p className="text-slate-500 mt-1 ml-11">Look up a job, edit services, change schedule</p>
+        </motion.div>
+
+        {/* ═══════════════════════════════════════════════ */}
+        {/* ✅ JOB LOOKUP BAR                               */}
+        {/* ═══════════════════════════════════════════════ */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="neu-raised rounded-3xl p-5 mb-6 border-l-4 border-emerald-500"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Hash className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-bold text-slate-800 dark:text-white">Look Up a Job to Edit</h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-4">
+            Type a job number → edit details, add/remove services, change dates & times.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                value={lookupInput}
+                onChange={e => setLookupInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLookup()}
+                placeholder="e.g. JOB-2610-0004 or 2610"
+                className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 font-mono"
+                autoComplete="off"
+              />
+            </div>
+            <button
+              onClick={handleLookup}
+              disabled={lookupLoading}
+              className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              Open Job
+            </button>
+          </div>
+
+          {/* Results picker */}
+          {lookupResults.length > 0 && (
+            <div className="mt-4 neu-inset rounded-2xl p-3 max-h-72 overflow-y-auto">
+              <p className="text-xs text-slate-500 mb-2">{lookupResults.length} matches — pick one:</p>
+              <div className="space-y-1">
+                {lookupResults.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => openEditor(r.id)}
+                    className="w-full text-left p-3 rounded-xl hover:bg-white dark:hover:bg-slate-700 transition-colors flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-mono font-bold text-slate-800 dark:text-white text-sm">{r.job_number}</p>
+                      <p className="text-xs text-slate-500 truncate">{r.title} · {r.clients?.company_name || 'No client'}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getStatusColor(r.status)}`}>
+                        {r.status?.replace('_', ' ')}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Stats */}
@@ -310,7 +455,15 @@ export default function JobManagement() {
                   const activeAssignment = (job.field_job_assignments || []).find(a => a.assignment_status !== 'released' && a.assignment_status !== 'completed')
                   return (
                     <tr key={job.id} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                      <td className="py-3 px-3 font-semibold text-slate-800 dark:text-white">{job.job_number}</td>
+                      <td className="py-3 px-3">
+                        <button
+                          onClick={() => openEditor(job.id)}
+                          className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline font-mono"
+                          title="Open full editor"
+                        >
+                          {job.job_number}
+                        </button>
+                      </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{job.clients?.company_name || '—'}</td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{job.title}</td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400 max-w-xs truncate">{job.site_address || '—'}</td>
@@ -331,14 +484,12 @@ export default function JobManagement() {
                       </td>
                       <td className="py-3 px-3">
                         <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEditor(job.id)} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit Full">
+                            <Edit className="w-4 h-4" />
+                          </button>
                           <button onClick={() => openAction(job, 'view')} className="p-2 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
                             <Eye className="w-4 h-4" />
                           </button>
-                          {canEdit && (
-                            <button onClick={() => openAction(job, 'edit')} className="p-2 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Edit">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          )}
                           {canReschedule && (
                             <button onClick={() => openAction(job, 'reschedule')} className="p-2 rounded-lg hover:bg-orange-100 text-slate-400 hover:text-orange-600" title="Reschedule">
                               <RotateCcw className="w-4 h-4" />
@@ -387,7 +538,9 @@ export default function JobManagement() {
               className="neu-raised rounded-2xl p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <p className="font-bold text-slate-800 dark:text-white">{job.job_number}</p>
+                  <button onClick={() => openEditor(job.id)} className="font-bold text-emerald-600 hover:underline font-mono">
+                    {job.job_number}
+                  </button>
                   <p className="text-xs text-slate-500">{job.clients?.company_name || '—'}</p>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusColor(job.status)}`}>
@@ -401,17 +554,12 @@ export default function JobManagement() {
                 <p className="flex items-center gap-1"><User className="w-3 h-3" />{job.teams?.team_name || 'No team'}</p>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <button onClick={() => openAction(job, 'view')} className="flex-1 py-2 rounded-xl bg-blue-100 text-blue-700 text-xs font-medium flex items-center justify-center gap-1">
-                  <Eye className="w-3 h-3" /> View
+                <button onClick={() => openEditor(job.id)} className="flex-1 py-2 rounded-xl bg-emerald-100 text-emerald-700 text-xs font-medium flex items-center justify-center gap-1">
+                  <Edit className="w-3 h-3" /> Edit Full
                 </button>
                 {canReschedule && (
                   <button onClick={() => openAction(job, 'reschedule')} className="flex-1 py-2 rounded-xl bg-orange-100 text-orange-700 text-xs font-medium flex items-center justify-center gap-1">
                     <RotateCcw className="w-3 h-3" /> Reschedule
-                  </button>
-                )}
-                {canPostpone && (
-                  <button onClick={() => openAction(job, 'postpone')} className="flex-1 py-2 rounded-xl bg-yellow-100 text-yellow-700 text-xs font-medium flex items-center justify-center gap-1">
-                    <Pause className="w-3 h-3" /> Postpone
                   </button>
                 )}
               </div>
@@ -426,7 +574,24 @@ export default function JobManagement() {
         </div>
       </main>
 
-      {/* MODALS */}
+      {/* ═══════════════════════════════════════════════ */}
+      {/* ✅ JOB EDITOR MODAL — full details + services + schedule */}
+      {/* ═══════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showEditor && editingJob && (
+          <JobEditorModal
+            job={editingJob}
+            services={availableServices}
+            saving={saving}
+            onClose={closeEditor}
+            onSave={handleSaveEditor}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════ */}
+      {/* EXISTING ACTION MODALS (unchanged)              */}
+      {/* ═══════════════════════════════════════════════ */}
       <AnimatePresence>
         {showActionModal && selectedJob && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
