@@ -4,10 +4,10 @@ import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useFieldOpsStore from '../store/fieldOpsStore'
 import useThemeStore from '../../../store/themeStore'
-import { 
+import {
   Radio, AlertTriangle, Search, Users, Clock, Shield,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
-  MessageSquare, History, FileText, Briefcase
+  MessageSquare, History, FileText, Briefcase, ListOrdered
 } from 'lucide-react'
 
 export default function FieldOpsDashboard() {
@@ -54,9 +54,10 @@ export default function FieldOpsDashboard() {
           <p className="text-slate-500 dark:text-slate-400 ml-11">Live job monitoring, incidents, messaging & job tracking</p>
         </motion.div>
 
-        {/* Main Action Cards - 5 cards now with Job Management */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+        {/* Main Action Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
           {[
+            { icon: ListOrdered, label: 'Job List', desc: 'Jobs staged before pool release', path: '/fieldops/job-list', bg: 'bg-amber-100 dark:bg-amber-900/30', color: 'text-amber-600', stats: 'Staging area' },
             { icon: Radio, label: 'Live Jobs', desc: 'Monitor active jobs & assignments', path: '/fieldops/live-jobs', bg: 'bg-blue-100 dark:bg-blue-900/30', color: 'text-blue-600', stats: `${stats.activeJobs || 0} active` },
             { icon: Briefcase, label: 'Job Management', desc: 'Edit, reschedule, postpone & reassign jobs', path: '/fieldops/job-management', bg: 'bg-emerald-100 dark:bg-emerald-900/30', color: 'text-emerald-600', stats: 'Manage all jobs' },
             { icon: AlertTriangle, label: 'Incidents', desc: 'Report & manage field incidents', path: '/fieldops/incidents', bg: 'bg-red-100 dark:bg-red-900/30', color: 'text-red-600', stats: `${stats.openIncidents || 0} open` },
@@ -77,8 +78,9 @@ export default function FieldOpsDashboard() {
         </div>
 
         {/* Quick Links */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
           {[
+            { icon: ListOrdered, label: 'Job List', path: '/fieldops/job-list', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
             { icon: Radio, label: 'Live Jobs', path: '/fieldops/live-jobs', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
             { icon: Briefcase, label: 'Job Management', path: '/fieldops/job-management', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
             { icon: AlertTriangle, label: 'Incidents', path: '/fieldops/incidents', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
