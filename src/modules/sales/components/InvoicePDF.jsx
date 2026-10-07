@@ -19,7 +19,6 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
     })
   }
 
-  // Cap displayed items so the layout never spills to page 2
   const MAX_ITEMS = 6
   const displayItems = (items || []).slice(0, MAX_ITEMS)
 
@@ -56,17 +55,17 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
-        marginBottom: '8px',
+        marginBottom: '10px',
         borderBottom: '1.5px solid #0D5F89',
-        paddingBottom: '8px',
+        paddingBottom: '10px',
         paddingTop: '4px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* ✅ Bigger, cleaner logo box */}
           <div style={{
-            width: '45px',
-            height: '45px',
-            borderRadius: '8px',
-            border: '1.5px solid #e2e8f0',
+            width: '75px',
+            height: '75px',
+            borderRadius: '10px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -77,10 +76,15 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
             <img
               src="/logo.png"
               alt="Logo"
-              style={{ width: '37px', height: '37px', objectFit: 'contain' }}
+              style={{
+                width: '70px',
+                height: '70px',
+                objectFit: 'contain',
+                imageRendering: 'auto'
+              }}
               onError={(e) => {
                 e.target.style.display = 'none'
-                e.target.parentElement.innerHTML = '<span style="color:#1e293b;font-weight:bold;font-size:16px">NG</span>'
+                e.target.parentElement.innerHTML = '<span style="color:#1e293b;font-weight:bold;font-size:22px">NG</span>'
               }}
             />
           </div>
@@ -222,7 +226,6 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
             </tr>
           )}
 
-          {/* Pad with empty rows so totals section stays anchored */}
           {displayItems.length < 3 && [...Array(3 - displayItems.length)].map((_, i) => (
             <tr key={`empty-${i}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
               <td style={{ padding: '4px 8px' }}>&nbsp;</td>
@@ -271,7 +274,7 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
         </div>
       </div>
 
-      {/* Notes (optional) */}
+      {/* Notes */}
       {invoice?.notes && (
         <div style={{ marginTop: '8px' }}>
           <h3 style={{
