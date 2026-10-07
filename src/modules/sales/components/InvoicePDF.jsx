@@ -61,11 +61,10 @@ const InvoicePDF = forwardRef(({ invoice, items, companyInfo }, ref) => {
         paddingTop: '4px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {/* ✅ Bigger, cleaner logo box */}
+          {/* ✅ Bigger logo, no border frame */}
           <div style={{
             width: '75px',
             height: '75px',
-            borderRadius: '10px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
