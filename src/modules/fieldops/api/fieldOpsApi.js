@@ -10,6 +10,7 @@ export const fieldOpsApi = {
       .select('*')
       .neq('status', 'completed')
       .neq('status', 'cancelled')
+      .eq('released_to_pool', true)   // ✅ only released jobs
       .order('scheduled_date', { ascending: true })
       .order('scheduled_start_time', { ascending: true })
       .limit(100)
@@ -27,7 +28,9 @@ export const fieldOpsApi = {
     const { data: categories } = await supabase.from('job_categories').select('id, name, color').in('id', catIds)
 
     const teamIds = [...new Set(jobs.map(j => j.team_id).filter(Boolean))]
-    const { data: teams } = await supabase.from('teams').select('id, team_name').in('id', teamIds)
+    const { data: teams } = teamIds.length > 0
+      ? await supabase.from('teams').select('id, team_name').in('id', teamIds)
+      : { data: [] }
 
     const { data: allAssignments } = await supabase.from('field_job_assignments').select('*').in('job_id', jobIds)
 
@@ -47,10 +50,7 @@ export const fieldOpsApi = {
         // Skip explicitly closed jobs
         if (job.status === 'cancelled' || job.status === 'completed') return false
 
-        // ✅ FIX: hide jobs whose assignments are ALL 'completed'.
-        // Covers the case where the mobile "web_app" UUID trigger bug
-        // blocked the jobs.status UPDATE — the assignment is done, so
-        // the job must not keep appearing on Live Jobs.
+        // Also hide jobs whose every assignment is already 'completed'
         const jobAssignments = (allAssignments || []).filter(a => a.job_id === job.id)
         const activeAssignments = jobAssignments.filter(a => a.assignment_status !== 'released')
         if (activeAssignments.length > 0 && activeAssignments.every(a => a.assignment_status === 'completed')) {
@@ -83,7 +83,6 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
-  // ✅ Photos helper (with signed URLs) — used by LiveJobs and JobTracker
   async getJobPhotos(jobId) {
     const { data, error } = await supabase
       .from('job_photos')
@@ -212,7 +211,6 @@ export const fieldOpsApi = {
         const job = (jobs || []).find(j => j.id === a.job_id)
         if (!job) return false
         if (job.status === 'completed' || job.status === 'cancelled') return false
-        // ✅ Also hide if this specific assignment is completed
         if (a.assignment_status === 'completed') return false
         return true
       })
