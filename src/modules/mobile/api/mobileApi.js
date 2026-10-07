@@ -1,5 +1,13 @@
 import { supabase } from '../../../lib/supabaseClient'
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Local "today" in YYYY-MM-DD (uses device timezone, not UTC)
+//    If you want jobs from TODAY ONLY (not future), change the
+//    filter in getOpenJobs from `.gte('scheduled_date', today)`
+//    to `.eq('scheduled_date', today)`.
+// ═══════════════════════════════════════════════════════════════
+const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
+
 export const mobileApi = {
   // ============================================
   // EMPLOYEE
@@ -56,12 +64,15 @@ export const mobileApi = {
   // JOBS
   // ============================================
   async getOpenJobs() {
-    // ✅ Only jobs explicitly released to the pool
+    const today = getTodayLocal()
+
+    // ✅ Only released jobs scheduled for TODAY or later
     const { data: availableJobs } = await supabase
       .from('jobs')
       .select('*')
       .in('status', ['pending', 'scheduled'])
       .eq('released_to_pool', true)
+      .gte('scheduled_date', today)   // ✅ hide past-dated jobs
       .order('scheduled_date')
       .limit(50)
 
@@ -249,8 +260,6 @@ export const mobileApi = {
   },
 
   async completeJob(jobId, employeeId, lat, lng) {
-    console.log('🔄 [completeJob] START', { jobId, employeeId, lat, lng })
-
     try {
       const assignmentUpdates = {
         assignment_status: 'completed',
@@ -262,7 +271,7 @@ export const mobileApi = {
         assignmentUpdates.check_out_time = new Date().toISOString()
       }
 
-      const { data: assignData, error: assignError } = await supabase
+      const { error: assignError } = await supabase
         .from('field_job_assignments')
         .update(assignmentUpdates)
         .eq('job_id', jobId)
@@ -270,7 +279,6 @@ export const mobileApi = {
         .select()
 
       if (assignError) {
-        console.error('❌ [completeJob] Assignment update failed:', assignError)
         return { success: false, error: `Assignment update failed: ${assignError.message}` }
       }
 
@@ -286,7 +294,6 @@ export const mobileApi = {
         .eq('id', jobId)
 
       if (jobError) {
-        console.error('❌ [completeJob] Job status update failed:', jobError)
         return { success: false, error: `Job status update failed: ${jobError.message}` }
       }
 
@@ -381,7 +388,7 @@ export const mobileApi = {
   // ATTENDANCE
   // ============================================
   async clockIn(employeeId, lat, lng) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocal()
     const record = { employee_id: employeeId, attendance_date: today, clock_in_time: new Date().toISOString(), check_in_method: lat ? 'gps' : 'mobile_app', status: 'present' }
     if (lat) { record.check_in_latitude = lat; record.check_in_longitude = lng }
     const { data: existing } = await supabase.from('attendance_records').select('id').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle()
@@ -392,7 +399,7 @@ export const mobileApi = {
   },
 
   async clockOut(employeeId, lat, lng) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocal()
     const record = { clock_out_time: new Date().toISOString(), check_out_method: lat ? 'gps' : 'mobile_app' }
     if (lat) { record.check_out_latitude = lat; record.check_out_longitude = lng }
     await supabase.from('attendance_records').update(record).eq('employee_id', employeeId).eq('attendance_date', today)
@@ -401,7 +408,7 @@ export const mobileApi = {
   },
 
   async getTodayAttendance(employeeId) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocal()
     const { data } = await supabase.from('attendance_records').select('*').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle()
     return { data }
   },
@@ -574,7 +581,7 @@ export const mobileApi = {
           reference_id: jobId,
           job_id: jobId,
           performed_by: userData?.user?.id || null,
-          movement_date: new Date().toISOString().split('T')[0],
+          movement_date: getTodayLocal(),
           status: 'completed',
           notes: notes || 'Scanned out for job'
         }])
@@ -612,7 +619,7 @@ export const mobileApi = {
   // STATS
   // ============================================
   async getMobileStats(employeeId) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocal()
     const now = new Date()
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + 1); weekStart.setHours(0, 0, 0, 0)
     const [{ data: myJobs }, { data: todayAttendance }, { data: weeklyAttendance }, { data: completedToday }] = await Promise.all([
@@ -631,7 +638,7 @@ export const mobileApi = {
   },
 
   async getKPIData(employeeId) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getTodayLocal()
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
     const [{ data: completedToday }, { data: completedMonth }, { data: allCompleted }] = await Promise.all([
