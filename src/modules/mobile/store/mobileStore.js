@@ -1,6 +1,26 @@
 import { create } from 'zustand'
 import { mobileApi } from '../api/mobileApi'
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Local "today" in YYYY-MM-DD (device timezone, not UTC)
+// ═══════════════════════════════════════════════════════════════
+const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
+
+// ═══════════════════════════════════════════════════════════════
+// ✅ Safety net — strip jobs scheduled before today
+// Even if the API ever returns a past-dated job (cache, race, bug),
+// it never reaches the UI. Belt and braces.
+// ═══════════════════════════════════════════════════════════════
+const stripPastDated = (jobs) => {
+  if (!Array.isArray(jobs)) return []
+  const today = getTodayLocal()
+  return jobs.filter(j => {
+    if (!j?.scheduled_date) return false   // no date → not pool-eligible
+    const date = String(j.scheduled_date).slice(0, 10)
+    return date >= today
+  })
+}
+
 const useMobileStore = create((set, get) => ({
   employee: null,
   openJobs: [],
@@ -36,23 +56,54 @@ const useMobileStore = create((set, get) => ({
     set({ loading: false })
   },
 
-  fetchOpenJobs: async () => { const { data } = await mobileApi.getOpenJobs(); set({ openJobs: data }) },
+  // ✅ Defensive: always strip past-dated jobs from the pool
+  fetchOpenJobs: async () => {
+    const { data } = await mobileApi.getOpenJobs()
+    set({ openJobs: stripPastDated(data) })
+  },
+
+  // ✅ Public refetch — call on tab focus / pull-to-refresh
+  refreshOpenJobs: async () => {
+    const { data } = await mobileApi.getOpenJobs()
+    set({ openJobs: stripPastDated(data) })
+    return { success: true }
+  },
+
+  // ✅ Full refresh of everything that matters after returning to the app
+  refreshAll: async () => {
+    const { employee } = get()
+    if (!employee?.id) return
+    await Promise.all([
+      get().refreshOpenJobs(),
+      get().fetchMyJobs(employee.id),
+      get().fetchStats(employee.id)
+    ])
+  },
+
   fetchMyJobs: async (eid) => { if (!eid) return; const { data } = await mobileApi.getMyJobs(eid); set({ myJobs: data }) },
   fetchCompletedJobs: async (eid) => { if (!eid) return; const { data } = await mobileApi.getCompletedJobs(eid); set({ completedJobs: data }) },
   fetchJobDetail: async (jobId) => { const { data } = await mobileApi.getJobDetail(jobId); set({ selectedJob: data }); return data },
 
-  selectJob: async (jobId, eid) => { const r = await mobileApi.selectJob(jobId, eid); if (r.success) await Promise.all([get().fetchOpenJobs(), get().fetchMyJobs(eid)]); return r },
-  startJob: async (jobId, eid, lat, lng) => { const r = await mobileApi.startJob(jobId, eid, lat, lng); if (r.success) await get().fetchMyJobs(eid); return r },
-  
-  // ✅ AMENDED: passes through the error
+  selectJob: async (jobId, eid) => {
+    const r = await mobileApi.selectJob(jobId, eid)
+    if (r.success) await Promise.all([get().refreshOpenJobs(), get().fetchMyJobs(eid)])
+    return r
+  },
+
+  startJob: async (jobId, eid, lat, lng) => {
+    const r = await mobileApi.startJob(jobId, eid, lat, lng)
+    if (r.success) await get().fetchMyJobs(eid)
+    return r
+  },
+
   completeJob: async (jobId, eid, lat, lng) => {
     const r = await mobileApi.completeJob(jobId, eid, lat, lng)
     if (r.success) {
       await Promise.all([
-        get().fetchOpenJobs(), 
-        get().fetchMyJobs(eid), 
-        get().fetchCompletedJobs(eid), 
-        get().fetchStats(eid), 
+        get().refreshOpenJobs(),
+        get().fetchMyJobs(eid),
+        get().fetchCompletedJobs(eid),
+        get().fetchStats(eid),
         get().fetchKPIData(eid)
       ])
     }
@@ -72,7 +123,7 @@ const useMobileStore = create((set, get) => ({
   fetchLeaveRequests: async (eid) => { const { data } = await mobileApi.getLeaveRequests(eid); set({ leaveRequests: data }) },
   fetchLeaveTypes: async () => { const { data } = await mobileApi.getLeaveTypes(); set({ leaveTypes: data }) },
   fetchLeaveBalances: async (eid) => { const { data } = await mobileApi.getLeaveBalances(eid); set({ leaveBalances: data }) },
-  
+
   applyLeave: async (data) => {
     const result = await mobileApi.applyLeave(data)
     if (!result.error && result.data) {
