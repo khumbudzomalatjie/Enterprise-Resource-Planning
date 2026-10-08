@@ -1,10 +1,7 @@
 import { supabase } from '../../../lib/supabaseClient'
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ Local "today" in YYYY-MM-DD (uses device timezone, not UTC)
-//    If you want jobs from TODAY ONLY (not future), change the
-//    filter in getOpenJobs from `.gte('scheduled_date', today)`
-//    to `.eq('scheduled_date', today)`.
+// ✅ Local "today" in YYYY-MM-DD (device timezone, not UTC)
 // ═══════════════════════════════════════════════════════════════
 const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
 
@@ -63,17 +60,17 @@ export const mobileApi = {
   // ============================================
   // JOBS
   // ============================================
+  // ✅ TODAY ONLY + released
   async getOpenJobs() {
     const today = getTodayLocal()
 
-    // ✅ Only released jobs scheduled for TODAY or later
     const { data: availableJobs } = await supabase
       .from('jobs')
       .select('*')
       .in('status', ['pending', 'scheduled'])
       .eq('released_to_pool', true)
-      .gte('scheduled_date', today)   // ✅ hide past-dated jobs
-      .order('scheduled_date')
+      .eq('scheduled_date', today)      // ✅ TODAY ONLY
+      .order('scheduled_start_time')
       .limit(50)
 
     if (!availableJobs?.length) return { data: [] }
