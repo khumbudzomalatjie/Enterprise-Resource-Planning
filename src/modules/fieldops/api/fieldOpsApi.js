@@ -1,16 +1,25 @@
 import { supabase } from '../../../lib/supabaseClient'
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Local "today" in YYYY-MM-DD (device timezone, not UTC)
+// ═══════════════════════════════════════════════════════════════
+const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
+
 export const fieldOpsApi = {
   // ============================================
   // LIVE JOBS - Read from field_job_assignments
+  // ✅ Only shows jobs scheduled today or later, OR already in_progress
   // ============================================
   async getLiveJobs() {
+    const today = getTodayLocal()
+
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
       .neq('status', 'completed')
       .neq('status', 'cancelled')
       .eq('released_to_pool', true)   // ✅ only released jobs
+      .or(`scheduled_date.gte.${today},status.eq.in_progress`)  // ✅ today+ OR in_progress
       .order('scheduled_date', { ascending: true })
       .order('scheduled_start_time', { ascending: true })
       .limit(100)
