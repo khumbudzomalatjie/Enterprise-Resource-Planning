@@ -9,36 +9,38 @@ import {
   Briefcase, Search, ChevronRight,
   Sun, Moon, Sparkles, Calendar, Clock, MapPin,
   Loader2, Send, CheckSquare, Square, RefreshCw,
-  FileText, Edit
+  FileText, Edit, AlertTriangle
 } from 'lucide-react'
+
+const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
 
 export default function JobList() {
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
+  const today = getTodayLocal()
 
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState([])
   const [releasing, setReleasing] = useState(null)
 
-  useEffect(() => { loadJobs() }, [statusFilter])
+  useEffect(() => { loadJobs() }, [])
 
   const loadJobs = async () => {
     setLoading(true)
     try {
-      let query = supabase
+      // Show jobs that are EITHER:
+      //  - not yet released (any date)   → admin decides
+      //  - released but future-dated     → waiting for their day
+      const { data: jobRows, error } = await supabase
         .from('jobs')
         .select('*')
-        .or('released_to_pool.is.null,released_to_pool.eq.false')
         .not('status', 'in', '(completed,cancelled)')
+        .or(`released_to_pool.eq.false,released_to_pool.is.null,scheduled_date.gt.${today}`)
         .order('scheduled_date', { ascending: true, nullsFirst: false })
         .limit(300)
 
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
-
-      const { data: jobRows, error } = await query
       if (error) throw error
       if (!jobRows || jobRows.length === 0) {
         setJobs([])
@@ -74,6 +76,23 @@ export default function JobList() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // A job can only be released if it's TODAY's date
+  const canRelease = (job) => {
+    const isReleased = job.released_to_pool === true
+    const date = job.scheduled_date ? String(job.scheduled_date).slice(0, 10) : null
+    return !isReleased && date === today
+  }
+
+  const isFuture = (job) => {
+    const date = job.scheduled_date ? String(job.scheduled_date).slice(0, 10) : null
+    return date && date > today
+  }
+
+  const isPast = (job) => {
+    const date = job.scheduled_date ? String(job.scheduled_date).slice(0, 10) : null
+    return date && date < today
   }
 
   const releaseJob = async (jobId) => {
@@ -127,10 +146,16 @@ export default function JobList() {
       || j.site_address?.toLowerCase().includes(s)
   })
 
-  const allSelected = filteredJobs.length > 0 && selectedIds.length === filteredJobs.length
+  // "Select all" only selects jobs that can actually be released (today's date)
+  const releasableJobs = filteredJobs.filter(canRelease)
+  const allSelected = releasableJobs.length > 0 && releasableJobs.every(j => selectedIds.includes(j.id))
   const toggleSelectAll = () => {
-    if (allSelected) setSelectedIds([])
-    else setSelectedIds(filteredJobs.map(j => j.id))
+    if (allSelected) {
+      setSelectedIds(prev => prev.filter(id => !releasableJobs.some(j => j.id === id)))
+    } else {
+      const newIds = [...new Set([...selectedIds, ...releasableJobs.map(j => j.id)])]
+      setSelectedIds(newIds)
+    }
   }
 
   const formatDate = (d) => d
@@ -185,7 +210,7 @@ export default function JobList() {
               <FileText className="w-8 h-8 text-emerald-600" />Job List
             </h1>
             <p className="text-slate-500 mt-1 ml-11">
-              Jobs waiting to be released to the pool — not yet visible to cleaners
+              Jobs waiting for their scheduled date or manual release
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -208,6 +233,7 @@ export default function JobList() {
           </div>
         </motion.div>
 
+        {/* Info banner */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
           className="neu-raised rounded-2xl p-4 mb-6 border-l-4 border-blue-500 bg-blue-50/40 dark:bg-blue-900/10 flex items-start gap-3"
@@ -216,11 +242,12 @@ export default function JobList() {
             <Briefcase className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-sm">
-            <p className="font-semibold text-slate-800 dark:text-white">Staging area</p>
-            <p className="text-slate-600 dark:text-slate-400 mt-0.5">
-              Jobs stay here until you release them. Once released, they appear on mobile's Open pool
-              for cleaners to pick up.
-            </p>
+            <p className="font-semibold text-slate-800 dark:text-white">How this works</p>
+            <ul className="text-slate-600 dark:text-slate-400 mt-0.5 list-disc list-inside space-y-0.5">
+              <li>Jobs scheduled for <strong>today</strong> appear here until you release them</li>
+              <li>Jobs scheduled for <strong>a future date</strong> wait here — they auto-move to the pool on their day (if released)</li>
+              <li>Once released, cleaners see the job on the mobile Open Pool <strong>only on the scheduled day</strong></li>
+            </ul>
           </div>
         </motion.div>
 
@@ -238,23 +265,13 @@ export default function JobList() {
               className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300"
-          >
-            <option value="all">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="pending">Pending</option>
-            <option value="scheduled">Scheduled</option>
-          </select>
-          {filteredJobs.length > 0 && (
+          {releasableJobs.length > 0 && (
             <button
               onClick={toggleSelectAll}
               className="px-4 py-3 neu-inset rounded-xl flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400"
             >
               {allSelected ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4" />}
-              <span>{allSelected ? 'Deselect All' : 'Select All'}</span>
+              <span>{allSelected ? 'Deselect Today' : `Select Today's (${releasableJobs.length})`}</span>
             </button>
           )}
         </motion.div>
@@ -271,26 +288,21 @@ export default function JobList() {
           >
             <FileText className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
             <p className="text-slate-500 text-lg">
-              {search ? 'No jobs match your search' : 'No jobs waiting to be released'}
+              {search ? 'No jobs match your search' : 'No jobs waiting'}
             </p>
             <p className="text-slate-400 text-sm mt-1">
-              {search ? 'Try a different search term' : 'All jobs are currently in the pool'}
+              {search ? 'Try a different search term' : 'All released jobs are already in the pool'}
             </p>
           </motion.div>
         ) : (
           <>
+            {/* DESKTOP TABLE */}
             <div className="hidden lg:block neu-raised rounded-3xl overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/50">
                     <tr className="border-b border-slate-200 dark:border-slate-700">
-                      <th className="text-left py-3 px-3 text-slate-500 font-medium w-10">
-                        <button onClick={toggleSelectAll} className="p-1">
-                          {allSelected
-                            ? <CheckSquare className="w-4 h-4 text-emerald-600" />
-                            : <Square className="w-4 h-4 text-slate-400" />}
-                        </button>
-                      </th>
+                      <th className="text-left py-3 px-3 text-slate-500 font-medium w-10"></th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Job #</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Title</th>
                       <th className="text-left py-3 px-3 text-slate-500 font-medium">Client</th>
@@ -304,14 +316,23 @@ export default function JobList() {
                   <tbody>
                     {filteredJobs.map(job => {
                       const selected = selectedIds.includes(job.id)
+                      const releasable = canRelease(job)
+                      const future = isFuture(job)
+                      const past = isPast(job)
+                      const isReleased = job.released_to_pool === true
+
                       return (
                         <tr key={job.id} className={`border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${selected ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : ''}`}>
                           <td className="py-3 px-3">
-                            <button onClick={() => toggleSelection(job.id)} className="p-1">
-                              {selected
-                                ? <CheckSquare className="w-4 h-4 text-emerald-600" />
-                                : <Square className="w-4 h-4 text-slate-400" />}
-                            </button>
+                            {releasable ? (
+                              <button onClick={() => toggleSelection(job.id)} className="p-1">
+                                {selected
+                                  ? <CheckSquare className="w-4 h-4 text-emerald-600" />
+                                  : <Square className="w-4 h-4 text-slate-400" />}
+                              </button>
+                            ) : (
+                              <span className="inline-block w-4 h-4"></span>
+                            )}
                           </td>
                           <td className="py-3 px-3 font-mono font-semibold text-slate-800 dark:text-white">{job.job_number}</td>
                           <td className="py-3 px-3 text-slate-700 dark:text-slate-300 max-w-xs truncate">{job.title || '—'}</td>
@@ -348,17 +369,34 @@ export default function JobList() {
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => releaseJob(job.id)}
-                                disabled={releasing === job.id}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                                title="Release this job to the pool"
-                              >
-                                {releasing === job.id
-                                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                                  : <Send className="w-3 h-3" />}
-                                Release
-                              </button>
+                              {releasable && (
+                                <button
+                                  onClick={() => releaseJob(job.id)}
+                                  disabled={releasing === job.id}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                  title="Release this job to the pool"
+                                >
+                                  {releasing === job.id
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <Send className="w-3 h-3" />}
+                                  Release
+                                </button>
+                              )}
+                              {isReleased && future && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                  Waiting for date
+                                </span>
+                              )}
+                              {!isReleased && future && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                  Not released
+                                </span>
+                              )}
+                              {!isReleased && past && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" /> Past-dated
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -369,9 +407,15 @@ export default function JobList() {
               </div>
             </div>
 
+            {/* MOBILE CARDS */}
             <div className="lg:hidden space-y-4">
               {filteredJobs.map(job => {
                 const selected = selectedIds.includes(job.id)
+                const releasable = canRelease(job)
+                const future = isFuture(job)
+                const past = isPast(job)
+                const isReleased = job.released_to_pool === true
+
                 return (
                   <motion.div
                     key={job.id}
@@ -379,11 +423,15 @@ export default function JobList() {
                     className={`neu-raised rounded-2xl p-5 ${selected ? 'ring-2 ring-emerald-500' : ''}`}
                   >
                     <div className="flex items-start justify-between mb-3 gap-3">
-                      <button onClick={() => toggleSelection(job.id)} className="p-1 flex-shrink-0">
-                        {selected
-                          ? <CheckSquare className="w-5 h-5 text-emerald-600" />
-                          : <Square className="w-5 h-5 text-slate-400" />}
-                      </button>
+                      {releasable ? (
+                        <button onClick={() => toggleSelection(job.id)} className="p-1 flex-shrink-0">
+                          {selected
+                            ? <CheckSquare className="w-5 h-5 text-emerald-600" />
+                            : <Square className="w-5 h-5 text-slate-400" />}
+                        </button>
+                      ) : (
+                        <span className="w-5 h-5 flex-shrink-0"></span>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="font-mono font-bold text-slate-800 dark:text-white text-sm">{job.job_number}</p>
                         <p className="text-xs text-slate-500 truncate">{job.clients?.company_name || '—'}</p>
@@ -403,23 +451,40 @@ export default function JobList() {
                         {job.priority || 'medium'}
                       </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={() => navigate('/fieldops/job-management')}
                         className="py-2 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-medium flex items-center justify-center gap-1"
                       >
                         <Edit className="w-3 h-3" /> Edit
                       </button>
-                      <button
-                        onClick={() => releaseJob(job.id)}
-                        disabled={releasing === job.id}
-                        className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-xs font-medium flex items-center justify-center gap-1 disabled:opacity-50"
-                      >
-                        {releasing === job.id
-                          ? <Loader2 className="w-3 h-3 animate-spin" />
-                          : <Send className="w-3 h-3" />}
-                        Release to Pool
-                      </button>
+                      {releasable && (
+                        <button
+                          onClick={() => releaseJob(job.id)}
+                          disabled={releasing === job.id}
+                          className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-xs font-medium flex items-center justify-center gap-1 disabled:opacity-50"
+                        >
+                          {releasing === job.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Send className="w-3 h-3" />}
+                          Release to Pool
+                        </button>
+                      )}
+                      {isReleased && future && (
+                        <span className="flex-1 py-2 rounded-xl bg-blue-100 text-blue-700 text-xs font-medium text-center">
+                          Waiting for its date
+                        </span>
+                      )}
+                      {!isReleased && future && (
+                        <span className="flex-1 py-2 rounded-xl bg-amber-100 text-amber-700 text-xs font-medium text-center">
+                          Not released
+                        </span>
+                      )}
+                      {!isReleased && past && (
+                        <span className="flex-1 py-2 rounded-xl bg-red-100 text-red-700 text-xs font-medium text-center">
+                          Past-dated — reschedule
+                        </span>
+                      )}
                     </div>
                   </motion.div>
                 )
