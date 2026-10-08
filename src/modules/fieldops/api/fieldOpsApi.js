@@ -7,8 +7,7 @@ const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
 
 export const fieldOpsApi = {
   // ============================================
-  // LIVE JOBS - Read from field_job_assignments
-  // ✅ Only shows jobs scheduled today or later, OR already in_progress
+  // LIVE JOBS — TODAY ONLY + in-progress safety net
   // ============================================
   async getLiveJobs() {
     const today = getTodayLocal()
@@ -18,9 +17,8 @@ export const fieldOpsApi = {
       .select('*')
       .neq('status', 'completed')
       .neq('status', 'cancelled')
-      .eq('released_to_pool', true)   // ✅ only released jobs
-      .or(`scheduled_date.gte.${today},status.eq.in_progress`)  // ✅ today+ OR in_progress
-      .order('scheduled_date', { ascending: true })
+      .eq('released_to_pool', true)
+      .or(`scheduled_date.eq.${today},status.eq.in_progress`)   // ✅ today OR still running
       .order('scheduled_start_time', { ascending: true })
       .limit(100)
 
@@ -56,10 +54,8 @@ export const fieldOpsApi = {
 
     const merged = jobs
       .filter(job => {
-        // Skip explicitly closed jobs
         if (job.status === 'cancelled' || job.status === 'completed') return false
 
-        // Also hide jobs whose every assignment is already 'completed'
         const jobAssignments = (allAssignments || []).filter(a => a.job_id === job.id)
         const activeAssignments = jobAssignments.filter(a => a.assignment_status !== 'released')
         if (activeAssignments.length > 0 && activeAssignments.every(a => a.assignment_status === 'completed')) {
