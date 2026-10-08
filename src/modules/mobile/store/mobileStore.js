@@ -7,17 +7,15 @@ import { mobileApi } from '../api/mobileApi'
 const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ Safety net — strip jobs scheduled before today
-// Even if the API ever returns a past-dated job (cache, race, bug),
-// it never reaches the UI. Belt and braces.
+// ✅ Safety net — keep ONLY today's jobs in Open Pool
 // ═══════════════════════════════════════════════════════════════
-const stripPastDated = (jobs) => {
+const filterTodayOnly = (jobs) => {
   if (!Array.isArray(jobs)) return []
   const today = getTodayLocal()
   return jobs.filter(j => {
-    if (!j?.scheduled_date) return false   // no date → not pool-eligible
+    if (!j?.scheduled_date) return false
     const date = String(j.scheduled_date).slice(0, 10)
-    return date >= today
+    return date === today
   })
 }
 
@@ -56,20 +54,17 @@ const useMobileStore = create((set, get) => ({
     set({ loading: false })
   },
 
-  // ✅ Defensive: always strip past-dated jobs from the pool
   fetchOpenJobs: async () => {
     const { data } = await mobileApi.getOpenJobs()
-    set({ openJobs: stripPastDated(data) })
+    set({ openJobs: filterTodayOnly(data) })
   },
 
-  // ✅ Public refetch — call on tab focus / pull-to-refresh
   refreshOpenJobs: async () => {
     const { data } = await mobileApi.getOpenJobs()
-    set({ openJobs: stripPastDated(data) })
+    set({ openJobs: filterTodayOnly(data) })
     return { success: true }
   },
 
-  // ✅ Full refresh of everything that matters after returning to the app
   refreshAll: async () => {
     const { employee } = get()
     if (!employee?.id) return
