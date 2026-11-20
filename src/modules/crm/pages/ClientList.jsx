@@ -6,27 +6,27 @@ import useCRMStore from '../store/crmStore'
 import useThemeStore from '../../../store/themeStore'
 import ClientForm from '../components/ClientForm'
 import toast from 'react-hot-toast'
-import { 
-  Search, Building2, Plus, Star, MapPin, 
+import {
+  Search, Building2, Plus, Star, MapPin,
   Phone, Mail, ChevronRight, Sun, Moon, Sparkles,
-  Edit, Trash2, Filter, X, Users
+  Edit, Trash2, Filter, X, Users, User
 } from 'lucide-react'
 
 export default function ClientList() {
   const { clients, fetchClients, createClient, updateClient, loading } = useCRMStore()
   const { isDark, toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  
+
   // Search & Filter State
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
-  
+
   // Form State
   const [showForm, setShowForm] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
   const [editingClient, setEditingClient] = useState(null)
-  
+
   // Delete Confirmation
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
@@ -34,33 +34,34 @@ export default function ClientList() {
     loadClients()
   }, [])
 
-  const loadClients = async () => {
+  // FIX: accept overrides so handlers don't read stale state
+  const loadClients = async (overrides = {}) => {
+    const status = overrides.status ?? statusFilter
+    const type = overrides.type ?? typeFilter
+    const q = overrides.search ?? search
     const filters = {}
-    if (statusFilter !== 'all') filters.status = statusFilter
-    if (typeFilter !== 'all') filters.type = typeFilter
-    if (search) filters.search = search
+    if (status !== 'all') filters.status = status
+    if (type !== 'all') filters.type = type
+    if (q) filters.search = q
     await fetchClients(filters)
   }
 
   const handleSearch = (e) => {
     e.preventDefault()
-    loadClients()
+    loadClients({ search })
   }
 
   const clearFilters = () => {
     setSearch('')
     setStatusFilter('all')
     setTypeFilter('all')
-    loadClients()
+    loadClients({ status: 'all', type: 'all', search: '' })
   }
 
   const handleFilterClick = (status) => {
-    if (statusFilter === status) {
-      setStatusFilter('all')
-    } else {
-      setStatusFilter(status)
-    }
-    loadClients()
+    const next = statusFilter === status ? 'all' : status
+    setStatusFilter(next)
+    loadClients({ status: next })
   }
 
   // Create Client Handler
@@ -126,6 +127,8 @@ export default function ClientList() {
       active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
       inactive: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border border-slate-200 dark:border-slate-600',
       prospect: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      lead: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      vip: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800',
       former: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 border border-gray-200 dark:border-gray-600',
       blacklisted: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800',
     }
@@ -144,7 +147,7 @@ export default function ClientList() {
   return (
     <div className={`min-h-screen font-['Inter'] transition-colors duration-300 ${isDark ? 'dark' : ''}`}>
       <Navbar />
-      
+
       {/* Theme Toggle + ERP Label */}
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2">
@@ -153,7 +156,7 @@ export default function ClientList() {
             Enterprise Resource Planning
           </span>
         </div>
-        <button 
+        <button
           onClick={toggleTheme}
           className="neu-raised neu-btn w-12 h-12 rounded-2xl flex items-center justify-center hover:scale-110 transition-transform"
         >
@@ -186,7 +189,7 @@ export default function ClientList() {
               {clients?.length || 0} client{(clients?.length || 0) !== 1 ? 's' : ''} in portfolio
             </p>
           </div>
-          
+
           <button
             onClick={() => setShowForm(true)}
             className="neu-raised neu-btn px-6 py-3 rounded-2xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-lg"
@@ -210,23 +213,25 @@ export default function ClientList() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by company name, code, or trading name..."
+                placeholder="Search by name, company, code, email, or phone..."
                 className="w-full pl-10 pr-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
               />
             </div>
-            
+
             <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value)
-                loadClients()
+                loadClients({ status: e.target.value })
               }}
               className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none"
             >
               <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="lead">Lead</option>
               <option value="prospect">Prospect</option>
+              <option value="active">Active</option>
+              <option value="vip">VIP</option>
+              <option value="inactive">Inactive</option>
               <option value="former">Former</option>
               <option value="blacklisted">Blacklisted</option>
             </select>
@@ -235,17 +240,13 @@ export default function ClientList() {
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value)
-                loadClients()
+                loadClients({ type: e.target.value })
               }}
               className="px-4 py-3 neu-inset rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none"
             >
               <option value="all">All Types</option>
-              <option value="corporate">Corporate</option>
-              <option value="government">Government</option>
-              <option value="retail">Retail</option>
-              <option value="industrial">Industrial</option>
-              <option value="residential">Residential</option>
-              <option value="other">Other</option>
+              <option value="business">Business</option>
+              <option value="personal">Personal / Individual</option>
             </select>
 
             <div className="flex gap-2">
@@ -278,6 +279,7 @@ export default function ClientList() {
           {[
             { label: 'All', count: clients?.length || 0, status: 'all' },
             { label: 'Active', count: clients?.filter(c => c.client_status === 'active').length || 0, status: 'active' },
+            { label: 'Leads', count: clients?.filter(c => c.client_status === 'lead').length || 0, status: 'lead' },
             { label: 'Prospects', count: clients?.filter(c => c.client_status === 'prospect').length || 0, status: 'prospect' },
             { label: 'Inactive', count: clients?.filter(c => c.client_status === 'inactive').length || 0, status: 'inactive' },
           ].map((stat) => (
@@ -303,88 +305,108 @@ export default function ClientList() {
           </div>
         ) : clients?.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {clients.map((client, index) => (
-              <motion.div
-                key={client.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="neu-raised rounded-2xl p-5 stat-card hover:scale-[1.02] transition-transform"
-              >
-                {/* Card Header */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 
-                      className="font-semibold text-slate-800 dark:text-white text-lg truncate cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                      onClick={() => navigate(`/crm/clients/${client.id}`)}
-                    >
-                      {client.company_name}
-                    </h3>
-                    {client.trading_name && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{client.trading_name}</p>
-                    )}
-                    <p className="text-xs text-slate-400 mt-1">{client.client_code}</p>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${getStatusColor(client.client_status)}`}>
-                    {client.client_status?.replace('_', ' ')}
-                  </span>
-                </div>
+            {clients.map((client, index) => {
+              // FIX: fall back to first/last name for individual clients
+              const displayName =
+                (client.company_name || '').trim() ||
+                [client.first_name, client.last_name].filter(Boolean).join(' ').trim() ||
+                'Unnamed Client'
 
-                {/* Contact Info */}
-                <div className="space-y-2 text-sm mb-3">
-                  {client.city && (
-                    <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{[client.city, client.state].filter(Boolean).join(', ')}</span>
-                    </p>
-                  )}
-                  {client.phone && (
-                    <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                      <Phone className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{client.phone}</span>
-                    </p>
-                  )}
-                  {client.email && (
-                    <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                      <Mail className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{client.email}</span>
-                    </p>
-                  )}
-                </div>
+              const displayEmail = client.email || client.contact_email || null
+              const displayPhone = client.phone || client.mobile || client.contact_mobile || null
+              const displayLocation =
+                [client.city, client.state].filter(Boolean).join(', ') ||
+                client.address_line1 ||
+                null
 
-                {/* Footer */}
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Star className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                      {getRatingStars(client.client_rating)}
+              const isPersonal = client.client_type === 'personal'
+
+              return (
+                <motion.div
+                  key={client.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                  className="neu-raised rounded-2xl p-5 stat-card hover:scale-[1.02] transition-transform"
+                >
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3
+                        className="font-semibold text-slate-800 dark:text-white text-lg truncate cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-2"
+                        onClick={() => navigate(`/crm/clients/${client.id}`)}
+                      >
+                        {isPersonal && <User className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+                        <span className="truncate">{displayName}</span>
+                      </h3>
+                      {client.trading_name && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{client.trading_name}</p>
+                      )}
+                      {client.client_code && (
+                        <p className="text-xs text-slate-400 mt-1">{client.client_code}</p>
+                      )}
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${getStatusColor(client.client_status)}`}>
+                      {(client.client_status || 'unset').replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEditingClient(client)
-                      }}
-                      className="p-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors"
-                      title="Edit Client"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setDeleteConfirm(client.id)
-                      }}
-                      className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors"
-                      title="Remove Client"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                  {/* Contact Info */}
+                  <div className="space-y-2 text-sm mb-3">
+                    {displayLocation && (
+                      <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{displayLocation}</span>
+                      </p>
+                    )}
+                    {displayPhone && (
+                      <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                        <Phone className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{displayPhone}</span>
+                      </p>
+                    )}
+                    {displayEmail && (
+                      <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                        <Mail className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{displayEmail}</span>
+                      </p>
+                    )}
                   </div>
-                </div>
-              </motion.div>
-            ))}
+
+                  {/* Footer */}
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-4 h-4 text-yellow-500" />
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {getRatingStars(client.client_rating)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingClient(client)
+                        }}
+                        className="p-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-slate-400 hover:text-emerald-600 transition-colors"
+                        title="Edit Client"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleteConfirm(client.id)
+                        }}
+                        className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-600 transition-colors"
+                        title="Remove Client"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         ) : (
           <motion.div
@@ -396,7 +418,7 @@ export default function ClientList() {
             <p className="text-slate-500 dark:text-slate-400 text-xl mb-2">No clients found</p>
             <p className="text-slate-400 dark:text-slate-500 mb-6">
               {search || statusFilter !== 'all' || typeFilter !== 'all'
-                ? 'Try adjusting your search or filters' 
+                ? 'Try adjusting your search or filters'
                 : 'Start by adding your first client to the CRM system'}
             </p>
             <button
@@ -428,10 +450,10 @@ export default function ClientList() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="max-w-3xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar"
             >
-              <ClientForm 
-                onSubmit={handleCreateClient} 
-                onCancel={() => setShowForm(false)} 
-                loading={formLoading} 
+              <ClientForm
+                onSubmit={handleCreateClient}
+                onCancel={() => setShowForm(false)}
+                loading={formLoading}
               />
             </motion.div>
           </motion.div>
@@ -456,11 +478,11 @@ export default function ClientList() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="max-w-3xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar"
             >
-              <ClientForm 
+              <ClientForm
                 initialData={editingClient}
-                onSubmit={handleUpdateClient} 
-                onCancel={() => setEditingClient(null)} 
-                loading={formLoading} 
+                onSubmit={handleUpdateClient}
+                onCancel={() => setEditingClient(null)}
+                loading={formLoading}
               />
             </motion.div>
           </motion.div>
