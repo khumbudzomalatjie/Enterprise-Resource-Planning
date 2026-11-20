@@ -5,6 +5,35 @@ import { supabase } from '../../../lib/supabaseClient'
 // ═══════════════════════════════════════════════════════════════
 const getTodayLocal = () => new Date().toLocaleDateString('en-CA')
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Guard: reject any write to a completed or cancelled job.
+// Returns { ok: true } or { ok: false, error: { message } }.
+// ═══════════════════════════════════════════════════════════════
+const assertJobEditable = async (jobId) => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('status, job_number')
+    .eq('id', jobId)
+    .single()
+
+  if (error) return { ok: false, error }
+  if (!data) return { ok: false, error: { message: 'Job not found' } }
+
+  if (data.status === 'completed') {
+    return {
+      ok: false,
+      error: { message: `Job ${data.job_number} is completed and locked. Contact an administrator to reopen.` }
+    }
+  }
+  if (data.status === 'cancelled') {
+    return {
+      ok: false,
+      error: { message: `Job ${data.job_number} is cancelled and locked.` }
+    }
+  }
+  return { ok: true, job: data }
+}
+
 export const fieldOpsApi = {
   // ============================================
   // LIVE JOBS — TODAY ONLY + in-progress safety net
@@ -18,7 +47,7 @@ export const fieldOpsApi = {
       .neq('status', 'completed')
       .neq('status', 'cancelled')
       .eq('released_to_pool', true)
-      .or(`scheduled_date.eq.${today},status.eq.in_progress`)   // ✅ today OR still running
+      .or(`scheduled_date.eq.${today},status.eq.in_progress`)
       .order('scheduled_start_time', { ascending: true })
       .limit(100)
 
@@ -117,7 +146,11 @@ export const fieldOpsApi = {
     return { data: withUrls, error: null }
   },
 
+  // ✅ GUARDED: rejects assignment on completed/cancelled jobs
   async assignEmployeeToJob(jobId, employeeId, teamId = null) {
+    const check = await assertJobEditable(jobId)
+    if (!check.ok) return { data: null, error: check.error }
+
     const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('field_job_assignments')
@@ -131,7 +164,21 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ GUARDED: rejects release on completed/cancelled jobs
   async releaseEmployeeFromJob(assignmentId, reason = '') {
+    // Resolve the job_id for the assignment first, then check job status
+    const { data: assignment, error: fetchErr } = await supabase
+      .from('field_job_assignments')
+      .select('job_id')
+      .eq('id', assignmentId)
+      .single()
+
+    if (fetchErr) return { data: null, error: fetchErr }
+    if (!assignment) return { data: null, error: { message: 'Assignment not found' } }
+
+    const check = await assertJobEditable(assignment.job_id)
+    if (!check.ok) return { data: null, error: check.error }
+
     const { data: userData } = await supabase.auth.getUser()
     const { data, error } = await supabase
       .from('field_job_assignments')
@@ -143,7 +190,11 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ GUARDED: rejects bulk assignment on completed/cancelled jobs
   async bulkAssignEmployees(jobId, employeeIds, teamId = null) {
+    const check = await assertJobEditable(jobId)
+    if (!check.ok) return { data: null, error: check.error }
+
     const { data: userData } = await supabase.auth.getUser()
     const assignments = employeeIds.map(empId => ({
       job_id: jobId, employee_id: empId, team_id: teamId,
@@ -157,7 +208,31 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ GUARDED: allows transition TO completed/cancelled,
+  // blocks transitions AWAY from completed/cancelled (no reopen via API)
   async updateJobStatus(jobId, status, employeeId = null) {
+    const { data: current, error: fetchErr } = await supabase
+      .from('jobs')
+      .select('status, job_number')
+      .eq('id', jobId)
+      .single()
+
+    if (fetchErr) return { data: null, error: fetchErr }
+    if (!current) return { data: null, error: { message: 'Job not found' } }
+
+    if (current.status === 'completed' && status !== 'completed') {
+      return {
+        data: null,
+        error: { message: `Job ${current.job_number} is completed and locked. Contact an administrator to reopen.` }
+      }
+    }
+    if (current.status === 'cancelled' && status !== 'cancelled') {
+      return {
+        data: null,
+        error: { message: `Job ${current.job_number} is cancelled and locked.` }
+      }
+    }
+
     const updates = { status, updated_at: new Date().toISOString() }
     if (status === 'in_progress') updates.actual_start_time = new Date().toISOString()
     if (status === 'completed') updates.actual_end_time = new Date().toISOString()
@@ -188,7 +263,11 @@ export const fieldOpsApi = {
     return { data, error }
   },
 
+  // ✅ GUARDED: mobile sync cannot touch a completed/cancelled job
   async syncJobWithMobile(jobId, data) {
+    const check = await assertJobEditable(jobId)
+    if (!check.ok) return { success: false, error: check.error.message }
+
     const { employeeId, status, checkInLocation, checkOutLocation, notes } = data
     if (status) await this.updateJobStatus(jobId, status, employeeId)
     if (employeeId) {
