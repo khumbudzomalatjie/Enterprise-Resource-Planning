@@ -8,16 +8,16 @@ const cleanValue = (value, type = 'string') => {
   if (value === '' || value === undefined || value === null || value === 'undefined' || value === 'null') {
     return null
   }
-  
+
   if (type === 'number') {
     const num = Number(value)
     return isNaN(num) ? null : num
   }
-  
+
   if (type === 'boolean') {
     return value === true || value === 'true' || value === 1
   }
-  
+
   return value
 }
 
@@ -27,61 +27,52 @@ const cleanValue = (value, type = 'string') => {
  */
 const cleanObjectForDb = (data) => {
   const cleaned = {}
-  
-  // String fields - can keep empty strings if they are actual text columns
+
   const textFields = [
-    'client_code', 'company_name', 'trading_name', 'registration_number', 
+    'client_code', 'company_name', 'trading_name', 'registration_number',
     'tax_number', 'vat_number', 'industry', 'website',
     'first_name', 'last_name', 'gender', 'nationality', 'id_number',
     'contact_full_name', 'contact_position', 'contact_mobile', 'contact_email',
     'email', 'phone', 'mobile', 'alternative_phone', 'whatsapp_number',
-    'preferred_contact_method', 'address_line1', 'address_line2', 
+    'preferred_contact_method', 'address_line1', 'address_line2',
     'city', 'state', 'postal_code', 'country', 'postal_address',
     'occupation', 'employer', 'work_address', 'work_phone',
-    'payment_terms', 'preferred_payment_method', 'currency', 
-    'billing_cycle', 'billing_address', 'bank_name', 'bank_account_number', 
+    'payment_terms', 'preferred_payment_method', 'currency',
+    'billing_cycle', 'billing_address', 'bank_name', 'bank_account_number',
     'bank_branch_code', 'lead_source', 'pipeline_stage',
     'accounts_contact', 'hr_contact', 'technical_contact', 'support_contact',
-    'products_purchased', 'services_subscribed', 'support_package', 
+    'products_purchased', 'services_subscribed', 'support_package',
     'sla_details', 'notes', 'tags', 'client_type', 'client_status', 'client_rating'
   ]
-  
-  // Date fields - must be null if empty
+
   const dateFields = [
-    'date_of_birth', 'contract_start_date', 'contract_end_date', 
+    'date_of_birth', 'contract_start_date', 'contract_end_date',
     'renewal_date', 'acquired_date'
   ]
-  
-  // Numeric fields - must be null if empty
+
   const numericFields = [
     'credit_limit', 'estimated_value', 'contract_value', 'annual_revenue'
   ]
-  
-  // UUID fields - must be null if empty (never empty string)
+
   const uuidFields = [
     'assigned_to', 'account_manager_id', 'created_by'
   ]
-  
-  // Boolean fields
+
   const booleanFields = ['tax_exempt']
-  
-  // Process text fields
+
   textFields.forEach(field => {
     if (data[field] !== undefined && data[field] !== null) {
       cleaned[field] = data[field]
     }
   })
-  
-  // Process date fields - convert empty to null
+
   dateFields.forEach(field => {
     const value = data[field]
     if (value && value !== '' && value !== null && value !== undefined) {
       cleaned[field] = value
     }
-    // If empty/missing, don't include the field at all
   })
-  
-  // Process numeric fields - convert empty/NaN to null
+
   numericFields.forEach(field => {
     const value = data[field]
     if (value !== undefined && value !== null && value !== '') {
@@ -91,22 +82,20 @@ const cleanObjectForDb = (data) => {
       }
     }
   })
-  
-  // Process UUID fields - never include if empty
+
   uuidFields.forEach(field => {
     const value = data[field]
     if (value && value !== '' && value !== null && value !== undefined) {
       cleaned[field] = value
     }
   })
-  
-  // Process boolean fields
+
   booleanFields.forEach(field => {
     if (data[field] !== undefined && data[field] !== null && data[field] !== '') {
       cleaned[field] = data[field] === true || data[field] === 'true' || data[field] === 1
     }
   })
-  
+
   return cleaned
 }
 
@@ -120,7 +109,17 @@ export const crmApi = {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (filters.status && filters.status !== 'all') query = query.eq('client_status', filters.status)
+    // ✅ Status handling:
+    //   - explicit status (e.g. 'active', 'former', 'prospect') → filter to that status
+    //   - no status / 'all' → HIDE soft-deleted ('former') clients by default
+    //   This means a soft-deleted client disappears from the main list
+    //   but can still be found by selecting "Former" in the status dropdown.
+    if (filters.status && filters.status !== 'all') {
+      query = query.eq('client_status', filters.status)
+    } else {
+      query = query.neq('client_status', 'former')
+    }
+
     if (filters.type && filters.type !== 'all') query = query.eq('client_type', filters.type)
     if (filters.search) {
       query = query.or(`company_name.ilike.%${filters.search}%,first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`)
@@ -145,10 +144,9 @@ export const crmApi = {
 
   async createClient(clientData) {
     console.log('API createClient - raw data:', JSON.stringify(clientData, null, 2))
-    
-    // Clean the data before sending to database
+
     const cleanData = cleanObjectForDb(clientData)
-    
+
     console.log('API createClient - cleaned data:', JSON.stringify(cleanData, null, 2))
 
     const { data, error } = await supabase
@@ -163,20 +161,18 @@ export const crmApi = {
       console.error('Error details:', error.details)
       return { data: null, error }
     }
-    
+
     console.log('API createClient success:', data?.id)
     return { data, error: null }
   },
 
   async updateClient(id, updates) {
     console.log('API updateClient - raw updates:', JSON.stringify(updates, null, 2))
-    
-    // Clean the data before sending to database
+
     const cleanUpdates = cleanObjectForDb(updates)
-    
-    // Always update the timestamp
+
     cleanUpdates.updated_at = new Date().toISOString()
-    
+
     console.log('API updateClient - cleaned updates:', JSON.stringify(cleanUpdates, null, 2))
 
     const { data, error } = await supabase
@@ -185,22 +181,23 @@ export const crmApi = {
       .eq('id', id)
       .select('*')
       .single()
-    
+
     if (error) {
       console.error('API updateClient error:', error.message)
       console.error('Error code:', error.code)
       console.error('Error details:', error.details)
       return { data: null, error }
     }
-    
+
     console.log('API updateClient success:', data?.id)
     return { data, error: null }
   },
 
   async deleteClient(id) {
+    // Soft delete — consistent with ClientList's remove flow.
     const { error } = await supabase
       .from('clients')
-      .update({ client_status: 'inactive', updated_at: new Date().toISOString() })
+      .update({ client_status: 'former', updated_at: new Date().toISOString() })
       .eq('id', id)
     return { error }
   },
@@ -222,9 +219,7 @@ export const crmApi = {
 
   async createContact(contactData) {
     const cleanData = { ...contactData }
-    // Clean UUID field
     if (!cleanData.client_id || cleanData.client_id === '') delete cleanData.client_id
-    // Clean date field
     if (!cleanData.birthday || cleanData.birthday === '') delete cleanData.birthday
 
     const { data, error } = await supabase
@@ -238,7 +233,7 @@ export const crmApi = {
   async updateContact(id, updates) {
     const cleanUpdates = { ...updates }
     if (cleanUpdates.birthday === '') delete cleanUpdates.birthday
-    
+
     const { data, error } = await supabase
       .from('client_contacts')
       .update(cleanUpdates)
@@ -265,11 +260,9 @@ export const crmApi = {
 
   async createInteraction(interactionData) {
     const cleanData = { ...interactionData }
-    // Clean UUID fields
     ['client_id', 'contact_id', 'attended_by', 'created_by'].forEach(field => {
       if (!cleanData[field] || cleanData[field] === '') delete cleanData[field]
     })
-    // Clean date fields
     ['scheduled_date', 'completed_date', 'follow_up_date'].forEach(field => {
       if (cleanData[field] === '' || cleanData[field] === null) delete cleanData[field]
     })
@@ -308,15 +301,12 @@ export const crmApi = {
 
   async createClientService(serviceData) {
     const cleanData = { ...serviceData }
-    // Clean UUID fields
     ['client_id', 'service_type_id', 'created_by'].forEach(field => {
       if (!cleanData[field] || cleanData[field] === '') delete cleanData[field]
     })
-    // Clean date fields
     ['start_date', 'end_date'].forEach(field => {
       if (cleanData[field] === '' || cleanData[field] === null) delete cleanData[field]
     })
-    // Clean numeric fields
     ['price', 'square_meters', 'number_of_cleaners', 'frequency_per_week'].forEach(field => {
       if (cleanData[field] !== undefined && cleanData[field] !== null && cleanData[field] !== '') {
         cleanData[field] = Number(cleanData[field])
@@ -349,15 +339,12 @@ export const crmApi = {
 
   async createPipelineItem(itemData) {
     const cleanData = { ...itemData }
-    // Clean UUID fields
     ['client_id', 'assigned_to', 'created_by'].forEach(field => {
       if (!cleanData[field] || cleanData[field] === '') delete cleanData[field]
     })
-    // Clean date fields
     ['expected_close_date', 'actual_close_date'].forEach(field => {
       if (cleanData[field] === '' || cleanData[field] === null) delete cleanData[field]
     })
-    // Clean numeric fields
     ['estimated_value', 'actual_value', 'probability_percentage'].forEach(field => {
       if (cleanData[field] !== undefined && cleanData[field] !== null && cleanData[field] !== '') {
         cleanData[field] = Number(cleanData[field])
@@ -374,11 +361,10 @@ export const crmApi = {
 
   async updatePipelineItem(id, updates) {
     const cleanUpdates = { ...updates }
-    // Clean date fields
     ['expected_close_date', 'actual_close_date'].forEach(field => {
       if (cleanUpdates[field] === '') delete cleanUpdates[field]
     })
-    
+
     const { data, error } = await supabase
       .from('sales_pipeline')
       .update(cleanUpdates)
@@ -405,11 +391,9 @@ export const crmApi = {
 
   async createFeedback(feedbackData) {
     const cleanData = { ...feedbackData }
-    // Clean UUID fields
     ['client_id', 'resolved_by'].forEach(field => {
       if (!cleanData[field] || cleanData[field] === '') delete cleanData[field]
     })
-    // Clean numeric fields
     if (cleanData.rating !== undefined && cleanData.rating !== null && cleanData.rating !== '') {
       cleanData.rating = Number(cleanData.rating)
     }
@@ -439,12 +423,26 @@ export const crmApi = {
 
   // ============================================
   // DASHBOARD STATS
+  // ✅ Excludes soft-deleted (former) clients
   // ============================================
   async getCRMStats() {
     try {
-      const { count: totalClients } = await supabase.from('clients').select('*', { count: 'exact', head: true })
-      const { count: activeClients } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('client_status', 'active')
-      const { data: recentClients } = await supabase.from('clients').select('*').order('created_at', { ascending: false }).limit(5)
+      const { count: totalClients } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .neq('client_status', 'former')
+
+      const { count: activeClients } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_status', 'active')
+
+      const { data: recentClients } = await supabase
+        .from('clients')
+        .select('*')
+        .neq('client_status', 'former')
+        .order('created_at', { ascending: false })
+        .limit(5)
 
       return {
         totalClients: totalClients || 0,
