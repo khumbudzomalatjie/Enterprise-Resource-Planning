@@ -12,8 +12,12 @@ import {
   Calendar, Clock,
   CheckCircle2, XCircle, Edit, RotateCcw, Pause,
   UserCog, Flag, Eye, History, Sun, Moon, Sparkles,
-  Loader2, X, Save, Hash, ArrowRight
+  Loader2, X, Save, Hash, ArrowRight, Lock
 } from 'lucide-react'
+
+// ✅ Jobs in these statuses are read-only — never editable, cancellable, or reassignable.
+const LOCKED_STATUSES = ['completed', 'cancelled']
+const isLocked = (job) => LOCKED_STATUSES.includes(job?.status)
 
 export default function JobManagement() {
   const {
@@ -58,6 +62,16 @@ export default function JobManagement() {
     fetchAvailableServices()
   }, [])
 
+  // ✅ Central guard — returns true if the job is locked (and toasts).
+  const guardLocked = (job) => {
+    if (!job) return false
+    if (isLocked(job)) {
+      toast.error(`Job ${job.job_number || ''} is ${job.status} and locked.`)
+      return true
+    }
+    return false
+  }
+
   const handleLookup = async () => {
     const query = lookupInput.trim()
     if (!query) { toast.error('Enter a job number'); return }
@@ -79,10 +93,21 @@ export default function JobManagement() {
     }
 
     const exact = matches.find(m => m.job_number?.toUpperCase() === query.toUpperCase())
-    if (exact) { await openEditor(exact.id); return }
-    if (matches.length === 1) { await openEditor(matches[0].id); return }
+    if (exact) { await openJob(exact); return }
+    if (matches.length === 1) { await openJob(matches[0]); return }
 
     setLookupResults(matches)
+  }
+
+  // ✅ Routes: editable jobs → editor, locked jobs → read-only "view" modal
+  const openJob = async (job) => {
+    if (isLocked(job)) {
+      setSelectedJob(job)
+      setShowActionModal('view')
+      setLookupResults([])
+      return
+    }
+    await openEditor(job.id)
   }
 
   const openEditor = async (jobId) => {
@@ -93,6 +118,14 @@ export default function JobManagement() {
       toast.error(result.error || 'Failed to load job')
       return
     }
+
+    // Defense-in-depth: if the store returned the job and it's locked, force view mode.
+    if (result.data && isLocked(result.data)) {
+      setSelectedJob(result.data)
+      setShowActionModal('view')
+      return
+    }
+
     setLookupResults([])
     setShowEditor(true)
   }
@@ -104,6 +137,7 @@ export default function JobManagement() {
 
   const handleSaveEditor = async (payload) => {
     if (!editingJob?.id) return
+    if (guardLocked(editingJob)) return
     setSaving(true)
     const currentUser = { ...user, ...profile }
     const result = await saveFullJob(editingJob.id, payload, currentUser)
@@ -118,6 +152,14 @@ export default function JobManagement() {
 
   const openAction = (job, action) => {
     setSelectedJob(job)
+
+    // ✅ Read-only actions are still allowed on locked jobs
+    const readOnlyActions = ['view', 'history']
+    if (isLocked(job) && !readOnlyActions.includes(action)) {
+      toast.error(`Job ${job.job_number} is ${job.status} and locked. ${action} is disabled.`)
+      return
+    }
+
     if (action === 'edit') {
       setEditForm({
         title: job.title || '',
@@ -148,6 +190,7 @@ export default function JobManagement() {
   const currentUser = { ...user, ...profile }
 
   const handleEditSave = async () => {
+    if (guardLocked(selectedJob)) return
     setSaving(true)
     const result = await editJob(selectedJob.id, editForm, currentUser)
     setSaving(false)
@@ -156,6 +199,7 @@ export default function JobManagement() {
   }
 
   const handleReschedule = async () => {
+    if (guardLocked(selectedJob)) return
     if (!rescheduleForm.newDate || !rescheduleForm.reason) { toast.error('Date and reason are required'); return }
     setSaving(true)
     const result = await rescheduleJob(selectedJob.id, rescheduleForm, currentUser)
@@ -165,6 +209,7 @@ export default function JobManagement() {
   }
 
   const handlePostpone = async () => {
+    if (guardLocked(selectedJob)) return
     if (!postponeForm.reason) { toast.error('Reason required'); return }
     setSaving(true)
     const result = await postponeJob(selectedJob.id, postponeForm, currentUser)
@@ -174,6 +219,7 @@ export default function JobManagement() {
   }
 
   const handleReassign = async () => {
+    if (guardLocked(selectedJob)) return
     if (!reassignForm.reason) { toast.error('Reason required'); return }
     setSaving(true)
     const result = await reassignJob(selectedJob.id, reassignForm, currentUser)
@@ -183,6 +229,7 @@ export default function JobManagement() {
   }
 
   const handlePriority = async (priority) => {
+    if (guardLocked(selectedJob)) return
     setSaving(true)
     const result = await changePriority(selectedJob.id, priority, currentUser)
     setSaving(false)
@@ -191,6 +238,7 @@ export default function JobManagement() {
   }
 
   const handleCancel = async () => {
+    if (guardLocked(selectedJob)) return
     if (!cancelForm.reason) { toast.error('Reason required'); return }
     if (!window.confirm('Are you sure you want to cancel this job? This cannot be undone.')) return
     setSaving(true)
@@ -267,6 +315,9 @@ export default function JobManagement() {
           <p className="text-sm text-slate-500 mb-5">
             Type a job number to open the editor. You'll be able to update details,
             add or remove services, and change the schedule.
+            <span className="block mt-1 text-xs text-amber-600 dark:text-amber-400">
+              Completed and cancelled jobs are read-only.
+            </span>
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -299,31 +350,42 @@ export default function JobManagement() {
                 {lookupResults.length} match{lookupResults.length !== 1 ? 'es' : ''} — pick one:
               </p>
               <div className="space-y-1">
-                {lookupResults.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => openEditor(r.id)}
-                    className="w-full text-left p-3 rounded-xl hover:bg-white dark:hover:bg-slate-700 transition-colors flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-mono font-bold text-slate-800 dark:text-white text-sm">{r.job_number}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {r.title}
-                        {r.clients?.company_name && <> · {r.clients.company_name}</>}
-                        {r.scheduled_date && <> · {formatDate(r.scheduled_date)}</>}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getStatusColor(r.status)}`}>
-                        {r.status?.replace('_', ' ')}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getPriorityColor(r.priority)}`}>
-                        {r.priority}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
-                    </div>
-                  </button>
-                ))}
+                {lookupResults.map(r => {
+                  const locked = isLocked(r)
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => openJob(r)}
+                      title={locked ? `Job is ${r.status} — view only` : 'Open editor'}
+                      className={`w-full text-left p-3 rounded-xl transition-colors flex items-center justify-between gap-3 ${
+                        locked
+                          ? 'opacity-75 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-default'
+                          : 'hover:bg-white dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-mono font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2">
+                          {r.job_number}
+                          {locked && <Lock className="w-3 h-3 text-amber-500" />}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {r.title}
+                          {r.clients?.company_name && <> · {r.clients.company_name}</>}
+                          {r.scheduled_date && <> · {formatDate(r.scheduled_date)}</>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getStatusColor(r.status)}`}>
+                          {r.status?.replace('_', ' ')}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${getPriorityColor(r.priority)}`}>
+                          {r.priority}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -528,6 +590,17 @@ export default function JobManagement() {
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white">Job Details</h3>
                     <button onClick={closeModal} className="p-1 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
                   </div>
+
+                  {isLocked(selectedJob) && (
+                    <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400">
+                      <Lock className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>
+                        This job is <strong className="capitalize">{selectedJob.status}</strong> and locked.
+                        Editing, rescheduling, reassignment, and cancellation are disabled.
+                      </span>
+                    </div>
+                  )}
+
                   <div className="space-y-4">
                     <div>
                       <p className="text-xs text-slate-500">Job Number</p>
