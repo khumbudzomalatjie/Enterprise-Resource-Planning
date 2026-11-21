@@ -30,7 +30,6 @@ export default function PayslipList() {
   const loadPayslips = async () => {
     setLoading(true)
     try {
-      // ✅ Join employees and payroll_profiles to get the full primary info
       const { data, error } = await supabase
         .from('payslips')
         .select(`
@@ -72,7 +71,7 @@ export default function PayslipList() {
       if (!element) { toast.error('Payslip preview not ready — try again'); return }
 
       const opt = {
-        margin: [5, 5, 5, 5],
+        margin: [0, 0, 0, 0], // Let the CSS handle the margins
         filename: `Payslip_${payslip.payslip_number}.pdf`,
         image: { type: 'jpeg', quality: 1 },
         html2canvas: { scale: 2, useCORS: true },
@@ -94,11 +93,9 @@ export default function PayslipList() {
 
     const win = window.open('', '_blank')
     win.document.write(`
-      <html><head><title>Payslip</title>
+      <html><head><title>Payslip ${payslip.payslip_number}</title>
       <style>
-        body { font-family: Arial, sans-serif; padding: 20px; font-size: 11px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ccc; padding: 4px; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       </style></head>
       <body>${element.innerHTML}</body></html>
     `)
@@ -116,12 +113,37 @@ export default function PayslipList() {
            (p.employees?.employee_code || '').toLowerCase().includes(s)
   })
 
-  // YTD Calculation helper (sums all loaded payslips for this employee in the same year)
+  // YTD Calculation (Sums all payslips for this employee in the same year)
   const getYTD = (currentPayslip, field) => {
     const currentYear = new Date(currentPayslip.payroll_runs?.period_start).getFullYear();
     return payslips
       .filter(ps => ps.employee_id === currentPayslip.employee_id && new Date(ps.payroll_runs?.period_start).getFullYear() === currentYear)
       .reduce((sum, ps) => sum + (Number(ps[field]) || 0), 0);
+  }
+
+  // Common styles for the PDF layout
+  const styles = {
+    container: { background: '#fff', color: '#111827', padding: '15mm', width: '210mm', minHeight: '297mm', fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", fontSize: '12px', boxSizing: 'border-box' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #059669', paddingBottom: '15px', marginBottom: '20px' },
+    logo: { maxHeight: '70px', objectFit: 'contain' },
+    titleBlock: { textAlign: 'right' },
+    title: { fontSize: '24px', fontWeight: 'bold', color: '#059669', margin: '0 0 5px 0', letterSpacing: '1px' },
+    subtitle: { fontSize: '14px', color: '#4b5563', margin: 0 },
+    grid: { display: 'flex', gap: '20px', marginBottom: '20px' },
+    section: { flex: 1 },
+    sectionTitle: { fontSize: '13px', fontWeight: 'bold', color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' },
+    row: { display: 'flex', justifyContent: 'space-between', padding: '4px 0' },
+    label: { color: '#6b7280' },
+    value: { fontWeight: 'bold', color: '#111827' },
+    table: { width: '100%', borderCollapse: 'collapse', marginBottom: '20px' },
+    th: { background: '#f3f4f6', color: '#374151', padding: '8px', textAlign: 'left', fontWeight: 'bold', fontSize: '11px', borderBottom: '1px solid #d1d5db' },
+    thRight: { background: '#f3f4f6', color: '#374151', padding: '8px', textAlign: 'right', fontWeight: 'bold', fontSize: '11px', borderBottom: '1px solid #d1d5db' },
+    td: { padding: '8px', borderBottom: '1px solid #e5e7eb' },
+    tdRight: { padding: '8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '500' },
+    netPayBlock: { background: '#059669', color: '#fff', padding: '15px 20px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
+    netPayLabel: { fontSize: '16px', fontWeight: 'bold', letterSpacing: '1px', margin: 0 },
+    netPayValue: { fontSize: '24px', fontWeight: '900', margin: 0 },
+    footer: { textAlign: 'center', color: '#9ca3af', fontSize: '10px', marginTop: '40px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }
   }
 
   return (
@@ -150,7 +172,7 @@ export default function PayslipList() {
               <FileText className="w-8 h-8 text-emerald-600" />Payslips
             </h1>
             <p className="text-slate-500 mt-1">
-              {filteredPayslips.length} payslips
+              {filteredPayslips.length} payslips generated
             </p>
           </div>
           <div className="flex gap-2">
@@ -230,184 +252,155 @@ export default function PayslipList() {
       </main>
 
       {/* ═══════════════════════════════════════════════════════════════
-          HIDDEN PDF LAYOUT (Matches Mustek Example)
+          HIDDEN PDF LAYOUT (Modern Corporate Design)
           ═══════════════════════════════════════════════════════════════ */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }} aria-hidden="true">
         {payslips.map(p => (
-          <div key={p.id} id={`payslip-mini-${p.id}`} style={{ background: '#fff', color: '#000', padding: '30px', width: '210mm', minHeight: '297mm', fontFamily: 'Arial, sans-serif', fontSize: '11px' }}>
+          <div key={p.id} id={`payslip-mini-${p.id}`} style={styles.container}>
             
             {/* HEADER */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '2px solid #000', paddingBottom: '10px' }}>
+            <div style={styles.header}>
               <div>
-                <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>NDANDULENI GROUP</h1>
-                <p style={{ margin: 0 }}>Payslip for {p.payroll_runs?.period_start} to {p.payroll_runs?.period_end}</p>
+                {/* ✅ YOUR COMPANY LOGO */}
+                <img src="/logo.png" alt="Ndanduleni Group" style={styles.logo} />
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>PAYSLIP</h2>
-                <p style={{ margin: 0 }}>#{p.payslip_number}</p>
+              <div style={styles.titleBlock}>
+                <h1 style={styles.title}>PAYSLIP</h1>
+                <p style={styles.subtitle}>
+                  {p.payroll_runs?.period_start} to {p.payroll_runs?.period_end}
+                </p>
+                <p style={{ ...styles.subtitle, fontSize: '11px', marginTop: '5px' }}>
+                  Ref: <strong>{p.payslip_number}</strong>
+                </p>
               </div>
             </div>
 
-            {/* EMPLOYEE & PROFILE DETAILS */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+            {/* EMPLOYEE & PAYROLL DETAILS */}
+            <div style={styles.grid}>
+              {/* Employee Details */}
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>Employee Details</h3>
+                <div style={styles.row}><span style={styles.label}>Name:</span> <span style={styles.value}>{p.employees?.first_name} {p.employees?.last_name}</span></div>
+                <div style={styles.row}><span style={styles.label}>Employee Code:</span> <span style={styles.value}>{p.employees?.employee_code || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>ID Number:</span> <span style={styles.value}>{p.employees?.id_number || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>Job Title:</span> <span style={styles.value}>{p.employees?.position || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>Address:</span> <span style={styles.value}>{p.employees?.address_line1 || '-'} {p.employees?.city || ''}</span></div>
+              </div>
+
+              {/* Banking & Tax Details */}
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>Banking & Tax</h3>
+                <div style={styles.row}><span style={styles.label}>Bank Name:</span> <span style={styles.value}>{p.payroll_profiles?.bank_name || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>Account No:</span> <span style={styles.value}>{p.payroll_profiles?.bank_account_number ? `****${p.payroll_profiles.bank_account_number.slice(-4)}` : '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>Branch Code:</span> <span style={styles.value}>{p.payroll_profiles?.bank_branch_code || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>PAYE Ref:</span> <span style={styles.value}>{p.payroll_profiles?.tax_number || '-'}</span></div>
+                <div style={styles.row}><span style={styles.label}>UIF Ref:</span> <span style={styles.value}>{p.payroll_profiles?.uif_number || '-'}</span></div>
+              </div>
+            </div>
+
+            {/* EARNINGS & DEDUCTIONS */}
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.th, width: '40%' }}>Earnings</th>
+                  <th style={{ ...styles.thRight, width: '10%' }}>Amount</th>
+                  <th style={{ width: '2%', border: 'none', background: 'transparent' }}></th>
+                  <th style={{ ...styles.th, width: '38%' }}>Deductions</th>
+                  <th style={{ ...styles.thRight, width: '10%' }}>Amount</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold', width: '15%' }}>Emp. Code</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', width: '18%' }}>{p.employees?.employee_code || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold', width: '15%' }}>Date Engaged</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', width: '18%' }}>{p.employees?.hire_date || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold', width: '15%' }}>Pay Period</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', width: '19%' }}>{p.payroll_runs?.period_start} - {p.payroll_runs?.period_end}</td>
+                  <td style={styles.td}>Basic Salary</td>
+                  <td style={styles.tdRight}>{formatCurrency(p.basic_salary)}</td>
+                  <td style={{ border: 'none' }}></td>
+                  <td style={styles.td}>PAYE (Tax)</td>
+                  <td style={styles.tdRight}>{formatCurrency(p.paye_tax)}</td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Emp. Name</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.employees?.first_name} {p.employees?.last_name}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Job Title</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.employees?.position || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Co. Name</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>NDANDULENI GROUP</td>
+                  <td style={styles.td}>Allowances / Overtime</td>
+                  <td style={styles.tdRight}>{formatCurrency((p.total_earnings || 0) - (p.basic_salary || 0))}</td>
+                  <td style={{ border: 'none' }}></td>
+                  <td style={styles.td}>UIF</td>
+                  <td style={styles.tdRight}>{formatCurrency(p.uif_contribution)}</td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>ID Number</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.employees?.id_number || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Paypoint</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>HEAD_OFFICE</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>PAYE Ref. No.</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.payroll_profiles?.tax_number || '-'}</td>
+                  <td style={styles.td}></td>
+                  <td style={styles.tdRight}></td>
+                  <td style={{ border: 'none' }}></td>
+                  <td style={styles.td}>Other / Pension</td>
+                  <td style={styles.tdRight}>{formatCurrency((p.total_deductions || 0) - (p.paye_tax || 0) - (p.uif_contribution || 0))}</td>
                 </tr>
-                <tr>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Emp. Address</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.employees?.address_line1 || '-'} {p.employees?.city || ''}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Bank</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.payroll_profiles?.bank_name || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>UIF Reg. No.</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.payroll_profiles?.uif_number || '-'}</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Account No.</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.payroll_profiles?.bank_account_number ? `****${p.payroll_profiles.bank_account_number.slice(-4)}` : '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Branch No.</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>{p.payroll_profiles?.bank_branch_code || '-'}</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc', fontWeight: 'bold' }}>Payment Type</td>
-                  <td style={{ padding: '4px', border: '1px solid #ccc' }}>EFT</td>
+                <tr style={{ background: '#f9fafb', fontWeight: 'bold' }}>
+                  <td style={{ ...styles.td, color: '#059669' }}>Total Earnings</td>
+                  <td style={{ ...styles.tdRight, color: '#059669' }}>{formatCurrency(p.total_earnings)}</td>
+                  <td style={{ border: 'none', background: 'transparent' }}></td>
+                  <td style={{ ...styles.td, color: '#dc2626' }}>Total Deductions</td>
+                  <td style={{ ...styles.tdRight, color: '#dc2626' }}>{formatCurrency(p.total_deductions)}</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* EARNINGS AND DEDUCTIONS */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <div style={{ flex: 1 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#e0e0e0' }}>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'left' }}>Earnings</th>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>Basic Salary</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.basic_salary)}</td>
-                    </tr>
-                    {(p.total_earnings - p.basic_salary) > 0 && (
-                      <tr>
-                        <td style={{ padding: '4px', border: '1px solid #ccc' }}>Allowances / Overtime</td>
-                        <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.total_earnings - p.basic_salary)}</td>
-                      </tr>
-                    )}
-                    <tr style={{ fontWeight: 'bold', background: '#f9f9f9' }}>
-                      <td style={{ padding: '4px', border: '1px solid #000' }}>Total Earnings</td>
-                      <td style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>{formatCurrency(p.total_earnings)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#e0e0e0' }}>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'left' }}>Deductions</th>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>PAYE (Tax)</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.paye_tax)}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>UIF</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.uif_contribution)}</td>
-                    </tr>
-                    {(p.total_deductions - p.paye_tax - p.uif_contribution) > 0 && (
-                      <tr>
-                        <td style={{ padding: '4px', border: '1px solid #ccc' }}>Other / Pension</td>
-                        <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.total_deductions - p.paye_tax - p.uif_contribution)}</td>
-                      </tr>
-                    )}
-                    <tr style={{ fontWeight: 'bold', background: '#f9f9f9' }}>
-                      <td style={{ padding: '4px', border: '1px solid #000' }}>Total Deductions</td>
-                      <td style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>{formatCurrency(p.total_deductions)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* NET PAY BLOCK */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: '#000', color: '#fff', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>
-              <span>Net Pay</span>
-              <span>{formatCurrency(p.net_salary)}</span>
+            {/* NET PAY BANNER */}
+            <div style={styles.netPayBlock}>
+              <p style={styles.netPayLabel}>NET PAY</p>
+              <p style={styles.netPayValue}>{formatCurrency(p.net_salary)}</p>
             </div>
 
             {/* COMPANY CONTRIBUTIONS & YTD */}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 1 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#e0e0e0' }}>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'left' }}>Company Contributions</th>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>Skills Development Levy</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.total_earnings * 0.01)}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>UIF (Employer)</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(p.uif_contribution)}</td>
-                    </tr>
-                    <tr style={{ fontWeight: 'bold', background: '#f9f9f9' }}>
-                      <td style={{ padding: '4px', border: '1px solid #000' }}>Total Contributions</td>
-                      <td style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>{formatCurrency((p.total_earnings * 0.01) + p.uif_contribution)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <div style={styles.grid}>
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>Company Contributions (Employer)</h3>
+                <div style={styles.row}><span style={styles.label}>Skills Development Levy (1%):</span> <span style={styles.value}>{formatCurrency((p.total_earnings || 0) * 0.01)}</span></div>
+                <div style={styles.row}><span style={styles.label}>UIF (Employer):</span> <span style={styles.value}>{formatCurrency(p.uif_contribution)}</span></div>
+                <div style={{ ...styles.row, borderTop: '1px solid #e5e7eb', marginTop: '5px', paddingTop: '5px' }}>
+                  <span style={{ ...styles.label, fontWeight: 'bold', color: '#111827' }}>Total Cost to Company:</span> 
+                  <span style={{ ...styles.value, color: '#059669' }}>{formatCurrency((p.total_earnings || 0) + (p.total_earnings || 0) * 0.01 + (p.uif_contribution || 0))}</span>
+                </div>
               </div>
 
-              <div style={{ flex: 1 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#e0e0e0' }}>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'left' }}>Year To Date Totals</th>
-                      <th style={{ padding: '4px', border: '1px solid #000', textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>YTD Tax Paid</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(getYTD(p, 'paye_tax'))}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '4px', border: '1px solid #ccc' }}>YTD Gross Earnings</td>
-                      <td style={{ padding: '4px', border: '1px solid #ccc', textAlign: 'right' }}>{formatCurrency(getYTD(p, 'total_earnings'))}</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>Year To Date (YTD)</h3>
+                <div style={styles.row}><span style={styles.label}>YTD Gross Earnings:</span> <span style={styles.value}>{formatCurrency(getYTD(p, 'total_earnings'))}</span></div>
+                <div style={styles.row}><span style={styles.label}>YTD Tax Paid (PAYE):</span> <span style={styles.value}>{formatCurrency(getYTD(p, 'paye_tax'))}</span></div>
+                <div style={styles.row}><span style={styles.label}>YTD UIF Paid:</span> <span style={styles.value}>{formatCurrency(getYTD(p, 'uif_contribution'))}</span></div>
+                <div style={styles.row}><span style={styles.label}>YTD Net Salary:</span> <span style={styles.value}>{formatCurrency(getYTD(p, 'net_salary'))}</span></div>
               </div>
+            </div>
+
+            {/* LEAVE BALANCES (Placeholder UI) */}
+            <div style={{ marginTop: '10px' }}>
+              <h3 style={styles.sectionTitle}>Leave Balances</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Leave Type</th>
+                    <th style={styles.thRight}>Entitlement</th>
+                    <th style={styles.thRight}>Taken</th>
+                    <th style={styles.thRight}>Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={styles.td}>Annual Leave</td>
+                    <td style={styles.tdRight}>15.00</td>
+                    <td style={styles.tdRight}>0.00</td>
+                    <td style={styles.tdRight}>15.00</td>
+                  </tr>
+                  <tr>
+                    <td style={styles.td}>Sick Leave</td>
+                    <td style={styles.tdRight}>30.00</td>
+                    <td style={styles.tdRight}>0.00</td>
+                    <td style={styles.tdRight}>30.00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* FOOTER */}
+            <div style={styles.footer}>
+              This is a computer-generated payslip and does not require a signature.<br />
+              Generated by Ndanduleni Group ERP on {new Date().toLocaleDateString('en-ZA')}
             </div>
 
           </div>
