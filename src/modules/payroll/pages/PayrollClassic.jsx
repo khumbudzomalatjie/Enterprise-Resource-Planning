@@ -6,8 +6,46 @@ import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Save, Plus, FileText, Sun, Moon, Sparkles,
-  Search, X, User, DollarSign, Clock, Calendar
+  Search, X, User
 } from 'lucide-react'
+
+// ═══════════════════════════════════════════════════════════════
+// 🇿🇦 SARS PAYE TAX CALCULATOR (2024/2025 Tax Year)
+// ═══════════════════════════════════════════════════════════════
+const calculateZATax = (monthlyGross, monthlyPension = 0) => {
+  const taxableIncome = monthlyGross - monthlyPension
+  const annualIncome = taxableIncome * 12
+
+  let annualTax = 0
+  if (annualIncome <= 237100) {
+    annualTax = annualIncome * 0.18
+  } else if (annualIncome <= 370500) {
+    annualTax = 42678 + (annualIncome - 237100) * 0.26
+  } else if (annualIncome <= 512800) {
+    annualTax = 77362 + (annualIncome - 370500) * 0.31
+  } else if (annualIncome <= 673000) {
+    annualTax = 121475 + (annualIncome - 512800) * 0.36
+  } else if (annualIncome <= 857900) {
+    annualTax = 179147 + (annualIncome - 673000) * 0.39
+  } else if (annualIncome <= 1817000) {
+    annualTax = 251258 + (annualIncome - 857900) * 0.41
+  } else {
+    annualTax = 644489 + (annualIncome - 1817000) * 0.45
+  }
+
+  // Primary Rebate
+  const rebate = 17235
+  const finalAnnualTax = Math.max(0, annualTax - rebate)
+  const monthlyPAYE = finalAnnualTax / 12
+
+  // UIF (1% capped at R177.12)
+  const uif = Math.min(monthlyGross * 0.01, 177.12)
+
+  return {
+    paye: Math.round(monthlyPAYE * 100) / 100,
+    uif: Math.round(uif * 100) / 100
+  }
+}
 
 export default function PayrollClassic() {
   const { isDark, toggleTheme } = useThemeStore()
@@ -36,8 +74,6 @@ export default function PayrollClassic() {
 
   useEffect(() => { loadEmployees() }, [])
 
-  // ✅ Two-query approach — works even if the FK payroll_profiles.employee_id → employees.id is missing.
-  // Doesn't silently fail: surfaces the error via toast.
   const loadEmployees = async () => {
     try {
       const { data: empData, error: empError } = await supabase
@@ -45,50 +81,32 @@ export default function PayrollClassic() {
         .select('*')
         .order('first_name')
 
-      if (empError) {
-        console.error('[PayrollClassic] employee load error:', empError)
-        toast.error('Failed to load employees: ' + empError.message)
-        setEmployees([])
-        return
-      }
+      if (empError) throw empError
 
       const employeeIds = (empData || []).map(e => e.id)
-
       let profileData = []
+
       if (employeeIds.length > 0) {
-        const { data: profiles, error: profErr } = await supabase
+        const { data: profiles } = await supabase
           .from('payroll_profiles')
           .select('*')
           .in('employee_id', employeeIds)
-
-        if (profErr) {
-          console.error('[PayrollClassic] profile load error:', profErr)
-          // Don't fail — employees without profiles are still useful.
-          // But warn the user that profile data is missing.
-          toast.error('Warning: payroll profiles could not be loaded — ' + profErr.message)
-        } else {
-          profileData = profiles || []
-        }
+        profileData = profiles || []
       }
 
       const merged = (empData || []).map(emp => {
         const empProfiles = profileData.filter(p => p.employee_id === emp.id)
         return {
           ...emp,
-          payroll_profiles: empProfiles,        // keep array shape (existing code uses ?.[0])
-          payroll_profile: empProfiles[0] || null  // convenient singular (matches EmployeePayrollList)
+          payroll_profiles: empProfiles,
+          payroll_profile: empProfiles[0] || null
         }
       })
 
       setEmployees(merged)
-      console.log(
-        `[PayrollClassic] Loaded ${merged.length} employees, ` +
-        `${merged.filter(e => e.payroll_profile).length} with payroll profiles`
-      )
     } catch (err) {
-      console.error('[PayrollClassic] loadEmployees threw:', err)
+      console.error('Load error:', err)
       toast.error('Failed to load employees')
-      setEmployees([])
     }
   }
 
@@ -110,7 +128,7 @@ export default function PayrollClassic() {
     setSelectedEmployee(emp)
     setEmployeePayData({
       pay_type: 'Salary',
-      pay_amount: emp.payroll_profiles?.[0]?.basic_salary || '',
+      pay_amount: emp.payroll_profile?.basic_salary || '',
       overtime_rate: '1.5',
       pto_taken: 0
     })
@@ -133,24 +151,21 @@ export default function PayrollClassic() {
   }
 
   const handleAddToPayroll = () => {
-    if (!selectedEmployee || !employeePayData.pay_amount) {
-      toast.error('Please select an employee and set pay amount')
+    if (!selectedEmployee) return
+    const basic = parseFloat(employeePayData.pay_amount) || 0
+    if (basic <= 0) {
+      toast.error('Please set a valid pay amount')
       return
     }
 
-    const grossPay = parseFloat(employeePayData.pay_amount) || 0
-    const netPay = grossPay * 0.75
-
-    const exists = payrollList.find(p => p.id === selectedEmployee.id)
-    if (exists) {
+    if (payrollList.find(p => p.id === selectedEmployee.id)) {
       toast.error('Employee already added to payroll')
       return
     }
 
     const newEntry = {
       ...selectedEmployee,
-      gross_pay: grossPay,
-      net_pay: netPay,
+      gross_pay: basic, // This is the basic salary before deductions
       pay_type: employeePayData.pay_type,
       overtime_rate: employeePayData.overtime_rate,
       pto_taken: employeePayData.pto_taken
@@ -171,8 +186,7 @@ export default function PayrollClassic() {
 
   const updateTotals = (list) => {
     const totalGross = list.reduce((sum, p) => sum + (p.gross_pay || 0), 0)
-    const totalNet = list.reduce((sum, p) => sum + (p.net_pay || 0), 0)
-    setPayrollData(prev => ({ ...prev, total_gross: totalGross, total_net: totalNet }))
+    setPayrollData(prev => ({ ...prev, total_gross: totalGross }))
   }
 
   const handleProcessPayroll = async () => {
@@ -182,7 +196,66 @@ export default function PayrollClassic() {
     setLoading(true)
     try {
       const runNumber = 'RUN-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
+      
+      // 1. Fetch all custom deductions (e.g., Pension) for these employees before generating payslips
+      const profileIds = payrollList.map(e => e.payroll_profile?.id).filter(Boolean)
+      let allDeductions = []
+      if (profileIds.length > 0) {
+        const { data } = await supabase
+          .from('employee_deductions')
+          .select('*, deduction_types(name)')
+          .in('payroll_profile_id', profileIds)
+        allDeductions = data || []
+      }
 
+      // 2. Calculate totals for the run header
+      let runTotalGross = 0
+      let runTotalNet = 0
+      let runTotalDeductions = 0
+
+      const payslipPayloads = []
+
+      for (const emp of payrollList) {
+        const basicSalary = Number(emp.payroll_profile?.basic_salary || emp.gross_pay || 0)
+        
+        // Find custom deductions for this employee
+        const empDeductions = allDeductions.filter(d => d.payroll_profile_id === emp.payroll_profile?.id)
+        
+        // Separate Pension (tax deductible) from other deductions
+        const pensionDeduction = empDeductions.find(d => (d.deduction_types?.name || '').toLowerCase().includes('pension'))
+        const pensionAmount = pensionDeduction ? Number(pensionDeduction.amount) : 0
+        const otherDeductionsAmount = empDeductions.filter(d => d !== pensionDeduction).reduce((s, d) => s + Number(d.amount), 0)
+
+        // Calculate SARS Tax and UIF
+        const { paye, uif } = calculateZATax(basicSalary, pensionAmount)
+        
+        const totalDeductions = pensionAmount + otherDeductionsAmount + paye + uif
+        const netPay = basicSalary - totalDeductions
+
+        runTotalGross += basicSalary
+        runTotalNet += netPay
+        runTotalDeductions += totalDeductions
+
+        const payslipNumber = 'PS-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
+
+        payslipPayloads.push({
+          employee_id: emp.id,
+          payroll_profile_id: emp.payroll_profile?.id,
+          payslip_number: payslipNumber,
+          basic_salary: basicSalary,
+          total_earnings: basicSalary,
+          paye_tax: paye,
+          uif_contribution: uif,
+          total_deductions: totalDeductions,
+          net_salary: netPay,
+          days_worked: 22,
+          hours_worked: 176,
+          status: 'finalized',
+          payment_reference: 'EFT-' + Date.now()
+        })
+      }
+
+      // 3. Create the Payroll Run
       const { data: run, error: runError } = await supabase.from('payroll_runs').insert([{
         run_number: runNumber,
         period_start: payrollData.pay_from_date,
@@ -191,53 +264,25 @@ export default function PayrollClassic() {
         run_type: 'monthly',
         total_employees: payrollList.length,
         employees_processed: payrollList.length,
-        total_gross: payrollData.total_gross,
-        total_net: payrollData.total_net,
-        total_deductions: payrollData.total_gross - payrollData.total_net,
+        total_gross: runTotalGross,
+        total_net: runTotalNet,
+        total_deductions: runTotalDeductions,
         status: 'completed',
         processed_at: new Date().toISOString()
       }]).select().single()
 
-      if (runError || !run) {
-        throw new Error(runError?.message || 'Failed to create payroll run')
-      }
+      if (runError) throw runError
 
-      for (const emp of payrollList) {
-        const basicSalary = emp.gross_pay || 0
-        const paye = basicSalary * 0.18
-        const uif = Math.min(basicSalary * 0.01, 177.12)
-        const deductions = paye + uif
-        const netPay = basicSalary - deductions
+      // 4. Insert Payslips
+      const finalPayloads = payslipPayloads.map(p => ({ ...p, payroll_run_id: run.id }))
+      const { error: slipError } = await supabase.from('payslips').insert(finalPayloads)
 
-        const payslipNumber = 'PS-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-
-        const { error: slipError } = await supabase.from('payslips').insert([{
-          payroll_run_id: run.id,
-          employee_id: emp.id,
-          payroll_profile_id: emp.payroll_profiles?.[0]?.id,
-          payslip_number: payslipNumber,
-          basic_salary: basicSalary,
-          total_earnings: basicSalary,
-          paye_tax: paye,
-          uif_contribution: uif,
-          total_deductions: deductions,
-          net_salary: netPay,
-          days_worked: 22,
-          hours_worked: 176,
-          status: 'finalized',
-          payment_reference: 'EFT-' + Date.now()
-        }])
-
-        if (slipError) {
-          console.error(`[PayrollClassic] payslip insert failed for ${emp.first_name} ${emp.last_name}:`, slipError)
-          // Continue — one failed payslip shouldn't abort the whole run
-        }
-      }
+      if (slipError) throw slipError
 
       toast.success(`Payroll processed! ${payrollList.length} payslips generated.`)
       navigate('/payroll/payslips')
     } catch (error) {
-      console.error('[PayrollClassic] payroll processing failed:', error)
+      console.error('Process error:', error)
       toast.error('Failed to process payroll: ' + error.message)
     } finally {
       setLoading(false)
@@ -254,7 +299,7 @@ export default function PayrollClassic() {
   return (
     <div style={{ background: '#d9d9d9', fontFamily: 'Arial, sans-serif', padding: '8px', minHeight: '100vh' }}>
       <Navbar />
-
+      
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2" style={{ background: isDark ? '#1e293b' : 'linear-gradient(145deg, #e2e8f0, #eef2f8)' }}>
           <Sparkles className="w-4 h-4 text-emerald-600" />
@@ -271,9 +316,6 @@ export default function PayrollClassic() {
         </Link>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'absolute', left: 0, width: '70px', height: '70px', borderRadius: '50%', overflow: 'hidden', border: '3px solid #2f6cab', background: '#e9eef3' }}>
-            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
-          </div>
           <h1 style={{ fontFamily: "'Alumni Sans Pinstripe', sans-serif", fontSize: '72px', color: '#235d95', fontWeight: 900, letterSpacing: '3px', textAlign: 'center' }}>
             Payroll Dashboard
           </h1>
@@ -321,9 +363,6 @@ export default function PayrollClassic() {
               <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e' }}>
                 💰 Gross: {formatCurrency(payrollData.total_gross)}
               </span>
-              <span style={{ background: 'white', padding: '6px 12px', borderRadius: '20px', color: '#1f5a8e' }}>
-                💵 Net: {formatCurrency(payrollData.total_net)}
-              </span>
             </div>
           </div>
 
@@ -347,18 +386,6 @@ export default function PayrollClassic() {
                       <span style={labelStyle}>Pay Amount (R):</span>
                       <input type="number" step="0.01" style={inputStyle} value={employeePayData.pay_amount} onChange={e => setEmployeePayData({...employeePayData, pay_amount: e.target.value})} />
                     </div>
-                    <div style={fieldStyle}>
-                      <span style={labelStyle}>OT Rate (x):</span>
-                      <input type="text" style={inputStyle} value={employeePayData.overtime_rate} onChange={e => setEmployeePayData({...employeePayData, overtime_rate: e.target.value})} />
-                    </div>
-                    <div style={fieldStyle}>
-                      <span style={labelStyle}>PTO Taken (hrs):</span>
-                      <input type="number" step="0.5" style={inputStyle} value={employeePayData.pto_taken} onChange={e => setEmployeePayData({...employeePayData, pto_taken: e.target.value})} />
-                    </div>
-                    <div style={fieldStyle}>
-                      <span style={labelStyle}>Net Pay:</span>
-                      <input type="text" style={{...inputStyle, color: '#059669', fontWeight: 'bold'}} value={formatCurrency((parseFloat(employeePayData.pay_amount) || 0) * 0.75)} readOnly />
-                    </div>
                   </div>
                   <div style={{ padding: '10px', display: 'flex', gap: '8px' }}>
                     <button onClick={handleAddToPayroll} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700">
@@ -369,22 +396,11 @@ export default function PayrollClassic() {
                     </button>
                   </div>
                 </div>
-                <div>
-                  <div style={{ width: '110px', height: '110px', borderRadius: '15px', overflow: 'hidden', border: '3px solid #2c5f9b', margin: '12px auto', background: '#f4f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {selectedEmployee.profile_photo_url ? (
-                      <img src={selectedEmployee.profile_photo_url} alt="employee" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <img src="https://cdn-icons-png.flaticon.com/512/4140/4140048.png" alt="silhouette" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                    )}
-                  </div>
-                  <div style={{ textAlign: 'center', fontSize: '12px', color: '#2b5e96' }}>📸 {selectedEmployee.employee_code}</div>
-                </div>
               </div>
             ) : (
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <User className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <p className="text-slate-500 text-lg mb-2">No employee selected</p>
-                <p className="text-slate-400 text-sm mb-4">Click "Select Employee" to choose an employee</p>
                 <button onClick={() => setShowEmployeeModal(true)}
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700">
                   <Plus className="w-4 h-4 inline mr-1" /> Select Employee
@@ -394,7 +410,7 @@ export default function PayrollClassic() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: '16px', marginBottom: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '100%', gap: '16px', marginBottom: '20px' }}>
           <div style={panelStyle}>
             <div style={panelTitleStyle}>📋 PAYROLL LIST ({payrollList.length})</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
@@ -403,14 +419,13 @@ export default function PayrollClassic() {
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Employee</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Type</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Gross</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Net</th>
                   <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Del</th>
                 </tr>
               </thead>
               <tbody>
                 {payrollList.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ border: '1px solid #2f73b8', padding: '30px', textAlign: 'center', background: '#fcf8e8', color: '#6a6f73', fontStyle: 'italic' }}>
+                    <td colSpan={4} style={{ border: '1px solid #2f73b8', padding: '30px', textAlign: 'center', background: '#fcf8e8', color: '#6a6f73', fontStyle: 'italic' }}>
                       ✨ No employees added to payroll ✨
                     </td>
                   </tr>
@@ -420,54 +435,8 @@ export default function PayrollClassic() {
                       <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe', textAlign: 'left' }}>{emp.first_name} {emp.last_name}</td>
                       <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>{emp.pay_type}</td>
                       <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>{formatCurrency(emp.gross_pay)}</td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe', color: '#059669', fontWeight: 'bold' }}>{formatCurrency(emp.net_pay)}</td>
                       <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
                         <button onClick={() => removeFromPayroll(emp.id)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={panelStyle}>
-            <div style={panelTitleStyle}>⏱️ ATTENDANCE / TIMESHEET</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Date</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Clock In</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Clock Out</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Hours</th>
-                  <th style={{ background: '#b7dff6', border: '1px solid #2f73b8', padding: '10px 5px' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {timesheetData.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ border: '1px solid #2f73b8', padding: '30px', textAlign: 'center', background: '#fcf8e8', color: '#6a6f73', fontStyle: 'italic' }}>
-                      {selectedEmployee ? '📭 No attendance records' : '👈 Select an employee to view timesheet'}
-                    </td>
-                  </tr>
-                ) : (
-                  timesheetData.map((record, i) => (
-                    <tr key={i}>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>{record.attendance_date}</td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
-                        {record.clock_in_time ? new Date(record.clock_in_time).toLocaleTimeString() : '-'}
-                      </td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
-                        {record.clock_out_time ? new Date(record.clock_out_time).toLocaleTimeString() : '-'}
-                      </td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
-                        {record.total_hours ? record.total_hours.toFixed(1) : '-'}
-                      </td>
-                      <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
-                          record.status === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                        }`}>{record.status || 'N/A'}</span>
                       </td>
                     </tr>
                   ))
@@ -500,20 +469,13 @@ export default function PayrollClassic() {
                     className="flex items-center justify-between p-3 rounded-xl cursor-pointer hover:bg-blue-50 border border-blue-100 transition-colors"
                     style={{ background: '#eef4fa' }}>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
-                        {emp.profile_photo_url ? (
-                          <img src={emp.profile_photo_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <User className="w-5 h-5 text-blue-600" />
-                        )}
-                      </div>
                       <div>
                         <p className="font-medium text-sm">{emp.first_name} {emp.last_name}</p>
                         <p className="text-xs text-slate-500">{emp.employee_code} · {emp.position || 'N/A'}</p>
                       </div>
                     </div>
                     <span className="text-sm font-bold text-emerald-600">
-                      {formatCurrency(emp.payroll_profiles?.[0]?.basic_salary || 0)}
+                      {formatCurrency(emp.payroll_profile?.basic_salary || 0)}
                     </span>
                   </div>
                 ))}
