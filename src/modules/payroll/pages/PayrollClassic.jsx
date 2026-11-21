@@ -4,7 +4,7 @@ import Navbar from '../../../components/Navbar'
 import useThemeStore from '../../../store/themeStore'
 import { supabase } from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
-import { 
+import {
   ArrowLeft, Save, Plus, FileText, Sun, Moon, Sparkles,
   Search, X, User, DollarSign, Clock, Calendar
 } from 'lucide-react'
@@ -36,16 +36,67 @@ export default function PayrollClassic() {
 
   useEffect(() => { loadEmployees() }, [])
 
+  // ✅ Two-query approach — works even if the FK payroll_profiles.employee_id → employees.id is missing.
+  // Doesn't silently fail: surfaces the error via toast.
   const loadEmployees = async () => {
-    const { data } = await supabase
-      .from('employees')
-      .select('*, payroll_profiles(*)')
-      .eq('employment_status', 'active')
-      .order('first_name')
-    setEmployees(data || [])
+    try {
+      const { data: empData, error: empError } = await supabase
+        .from('employees')
+        .select('*')
+        .order('first_name')
+
+      if (empError) {
+        console.error('[PayrollClassic] employee load error:', empError)
+        toast.error('Failed to load employees: ' + empError.message)
+        setEmployees([])
+        return
+      }
+
+      const employeeIds = (empData || []).map(e => e.id)
+
+      let profileData = []
+      if (employeeIds.length > 0) {
+        const { data: profiles, error: profErr } = await supabase
+          .from('payroll_profiles')
+          .select('*')
+          .in('employee_id', employeeIds)
+
+        if (profErr) {
+          console.error('[PayrollClassic] profile load error:', profErr)
+          // Don't fail — employees without profiles are still useful.
+          // But warn the user that profile data is missing.
+          toast.error('Warning: payroll profiles could not be loaded — ' + profErr.message)
+        } else {
+          profileData = profiles || []
+        }
+      }
+
+      const merged = (empData || []).map(emp => {
+        const empProfiles = profileData.filter(p => p.employee_id === emp.id)
+        return {
+          ...emp,
+          payroll_profiles: empProfiles,        // keep array shape (existing code uses ?.[0])
+          payroll_profile: empProfiles[0] || null  // convenient singular (matches EmployeePayrollList)
+        }
+      })
+
+      setEmployees(merged)
+      console.log(
+        `[PayrollClassic] Loaded ${merged.length} employees, ` +
+        `${merged.filter(e => e.payroll_profile).length} with payroll profiles`
+      )
+    } catch (err) {
+      console.error('[PayrollClassic] loadEmployees threw:', err)
+      toast.error('Failed to load employees')
+      setEmployees([])
+    }
   }
 
-  const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
+  const formatCurrency = (amount) => {
+    const n = Number(amount)
+    if (!isFinite(n)) return 'R 0.00'
+    return new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(n)
+  }
 
   const filteredEmployees = employees.filter(emp => {
     if (!searchTerm) return true
@@ -64,7 +115,6 @@ export default function PayrollClassic() {
       pto_taken: 0
     })
     setShowEmployeeModal(false)
-    // Load timesheet data for this employee
     loadTimesheetData(emp.id)
   }
 
@@ -122,7 +172,7 @@ export default function PayrollClassic() {
   const updateTotals = (list) => {
     const totalGross = list.reduce((sum, p) => sum + (p.gross_pay || 0), 0)
     const totalNet = list.reduce((sum, p) => sum + (p.net_pay || 0), 0)
-    setPayrollData(prev => ({...prev, total_gross: totalGross, total_net: totalNet}))
+    setPayrollData(prev => ({ ...prev, total_gross: totalGross, total_net: totalNet }))
   }
 
   const handleProcessPayroll = async () => {
@@ -132,8 +182,8 @@ export default function PayrollClassic() {
     setLoading(true)
     try {
       const runNumber = 'RUN-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-      
-      const { data: run } = await supabase.from('payroll_runs').insert([{
+
+      const { data: run, error: runError } = await supabase.from('payroll_runs').insert([{
         run_number: runNumber,
         period_start: payrollData.pay_from_date,
         period_end: payrollData.pay_to_date,
@@ -148,6 +198,10 @@ export default function PayrollClassic() {
         processed_at: new Date().toISOString()
       }]).select().single()
 
+      if (runError || !run) {
+        throw new Error(runError?.message || 'Failed to create payroll run')
+      }
+
       for (const emp of payrollList) {
         const basicSalary = emp.gross_pay || 0
         const paye = basicSalary * 0.18
@@ -157,7 +211,7 @@ export default function PayrollClassic() {
 
         const payslipNumber = 'PS-' + new Date().toISOString().slice(2, 4) + new Date().toISOString().slice(5, 7) + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
 
-        await supabase.from('payslips').insert([{
+        const { error: slipError } = await supabase.from('payslips').insert([{
           payroll_run_id: run.id,
           employee_id: emp.id,
           payroll_profile_id: emp.payroll_profiles?.[0]?.id,
@@ -173,18 +227,24 @@ export default function PayrollClassic() {
           status: 'finalized',
           payment_reference: 'EFT-' + Date.now()
         }])
+
+        if (slipError) {
+          console.error(`[PayrollClassic] payslip insert failed for ${emp.first_name} ${emp.last_name}:`, slipError)
+          // Continue — one failed payslip shouldn't abort the whole run
+        }
       }
 
       toast.success(`Payroll processed! ${payrollList.length} payslips generated.`)
       navigate('/payroll/payslips')
     } catch (error) {
+      console.error('[PayrollClassic] payroll processing failed:', error)
       toast.error('Failed to process payroll: ' + error.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // Classic style helpers
+  // ─── Classic style helpers ────────────────────────────────────
   const panelStyle = { border: '1px solid #2f73b8', background: '#d7e7f4', borderRadius: '4px', overflow: 'hidden' }
   const panelTitleStyle = { background: '#a9d2f3', textAlign: 'center', padding: '8px', fontWeight: 'bold', letterSpacing: '1px', borderBottom: '1px solid #2f73b8', fontSize: '1rem' }
   const fieldStyle = { borderRight: '1px solid #2f73b8', borderBottom: '1px solid #2f73b8', padding: '12px 10px', minHeight: '55px', background: '#eef4fa', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
@@ -194,7 +254,7 @@ export default function PayrollClassic() {
   return (
     <div style={{ background: '#d9d9d9', fontFamily: 'Arial, sans-serif', padding: '8px', minHeight: '100vh' }}>
       <Navbar />
-      
+
       <div className="fixed top-20 right-4 z-30 flex items-center gap-4">
         <div className="neu-inset px-5 py-2 rounded-full flex items-center gap-2" style={{ background: isDark ? '#1e293b' : 'linear-gradient(145deg, #e2e8f0, #eef2f8)' }}>
           <Sparkles className="w-4 h-4 text-emerald-600" />
@@ -210,7 +270,6 @@ export default function PayrollClassic() {
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Payroll
         </Link>
 
-        {/* HEADER with Avatar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div style={{ position: 'absolute', left: 0, width: '70px', height: '70px', borderRadius: '50%', overflow: 'hidden', border: '3px solid #2f6cab', background: '#e9eef3' }}>
             <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
@@ -220,7 +279,6 @@ export default function PayrollClassic() {
           </h1>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3 mb-4 justify-center flex-wrap">
           <button onClick={() => setShowEmployeeModal(true)}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 flex items-center gap-2 shadow-md">
@@ -236,9 +294,7 @@ export default function PayrollClassic() {
           </button>
         </div>
 
-        {/* MAIN GRID */}
         <div style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: '16px', marginBottom: '20px' }}>
-          {/* LEFT: PAYROLL DETAILS */}
           <div style={panelStyle}>
             <div style={panelTitleStyle}>📅 PAYROLL DETAILS</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
@@ -271,7 +327,6 @@ export default function PayrollClassic() {
             </div>
           </div>
 
-          {/* RIGHT: EMPLOYEE DETAILS (shows selected employee info) */}
           <div style={panelStyle}>
             <div style={panelTitleStyle}>👤 EMPLOYEE DETAILS</div>
             {selectedEmployee ? (
@@ -339,9 +394,7 @@ export default function PayrollClassic() {
           </div>
         </div>
 
-        {/* TABLES SECTION */}
         <div style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: '16px', marginBottom: '20px' }}>
-          {/* PAYROLL LIST TABLE */}
           <div style={panelStyle}>
             <div style={panelTitleStyle}>📋 PAYROLL LIST ({payrollList.length})</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
@@ -378,7 +431,6 @@ export default function PayrollClassic() {
             </table>
           </div>
 
-          {/* TIMESHEET TABLE */}
           <div style={panelStyle}>
             <div style={panelTitleStyle}>⏱️ ATTENDANCE / TIMESHEET</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', fontSize: '0.85rem' }}>
@@ -413,7 +465,7 @@ export default function PayrollClassic() {
                       </td>
                       <td style={{ border: '1px solid #2f73b8', padding: '8px', background: '#fefefe' }}>
                         <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : 
+                          record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
                           record.status === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                         }`}>{record.status || 'N/A'}</span>
                       </td>
@@ -426,7 +478,6 @@ export default function PayrollClassic() {
         </div>
       </div>
 
-      {/* EMPLOYEE SELECTION MODAL */}
       {showEmployeeModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowEmployeeModal(false)}>
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}
