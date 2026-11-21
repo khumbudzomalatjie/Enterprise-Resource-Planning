@@ -76,7 +76,7 @@ export default function PayslipList() {
         image: { type: 'jpeg', quality: 1 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: 'avoid-all' } // ✅ Forces 1 page
+        pagebreak: { mode: 'avoid-all' }
       }
 
       await html2pdf().set(opt).from(element).save()
@@ -121,17 +121,19 @@ export default function PayslipList() {
       .reduce((sum, ps) => sum + (Number(ps[field]) || 0), 0);
   }
 
-  // ✅ CSS updated for 1-page fit and Blue theme (#2563eb)
+  // ✅ COLORS UPDATED: Navy (#062233) & Steel Blue (#0E71B2)
   const styles = {
     container: { background: '#fff', color: '#111827', padding: '12mm', width: '210mm', fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", fontSize: '12px', boxSizing: 'border-box' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2563eb', paddingBottom: '15px', marginBottom: '20px' },
-    logo: { maxHeight: '70px', objectFit: 'contain' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0E71B2', paddingBottom: '15px', marginBottom: '20px' },
+    logoBlock: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start' },
+    logo: { maxHeight: '60px', objectFit: 'contain', marginBottom: '5px' },
+    logoText: { fontSize: '16px', fontWeight: '900', color: '#062233', letterSpacing: '1px', textTransform: 'uppercase' },
     titleBlock: { textAlign: 'right' },
-    title: { fontSize: '24px', fontWeight: 'bold', color: '#2563eb', margin: '0 0 5px 0', letterSpacing: '1px' },
+    title: { fontSize: '24px', fontWeight: 'bold', color: '#0E71B2', margin: '0 0 5px 0', letterSpacing: '1px' },
     subtitle: { fontSize: '14px', color: '#4b5563', margin: 0 },
     grid: { display: 'flex', gap: '20px', marginBottom: '20px' },
     section: { flex: 1 },
-    sectionTitle: { fontSize: '13px', fontWeight: 'bold', color: '#374151', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' },
+    sectionTitle: { fontSize: '13px', fontWeight: 'bold', color: '#062233', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' },
     row: { display: 'flex', justifyContent: 'space-between', padding: '4px 0' },
     label: { color: '#6b7280' },
     value: { fontWeight: 'bold', color: '#111827' },
@@ -140,9 +142,9 @@ export default function PayslipList() {
     thRight: { background: '#f3f4f6', color: '#374151', padding: '8px', textAlign: 'right', fontWeight: 'bold', fontSize: '11px', borderBottom: '1px solid #d1d5db' },
     td: { padding: '8px', borderBottom: '1px solid #e5e7eb' },
     tdRight: { padding: '8px', borderBottom: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '500' },
-    netPayBlock: { background: '#2563eb', color: '#fff', padding: '15px 20px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
-    netPayLabel: { fontSize: '16px', fontWeight: 'bold', letterSpacing: '1px', margin: 0 },
-    netPayValue: { fontSize: '24px', fontWeight: '900', margin: 0 },
+    netPayBlock: { background: '#062233', color: '#fff', padding: '15px 20px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
+    netPayLabel: { fontSize: '16px', fontWeight: 'bold', letterSpacing: '1px', margin: 0, color: '#fff' },
+    netPayValue: { fontSize: '24px', fontWeight: '900', margin: 0, color: '#fff' },
     footer: { textAlign: 'center', color: '#9ca3af', fontSize: '10px', marginTop: '30px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }
   }
 
@@ -169,7 +171,7 @@ export default function PayslipList() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-              <FileText className="w-8 h-8 text-blue-600" />Payslips
+              <FileText className="w-8 h-8 text-[#0E71B2]" />Payslips
             </h1>
             <p className="text-slate-500 mt-1">
               {filteredPayslips.length} payslips generated
@@ -197,7 +199,7 @@ export default function PayslipList() {
 
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0E71B2] mx-auto mb-4"></div>
             <p className="text-slate-500">Loading...</p>
           </div>
         ) : filteredPayslips.length === 0 ? (
@@ -228,16 +230,16 @@ export default function PayslipList() {
                       <td className="py-3 px-4 text-xs">{p.payroll_runs?.period_start} to {p.payroll_runs?.period_end}</td>
                       <td className="py-3 px-4 text-right">{formatCurrency(p.total_earnings)}</td>
                       <td className="py-3 px-4 text-right text-red-600">-{formatCurrency(p.total_deductions)}</td>
-                      <td className="py-3 px-4 text-right font-bold text-blue-600">{formatCurrency(p.net_salary)}</td>
+                      <td className="py-3 px-4 text-right font-bold text-[#0E71B2]">{formatCurrency(p.net_salary)}</td>
                       <td className="py-3 px-4">
                         <div className="flex justify-center gap-1">
                           <button onClick={() => handleDownloadSingle(p)} disabled={downloadingId === p.id}
-                            className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="Download PDF">
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-[#0E71B2]" title="Download PDF">
                             {downloadingId === p.id
-                              ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#0E71B2]"></div>
                               : <Download className="w-4 h-4" />}
                           </button>
-                          <button onClick={() => handlePrint(p)} className="p-1.5 rounded-lg hover:bg-purple-100 text-slate-400 hover:text-purple-600" title="Print">
+                          <button onClick={() => handlePrint(p)} className="p-1.5 rounded-lg hover:bg-purple-50 text-slate-400 hover:text-purple-600" title="Print">
                             <Printer className="w-4 h-4" />
                           </button>
                         </div>
@@ -252,7 +254,7 @@ export default function PayslipList() {
       </main>
 
       {/* ═══════════════════════════════════════════════════════════════
-          HIDDEN PDF LAYOUT (Blue Theme, 1 Page, No Ref)
+          HIDDEN PDF LAYOUT (Navy & Steel Blue Theme)
           ═══════════════════════════════════════════════════════════════ */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0 }} aria-hidden="true">
         {payslips.map(p => (
@@ -260,8 +262,9 @@ export default function PayslipList() {
             
             {/* HEADER */}
             <div style={styles.header}>
-              <div>
+              <div style={styles.logoBlock}>
                 <img src="/logo.png" alt="Ndanduleni Group" style={styles.logo} />
+                <div style={styles.logoText}>NDANDULENI GROUP</div>
               </div>
               <div style={styles.titleBlock}>
                 <h1 style={styles.title}>PAYSLIP</h1>
@@ -326,8 +329,8 @@ export default function PayslipList() {
                   <td style={styles.tdRight}>{formatCurrency((p.total_deductions || 0) - (p.paye_tax || 0) - (p.uif_contribution || 0))}</td>
                 </tr>
                 <tr style={{ background: '#f9fafb', fontWeight: 'bold' }}>
-                  <td style={{ ...styles.td, color: '#2563eb' }}>Total Earnings</td>
-                  <td style={{ ...styles.tdRight, color: '#2563eb' }}>{formatCurrency(p.total_earnings)}</td>
+                  <td style={{ ...styles.td, color: '#0E71B2' }}>Total Earnings</td>
+                  <td style={{ ...styles.tdRight, color: '#0E71B2' }}>{formatCurrency(p.total_earnings)}</td>
                   <td style={{ border: 'none', background: 'transparent' }}></td>
                   <td style={{ ...styles.td, color: '#dc2626' }}>Total Deductions</td>
                   <td style={{ ...styles.tdRight, color: '#dc2626' }}>{formatCurrency(p.total_deductions)}</td>
@@ -348,8 +351,8 @@ export default function PayslipList() {
                 <div style={styles.row}><span style={styles.label}>Skills Development Levy (1%):</span> <span style={styles.value}>{formatCurrency((p.total_earnings || 0) * 0.01)}</span></div>
                 <div style={styles.row}><span style={styles.label}>UIF (Employer):</span> <span style={styles.value}>{formatCurrency(p.uif_contribution)}</span></div>
                 <div style={{ ...styles.row, borderTop: '1px solid #e5e7eb', marginTop: '5px', paddingTop: '5px' }}>
-                  <span style={{ ...styles.label, fontWeight: 'bold', color: '#111827' }}>Total Cost to Company:</span> 
-                  <span style={{ ...styles.value, color: '#2563eb' }}>{formatCurrency((p.total_earnings || 0) + (p.total_earnings || 0) * 0.01 + (p.uif_contribution || 0))}</span>
+                  <span style={{ ...styles.label, fontWeight: 'bold', color: '#062233' }}>Total Cost to Company:</span> 
+                  <span style={{ ...styles.value, color: '#0E71B2' }}>{formatCurrency((p.total_earnings || 0) + (p.total_earnings || 0) * 0.01 + (p.uif_contribution || 0))}</span>
                 </div>
               </div>
 
