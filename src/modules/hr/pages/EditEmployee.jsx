@@ -320,6 +320,13 @@ export default function EditEmployee() {
                   <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="last_name" value={formData.last_name} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" required /></div>
                   <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">First Name:*</div>
                   <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="first_name" value={formData.first_name} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" required /></div>
+                  
+                  {/* MOVED ID NUMBER HERE */}
+                  <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">ID Number:</div>
+                  <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="id_number" value={formData.id_number} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
+                  <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Tax Number:</div>
+                  <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="tax_number" value={formData.tax_number} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
+
                   <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Address:</div>
                   <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600" style={{ gridColumn: 'span 3' }}><input name="address_line1" value={formData.address_line1} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
                   <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">City:</div>
@@ -376,124 +383,23 @@ export default function EditEmployee() {
                   <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="bank_account_number" value={formData.bank_account_number} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
                   <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Branch Code:</div>
                   <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="bank_branch_code" value={formData.bank_branch_code} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
-                  <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">ID Number:</div>
-                  <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input name="id_number" value={formData.id_number} onChange={handleChange} className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
                 </div>
               )}
-
-              {/* ========== TIME CLOCK HISTORY TAB ========== */}
-              {activeTab === 'timeclock' && (
-                <div className="p-4">
-                  <div className="border border-[#2f77bb] dark:border-[#4a90c4] rounded-lg overflow-hidden">
-                    <table className="w-full border-collapse bg-white dark:bg-slate-800">
-                      <thead><tr><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Date</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Clock In</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Clock Out</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Hours</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Status</th></tr></thead>
-                      <tbody><tr><td colSpan="5" className="border border-[#2f77bb] dark:border-[#4a90c4] p-4 text-center text-slate-500 italic bg-[#f7fbff] dark:bg-slate-700">Time clock data will appear here once employee starts clocking in/out.</td></tr></tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* ========== PAYROLL HISTORY TAB ========== */}
-              {activeTab === 'payroll' && (
-                <div className="p-4">
-                  <div className="grid grid-cols-[140px_1fr_140px_1fr] border-t border-l border-[#2f77bb] dark:border-[#4a90c4] mb-4">
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Salary:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input placeholder="0.00" className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Pay Frequency:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><select className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none"><option value="monthly">Monthly</option><option value="bi_weekly">Bi-Weekly</option><option value="weekly">Weekly</option></select></div>
-                  </div>
-                  <div className="border border-[#2f77bb] dark:border-[#4a90c4] rounded-lg overflow-hidden">
-                    <table className="w-full border-collapse bg-white dark:bg-slate-800">
-                      <thead><tr><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Period</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Gross Pay</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Deductions</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Net Pay</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Status</th></tr></thead>
-                      <tbody><tr><td colSpan="5" className="border border-[#2f77bb] dark:border-[#4a90c4] p-4 text-center text-slate-500 italic bg-[#f7fbff] dark:bg-slate-700">Payroll history will appear here after processing.</td></tr></tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* ========== SCHEDULING TAB ========== */}
-              {activeTab === 'scheduling' && (
-                <div className="p-4">
-                  <div className="grid grid-cols-[140px_1fr_140px_1fr] border-t border-l border-[#2f77bb] dark:border-[#4a90c4] mb-4">
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Shift:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><select className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none"><option value="">Select Shift</option><option value="morning">Morning (6AM-2PM)</option><option value="afternoon">Afternoon (2PM-10PM)</option><option value="night">Night (10PM-6AM)</option><option value="flexible">Flexible</option></select></div>
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Work Days:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input placeholder="e.g., Mon-Fri" className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
-                  </div>
-                  <div className="border border-[#2f77bb] dark:border-[#4a90c4] rounded-lg overflow-hidden">
-                    <table className="w-full border-collapse bg-white dark:bg-slate-800">
-                      <thead><tr><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Date</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Shift</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Location</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Status</th></tr></thead>
-                      <tbody><tr><td colSpan="4" className="border border-[#2f77bb] dark:border-[#4a90c4] p-4 text-center text-slate-500 italic bg-[#f7fbff] dark:bg-slate-700">Schedule will appear here once assigned.</td></tr></tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* ========== LEAVE TAB ========== */}
-              {activeTab === 'leave' && (
-                <div className="p-4">
-                  <div className="grid grid-cols-[140px_1fr_140px_1fr] border-t border-l border-[#2f77bb] dark:border-[#4a90c4] mb-4">
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Annual Leave:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input defaultValue="15" placeholder="Days" className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
-                    <div className="cell label-cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center justify-end px-4 bg-[#d7e5f2] dark:bg-slate-600 font-bold text-slate-700 dark:text-slate-200">Sick Leave:</div>
-                    <div className="cell border-r border-b border-[#2f77bb] dark:border-[#4a90c4] min-h-[38px] flex items-center px-2 bg-[#dce8f5] dark:bg-slate-600"><input defaultValue="30" placeholder="Days" className="w-full border-none bg-[#f7f7c2] dark:bg-yellow-50 dark:text-slate-800 h-[25px] px-2 outline-none" /></div>
-                  </div>
-                  <div className="border border-[#2f77bb] dark:border-[#4a90c4] rounded-lg overflow-hidden">
-                    <table className="w-full border-collapse bg-white dark:bg-slate-800">
-                      <thead><tr><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Leave Type</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">From</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">To</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Days</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Status</th></tr></thead>
-                      <tbody><tr><td colSpan="5" className="border border-[#2f77bb] dark:border-[#4a90c4] p-4 text-center text-slate-500 italic bg-[#f7fbff] dark:bg-slate-700">Leave requests will appear here.</td></tr></tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* ========== DOCUMENTS TAB ========== */}
-              {activeTab === 'documents' && (
-                <div className="p-4">
-                  <button onClick={handleAddAttachmentClick} disabled={uploadingFiles}
-                    className="neu-btn px-6 py-3 rounded-xl bg-gradient-to-b from-[#4f8fd0] to-[#2d5f98] text-white font-bold flex items-center gap-2 mb-4"
-                    style={{ boxShadow: '3px 3px 6px rgba(0,0,0,0.35)' }}>
-                    {uploadingFiles ? <><Loader className="w-4 h-4 animate-spin" /> Uploading...</> : <><Upload className="w-5 h-5" /> Select Files from Device</>}
-                  </button>
-                </div>
-              )}
-
-              <input type="file" multiple ref={attachmentInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt,.csv,.ppt,.pptx" />
-
-              {/* Attachments Table */}
-              <div className="mt-4 border border-[#2f77bb] dark:border-[#4a90c4] rounded-lg overflow-hidden">
-                <div className="flex flex-wrap gap-2 p-3 bg-[#c9dff2] dark:bg-slate-600 border-b border-[#2f77bb] dark:border-[#4a90c4]">
-                  <button onClick={handleAddAttachmentClick} disabled={uploadingFiles} className="neu-btn px-3 py-1.5 rounded-lg bg-gradient-to-b from-[#4f8fd0] to-[#2d5f98] text-white text-sm font-bold flex items-center gap-1 disabled:opacity-50" style={{ boxShadow: '3px 3px 6px rgba(0,0,0,0.35)' }}><Paperclip className="w-4 h-4" /> Add Att.</button>
-                </div>
-                <table className="w-full border-collapse bg-white dark:bg-slate-800">
-                  <thead><tr><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">File Name</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Type</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-left">Size</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-center">👁 View</th><th className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 bg-[#d4e6f7] dark:bg-slate-600 text-sm text-center">🗑</th></tr></thead>
-                  <tbody>
-                    {attachments.length === 0 ? (
-                      <tr><td colSpan="5" className="border border-[#2f77bb] dark:border-[#4a90c4] p-4 text-center text-slate-500 italic bg-[#f7fbff] dark:bg-slate-700">No attachments</td></tr>
-                    ) : (
-                      attachments.map((att) => (
-                        <tr key={att.id} className="hover:bg-slate-50 dark:hover:bg-slate-700">
-                          <td className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 text-sm"><div className="flex items-center gap-2">{getFileIcon(att.type)}<span className="truncate max-w-[180px]" title={att.name}>{att.name}</span></div></td>
-                          <td className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 text-sm">{att.type || 'FILE'}</td>
-                          <td className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 text-sm">{formatFileSize(att.size)}</td>
-                          <td className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 text-center"><button onClick={() => handleViewDocument(att)} className="text-[#0066cc] hover:text-[#004499] inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50"><ExternalLink className="w-4 h-4" /><span className="text-xs">View</span></button></td>
-                          <td className="border border-[#2f77bb] dark:border-[#4a90c4] p-2 text-center"><button onClick={() => handleDeleteAttachment(att.id)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button></td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
-
+            
             {/* Photo Panel */}
-            <div className="border border-[#2f77bb] dark:border-[#4a90c4] bg-[#dce8f5] dark:bg-slate-600 flex flex-col items-center justify-center p-4 rounded-lg">
-              <div className="w-[150px] h-[170px] border-[3px] border-[#3569a3] dark:border-[#4a90c4] bg-[#edf3f9] dark:bg-slate-700 flex items-center justify-center overflow-hidden rounded-lg">
-                {photoPreview ? <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" /> : <img src="https://cdn-icons-png.flaticon.com/512/847/847969.png" alt="Default" className="w-20 h-20 opacity-50" />}
+            <div className="border border-[#2f77bb] bg-[#dce8f5] dark:bg-slate-700 flex flex-col items-center justify-start p-2.5 mt-2">
+              <div className="w-[150px] h-[170px] border-[3px] border-[#3569a3] dark:border-slate-500 bg-[#edf3f9] dark:bg-slate-600 flex items-center justify-center overflow-hidden">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <img src="https://cdn-icons-png.flaticon.com/512/847/847969.png" alt="Default" className="w-full h-full object-contain p-4" />
+                )}
               </div>
-              <button onClick={handlePhotoClick} className="mt-4 text-[#0066cc] dark:text-[#6ba3d6] font-bold cursor-pointer hover:underline flex items-center gap-1 bg-transparent border-none"><Camera className="w-4 h-4" /> Change Picture</button>
-              <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" ref={photoInputRef} />
-              {photoFile && <p className="text-xs text-emerald-600 mt-1">📷 New photo ready</p>}
+              <button onClick={handlePhotoClick} className="mt-2.5 text-[#0066cc] dark:text-blue-400 font-bold cursor-pointer text-sm hover:underline flex items-center gap-1">
+                <Camera className="w-4 h-4" /> Change Picture
+              </button>
+              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
             </div>
           </div>
         </motion.div>
