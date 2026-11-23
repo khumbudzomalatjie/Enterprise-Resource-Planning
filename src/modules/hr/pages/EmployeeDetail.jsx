@@ -153,7 +153,6 @@ export default function EmployeeDetail() {
   const loadPayrollHistory = async () => {
     if (!id) return
     try {
-      // FIXED: Using payroll_runs instead of payroll_periods
       const { data, error } = await supabase
         .from('payslips')
         .select('*, payroll_runs(period_start, period_end, run_number)')
@@ -168,7 +167,6 @@ export default function EmployeeDetail() {
   const loadPayrollDetails = async () => {
     if (!id) return
     try {
-      // FIXED: Using payroll_profiles instead of salary_structures
       const { data, error } = await supabase
         .from('payroll_profiles')
         .select('*')
@@ -182,7 +180,6 @@ export default function EmployeeDetail() {
   const loadSchedules = async () => {
     if (!id) return
     try {
-      // FIXED: Trying employee_shifts, if empty, check field_job_assignments
       const { data: shiftData } = await supabase
         .from('employee_shifts')
         .select('*, shift_types(*), jobs(title, job_number, site_address, clients(company_name))')
@@ -194,7 +191,6 @@ export default function EmployeeDetail() {
       if (shiftData && shiftData.length > 0) {
         setSchedules(shiftData)
       } else {
-        // Fallback to field ops assignments
         const { data: assignmentData } = await supabase
           .from('field_job_assignments')
           .select('*, jobs(title, job_number, site_address, scheduled_date, scheduled_start_time, clients(company_name))')
@@ -418,6 +414,54 @@ export default function EmployeeDetail() {
     } catch (error) { toast.error('Failed to upload') }
   }
 
+  // ✅ NEW: Handle deleting an attachment
+  const handleDeleteAttachment = async (docId, docUrl) => {
+    if (!window.confirm('Are you sure you want to permanently delete this file?')) return
+    
+    try {
+      // 1. Delete from database
+      const { error: dbError } = await supabase.from('employee_documents').delete().eq('id', docId)
+      if (dbError) throw dbError
+
+      // 2. Try to delete from storage (best effort)
+      try {
+        const urlParts = docUrl.split('/')
+        const bucketIndex = urlParts.indexOf('documents')
+        if (bucketIndex !== -1) {
+          const filePath = urlParts.slice(bucketIndex + 1).join('/')
+          await supabase.storage.from('documents').remove([filePath])
+        }
+      } catch (e) {
+        console.warn('Failed to delete from storage, but removed from DB', e)
+      }
+
+      toast.success('Attachment deleted')
+      loadAttachments()
+    } catch (err) {
+      toast.error('Failed to delete: ' + err.message)
+    }
+  }
+
+  // ✅ NEW: Handle direct download
+  const handleDownload = async (url, fileName) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = fileName || 'download'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      toast.error('Failed to download file')
+      // Fallback: open in new tab
+      window.open(url, '_blank')
+    }
+  }
+
   const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' }).format(amount || 0)
   const formatDate = (date) => date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
   const formatTime = (date) => date ? new Date(date).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '-'
@@ -532,7 +576,6 @@ export default function EmployeeDetail() {
                     {isEditing ? <input value={editData?.first_name || ''} onChange={e => setEditData({...editData, first_name: e.target.value})} className={inputClass} /> : <span>{employee.first_name}</span>}
                   </div>
                   
-                  {/* ADDED ID NUMBER HERE */}
                   <div className={labelCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center justify-end px-2"}>ID Number:</div>
                   <div className={valueCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center px-2"}>
                     {isEditing ? <input value={editData?.id_number || ''} onChange={e => setEditData({...editData, id_number: e.target.value})} className={inputClass} /> : <span>{employee.id_number || '-'}</span>}
@@ -643,7 +686,6 @@ export default function EmployeeDetail() {
                   <tbody>
                     {payrollHistory.map(payslip => (
                       <tr key={payslip.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                        {/* FIXED: Using payroll_runs data */}
                         <td className="p-2 border border-[#b8ccdc]">{payslip.payroll_runs?.run_number || payslip.payslip_number}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.basic_salary)}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.overtime_amount)}</td>
@@ -881,8 +923,14 @@ export default function EmployeeDetail() {
                   <td className="border border-[#b8ccdc] p-2 text-sm">{formatDate(doc.uploaded_at)}</td>
                   <td className="border border-[#b8ccdc] p-2 text-sm">
                     <div className="flex gap-1">
-                      <a href={doc.document_url} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-blue-100"><Eye className="w-4 h-4 text-blue-600" /></a>
-                      <a href={doc.document_url} download className="p-1 rounded hover:bg-emerald-100"><Download className="w-4 h-4 text-emerald-600" /></a>
+                      {/* ✅ CHANGED: Replaced Eye/View with Download */}
+                      <button onClick={() => handleDownload(doc.document_url, doc.document_name)} className="p-1 rounded hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Download">
+                        <Download className="w-4 h-4" />
+                      </button>
+                      {/* ✅ NEW: Added Delete button */}
+                      <button onClick={() => handleDeleteAttachment(doc.id, doc.document_url)} className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
