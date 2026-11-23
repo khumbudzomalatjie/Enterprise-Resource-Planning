@@ -14,7 +14,6 @@ import {
   Building2, BookOpen, Star, RefreshCw, Plus
 } from 'lucide-react'
 
-// Leave type definitions for color coding
 const LEAVE_TYPE_DEFINITIONS = [
   { id: 'annual', name: 'Annual Leave', days_allowed: 15, color: '#10b981' },
   { id: 'sick', name: 'Sick Leave', days_allowed: 30, color: '#ef4444' },
@@ -26,7 +25,6 @@ const LEAVE_TYPE_DEFINITIONS = [
   { id: 'unpaid', name: 'Unpaid Leave', days_allowed: 30, color: '#78716c' },
 ]
 
-// ADDED: Leave types list for the apply form
 const LEAVE_TYPES_LIST = [
   'Annual Leave', 'Sick Leave', 'Family Responsibility',
   'Maternity Leave', 'Study Leave', 'Unpaid Leave'
@@ -57,7 +55,6 @@ export default function EmployeeDetail() {
   const [tabLoading, setTabLoading] = useState(false)
   const [refreshingTab, setRefreshingTab] = useState(null)
 
-  // ADDED: Apply leave form state
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [applyForm, setApplyForm] = useState({
     leave_type: '',
@@ -156,12 +153,14 @@ export default function EmployeeDetail() {
   const loadPayrollHistory = async () => {
     if (!id) return
     try {
-      const { data } = await supabase
+      // FIXED: Using payroll_runs instead of payroll_periods
+      const { data, error } = await supabase
         .from('payslips')
-        .select('*, payroll_periods(period_name, period_start, period_end)')
+        .select('*, payroll_runs(period_start, period_end, run_number)')
         .eq('employee_id', id)
         .order('created_at', { ascending: false })
         .limit(20)
+      if (error) console.error('Payroll query error:', error.message)
       setPayrollHistory(data || [])
     } catch (e) { setPayrollHistory([]) }
   }
@@ -169,12 +168,13 @@ export default function EmployeeDetail() {
   const loadPayrollDetails = async () => {
     if (!id) return
     try {
-      const { data } = await supabase
-        .from('salary_structures')
+      // FIXED: Using payroll_profiles instead of salary_structures
+      const { data, error } = await supabase
+        .from('payroll_profiles')
         .select('*')
         .eq('employee_id', id)
-        .eq('is_active', true)
         .maybeSingle()
+      if (error) console.error('Payroll profile error:', error.message)
       setPayrollDetails(data || null)
     } catch (e) { setPayrollDetails(null) }
   }
@@ -182,14 +182,35 @@ export default function EmployeeDetail() {
   const loadSchedules = async () => {
     if (!id) return
     try {
-      const { data } = await supabase
+      // FIXED: Trying employee_shifts, if empty, check field_job_assignments
+      const { data: shiftData } = await supabase
         .from('employee_shifts')
         .select('*, shift_types(*), jobs(title, job_number, site_address, clients(company_name))')
         .eq('employee_id', id)
         .gte('shift_date', new Date().toISOString().split('T')[0])
         .order('shift_date', { ascending: true })
         .limit(30)
-      setSchedules(data || [])
+      
+      if (shiftData && shiftData.length > 0) {
+        setSchedules(shiftData)
+      } else {
+        // Fallback to field ops assignments
+        const { data: assignmentData } = await supabase
+          .from('field_job_assignments')
+          .select('*, jobs(title, job_number, site_address, scheduled_date, scheduled_start_time, clients(company_name))')
+          .eq('employee_id', id)
+          .neq('assignment_status', 'released')
+          .order('assigned_at', { ascending: false })
+        
+        const mappedAssignments = (assignmentData || []).map(a => ({
+          id: a.id,
+          shift_date: a.jobs?.scheduled_date,
+          shift_types: { name: 'Job Assignment', start_time: a.jobs?.scheduled_start_time },
+          jobs: a.jobs,
+          status: a.assignment_status
+        }))
+        setSchedules(mappedAssignments)
+      }
     } catch (e) { setSchedules([]) }
   }
 
@@ -210,28 +231,18 @@ export default function EmployeeDetail() {
     if (!id) return
     try {
       const { data, error } = await supabase
-        .from('employee_leave_balances')
-        .select('*')
+        .from('leave_balances')
+        .select('*, leave_types(name, color, icon, days_per_year)')
         .eq('employee_id', id)
+        .eq('year', new Date().getFullYear())
       
-      if (error) {
-        if (error.code === '42P01' || error.message.includes('does not exist')) {
-          console.log('employee_leave_balances table does not exist yet')
-        } else {
-          console.error('Leave balances error:', error.message)
-        }
-        setLeaveBalances([])
-      } else {
-        console.log('Leave balances loaded:', data?.length || 0)
+      if (error) { console.error('Leave balances error:', error.message); setLeaveBalances([]) }
+      else {
         setLeaveBalances(data || [])
-        
         const totalRemaining = (data || []).reduce((sum, b) => sum + (Number(b.remaining_days) || 0), 0)
         setStats(prev => ({ ...prev, leaveBalance: totalRemaining }))
       }
-    } catch (e) {
-      console.error('Leave balances load error:', e)
-      setLeaveBalances([])
-    }
+    } catch (e) { setLeaveBalances([]) }
   }
 
   const loadEvents = async () => {
@@ -281,10 +292,10 @@ export default function EmployeeDetail() {
       let activeJobsCount = 0
       try {
         const { count } = await supabase
-          .from('job_assignments')
+          .from('field_job_assignments')
           .select('*', { count: 'exact', head: true })
           .eq('employee_id', id)
-          .eq('status', 'assigned')
+          .in('assignment_status', ['assigned', 'accepted', 'in_progress'])
         activeJobsCount = count || 0
       } catch (e) {}
 
@@ -305,7 +316,6 @@ export default function EmployeeDetail() {
     } catch (e) {}
   }
 
-  // ADDED: Handle apply leave submission
   const handleApplyLeave = async (e) => {
     e.preventDefault()
     if (!applyForm.leave_type || !applyForm.start_date || !applyForm.end_date) {
@@ -440,7 +450,6 @@ export default function EmployeeDetail() {
     <div className="min-h-screen bg-[#d8d8d8] dark:bg-slate-900 font-['Inter'] transition-colors duration-300">
       <Navbar />
       <main className="max-w-7xl mx-auto px-2 sm:px-4 pt-4 pb-16">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 mb-2 text-sm px-2">
           <Link to="/hr" className="text-[#2c5f9b] hover:underline">HR</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -449,7 +458,6 @@ export default function EmployeeDetail() {
           <span className="text-slate-700 dark:text-slate-300">{employee.first_name} {employee.last_name}</span>
         </div>
 
-        {/* Title */}
         <div className="flex items-center justify-center relative mb-3">
           <div className="absolute left-4 text-[50px] text-[#2f5f9b]">👥</div>
           <h1 className="text-[50px] md:text-[60px] text-[#2c5f9b] tracking-wider font-black uppercase" style={{ fontFamily: "'Alumni Sans Pinstripe', sans-serif" }}>
@@ -457,7 +465,6 @@ export default function EmployeeDetail() {
           </h1>
         </div>
 
-        {/* Top Bar */}
         <div className="flex items-center gap-2 mb-3 flex-wrap px-2">
           <span className="text-base font-bold text-slate-700 dark:text-slate-300">Employee:</span>
           <input 
@@ -481,7 +488,6 @@ export default function EmployeeDetail() {
           <input value={employee.employee_code || ''} className="border border-[#2c73b6] bg-white dark:bg-slate-700 h-7 px-2 outline-none w-[140px] text-sm" readOnly />
         </div>
 
-        {/* Stats Bar */}
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-3 px-2">
           {[
             { label: 'Hours/Week', value: stats.totalHoursThisWeek.toFixed(1) },
@@ -500,7 +506,6 @@ export default function EmployeeDetail() {
           ))}
         </div>
 
-        {/* Tabs */}
         <div className="grid grid-cols-7 border border-[#2f77bb] mb-0">
           {tabs.map(tab => (
             <div key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -512,10 +517,8 @@ export default function EmployeeDetail() {
           ))}
         </div>
 
-        {/* Tab Content */}
         <div className="border border-[#2f77bb] bg-[#d7e5f2] dark:bg-slate-800 p-2.5 min-h-[400px]">
           
-          {/* GENERAL INFO TAB - unchanged */}
           {activeTab === 'general' && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_170px] gap-5">
               <div>
@@ -528,6 +531,17 @@ export default function EmployeeDetail() {
                   <div className={valueCellClass + " border-b border-[#2f77bb] min-h-[38px] flex items-center px-2"}>
                     {isEditing ? <input value={editData?.first_name || ''} onChange={e => setEditData({...editData, first_name: e.target.value})} className={inputClass} /> : <span>{employee.first_name}</span>}
                   </div>
+                  
+                  {/* ADDED ID NUMBER HERE */}
+                  <div className={labelCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center justify-end px-2"}>ID Number:</div>
+                  <div className={valueCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center px-2"}>
+                    {isEditing ? <input value={editData?.id_number || ''} onChange={e => setEditData({...editData, id_number: e.target.value})} className={inputClass} /> : <span>{employee.id_number || '-'}</span>}
+                  </div>
+                  <div className={labelCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center justify-end px-2"}>Tax Number:</div>
+                  <div className={valueCellClass + " border-b border-[#2f77bb] min-h-[38px] flex items-center px-2"}>
+                    {isEditing ? <input value={editData?.tax_number || ''} onChange={e => setEditData({...editData, tax_number: e.target.value})} className={inputClass} /> : <span>{employee.tax_number || '-'}</span>}
+                  </div>
+
                   <div className={labelCellClass + " border-r border-b border-[#2f77bb] min-h-[38px] flex items-center justify-end px-2"}>Email:</div>
                   <div className={valueCellClass + " border-b border-[#2f77bb] min-h-[38px] flex items-center px-2"} style={{gridColumn: 'span 3'}}>
                     {isEditing ? <input value={editData?.email || ''} onChange={e => setEditData({...editData, email: e.target.value})} className={inputClass} /> : <span>{employee.email}</span>}
@@ -573,7 +587,6 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* TIME CLOCK HISTORY TAB */}
           {activeTab === 'attendance' && (
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -598,7 +611,7 @@ export default function EmployeeDetail() {
                         <td className="p-2 border border-[#b8ccdc]">{formatTime(record.clock_out_time)}</td>
                         <td className="p-2 border border-[#b8ccdc] font-bold">{record.total_hours?.toFixed(1) || '-'}</td>
                         <td className="p-2 border border-[#b8ccdc] capitalize">{record.check_in_method?.replace('_', ' ') || '-'}</td>
-                        <td className="p-2 border border-[#b8ccdc]}">
+                        <td className="p-2 border border-[#b8ccdc]">
                           <span className={`px-2 py-0.5 rounded-full text-xs ${record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : record.is_late ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                             {record.is_late ? 'Late' : record.status}
                           </span>
@@ -621,7 +634,6 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* PAYROLL HISTORY TAB */}
           {activeTab === 'payroll' && (
             <div>
               <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">💰 Payroll History</h3><button onClick={() => refreshTab('payroll')} disabled={refreshingTab === 'payroll'} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors"><RefreshCw className={`w-4 h-4 ${refreshingTab === 'payroll' ? 'animate-spin' : ''}`} /></button></div>
@@ -631,13 +643,14 @@ export default function EmployeeDetail() {
                   <tbody>
                     {payrollHistory.map(payslip => (
                       <tr key={payslip.id} className="bg-white dark:bg-slate-700 even:bg-slate-50 dark:even:bg-slate-600">
-                        <td className="p-2 border border-[#b8ccdc]">{payslip.payroll_periods?.period_name || payslip.payslip_number}</td>
+                        {/* FIXED: Using payroll_runs data */}
+                        <td className="p-2 border border-[#b8ccdc]">{payslip.payroll_runs?.run_number || payslip.payslip_number}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.basic_salary)}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.overtime_amount)}</td>
                         <td className="p-2 border border-[#b8ccdc] text-red-600">{formatCurrency(payslip.total_deductions)}</td>
                         <td className="p-2 border border-[#b8ccdc]">{formatCurrency(payslip.paye_tax)}</td>
                         <td className="p-2 border border-[#b8ccdc] font-bold text-emerald-600">{formatCurrency(payslip.net_salary)}</td>
-                        <td className="p-2 border border-[#b8ccdc]}"><span className={`px-2 py-0.5 rounded-full text-xs ${payslip.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{payslip.status}</span></td>
+                        <td className="p-2 border border-[#b8ccdc]"><span className={`px-2 py-0.5 rounded-full text-xs ${payslip.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{payslip.status}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -647,21 +660,19 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* PAYROLL DETAILS TAB */}
           {activeTab === 'details' && (
             <div>
               <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">💳 Payroll Details</h3></div>
               {payrollDetails ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[{ label: 'Basic Salary', value: formatCurrency(payrollDetails.basic_salary) },{ label: 'Housing', value: formatCurrency(payrollDetails.housing_allowance) },{ label: 'Transport', value: formatCurrency(payrollDetails.transport_allowance) },{ label: 'Medical', value: formatCurrency(payrollDetails.medical_allowance) },{ label: 'Total Earnings', value: formatCurrency(payrollDetails.total_earnings) },{ label: 'Pension', value: formatCurrency(payrollDetails.pension_contribution) },{ label: 'Medical Aid', value: formatCurrency(payrollDetails.medical_aid) },{ label: 'Bank', value: payrollDetails.bank_name || 'N/A' }].map((item, i) => (
+                  {[{ label: 'Basic Salary', value: formatCurrency(payrollDetails.basic_salary) },{ label: 'Bank Name', value: payrollDetails.bank_name || 'N/A' },{ label: 'Account Number', value: payrollDetails.bank_account_number ? `****${payrollDetails.bank_account_number.slice(-4)}` : 'N/A' },{ label: 'Branch Code', value: payrollDetails.bank_branch_code || 'N/A' }].map((item, i) => (
                     <div key={i} className="bg-white dark:bg-slate-700 border border-[#b8ccdc] rounded p-3"><p className="text-xs text-slate-500">{item.label}</p><p className="font-semibold text-slate-800 dark:text-white">{item.value}</p></div>
                   ))}
                 </div>
-              ) : <div className="text-center py-8"><CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500">No payroll details configured</p></div>}
+              ) : <div className="text-center py-8"><CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-2" /><p className="text-slate-500">No payroll details configured. Please go to Payroll > Employee Profiles to set this up.</p></div>}
             </div>
           )}
 
-          {/* SCHEDULING TAB */}
           {activeTab === 'schedule' && (
             <div>
               <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">📅 Upcoming Schedule</h3></div>
@@ -676,7 +687,6 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* LEAVE TAB - WITH APPLY FORM */}
           {activeTab === 'leave' && (
             <div>
               <div className="flex justify-between items-center mb-3">
@@ -689,7 +699,6 @@ export default function EmployeeDetail() {
                 </div>
               </div>
 
-              {/* ADDED: Apply Leave Button */}
               <div className="mb-3">
                 <button 
                   onClick={() => setShowApplyForm(!showApplyForm)}
@@ -700,7 +709,6 @@ export default function EmployeeDetail() {
                 </button>
               </div>
 
-              {/* ADDED: Apply Leave Form */}
               {showApplyForm && (
                 <div className="mb-4 p-4 bg-white dark:bg-slate-700 rounded-xl border border-[#b8ccdc]">
                   <h4 className="font-semibold text-sm mb-3">📝 New Leave Request</h4>
@@ -752,7 +760,6 @@ export default function EmployeeDetail() {
                 </button>
               </div>
 
-              {/* LEAVE HISTORY */}
               {leaveSubTab === 'history' && (
                 <div>
                   {leaveRecords.length > 0 ? (
@@ -794,21 +801,18 @@ export default function EmployeeDetail() {
                     <div className="text-center py-8">
                       <FileText className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-slate-500">No leave records found</p>
-                      <p className="text-slate-400 text-xs mt-1">Click "Apply for Leave" above to submit a request</p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* LEAVE BALANCES */}
               {leaveSubTab === 'balances' && (
                 <div>
                   {leaveBalances.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {leaveBalances.map((balance, i) => {
-                        const typeName = balance.leave_type || 'Leave'
-                        const typeDef = LEAVE_TYPE_DEFINITIONS.find(lt => lt.name === typeName)
-                        const color = typeDef?.color || '#10b981'
+                        const typeName = balance.leave_types?.name || 'Leave'
+                        const color = balance.leave_types?.color || '#10b981'
                         const allocated = Number(balance.allocated_days) || 0
                         const used = Number(balance.used_days) || 0
                         const pending = Number(balance.pending_days) || 0
@@ -838,25 +842,6 @@ export default function EmployeeDetail() {
                     <div className="text-center py-8">
                       <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                       <p className="text-slate-500">No leave balances yet</p>
-                      <p className="text-slate-400 text-xs mt-1">Click below to create leave balances</p>
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const { error } = await supabase.rpc('sync_leave_balances', { p_employee_id: id })
-                            if (!error) {
-                              toast.success('Leave balances synced!')
-                              await loadLeaveBalances()
-                            } else {
-                              toast.error('Failed: ' + error.message)
-                            }
-                          } catch (e) {
-                            toast.error('Run the SQL setup in Supabase first')
-                          }
-                        }}
-                        className="mt-3 px-4 py-2 bg-[#2e75b6] text-white rounded-lg text-sm hover:bg-[#1a5fa0] transition-colors"
-                      >
-                        🔄 Sync Leave Balances
-                      </button>
                     </div>
                   )}
                 </div>
@@ -864,7 +849,6 @@ export default function EmployeeDetail() {
             </div>
           )}
 
-          {/* EVENTS TAB */}
           {activeTab === 'events' && (
             <div>
               <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 dark:text-slate-300">📢 Upcoming Events / Jobs</h3></div>
@@ -880,7 +864,6 @@ export default function EmployeeDetail() {
           )}
         </div>
 
-        {/* Attachments Section */}
         <div className="mt-4 border border-[#2f77bb]">
           <div className="flex gap-1.5 p-1.5 bg-[#c9dff2] dark:bg-slate-700 border-b border-[#2f77bb] flex-wrap">
             <button onClick={() => fileInputRef.current?.click()} className="neo-btn h-8 px-3 rounded-md bg-gradient-to-b from-[#4f8fd0] to-[#2d5f98] text-white font-bold text-xs">📎 Add Att.</button>
