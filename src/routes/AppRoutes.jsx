@@ -29,6 +29,9 @@ import TrackerRoutes from '../modules/tracker/routes/TrackerRoutes'
 // Field Operations - Messages & Contacts
 import FieldOpsRoutes from '../modules/fieldops/routes/FieldOpsRoutes'
 
+// ✅ NEW: Tender Routes
+import TenderRoutes from '../modules/tenders/routes/TenderRoutes'
+
 import { USER_ROLES } from '../types/authTypes'
 
 export default function AppRoutes() {
@@ -123,6 +126,25 @@ export default function AppRoutes() {
               USER_ROLES.FINANCE_OFFICER
             ]}>
               <SalesRoutes />
+            </RoleBasedRoute>
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* ============================================ */}
+      {/* ✅ NEW: TENDER & RFQ MANAGEMENT              */}
+      {/* ============================================ */}
+      <Route 
+        path="/tenders/*" 
+        element={
+          <ProtectedRoute>
+            <RoleBasedRoute requiredRoles={[
+              USER_ROLES.SUPER_ADMIN, 
+              USER_ROLES.OPERATIONS_MANAGER, 
+              USER_ROLES.SALES_AGENT,
+              USER_ROLES.FINANCE_OFFICER
+            ]}>
+              <TenderRoutes />
             </RoleBasedRoute>
           </ProtectedRoute>
         } 
