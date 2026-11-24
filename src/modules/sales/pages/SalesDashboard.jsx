@@ -6,7 +6,7 @@ import useSalesStore from '../store/salesStore'
 import useThemeStore from '../../../store/themeStore'
 import { 
   TrendingUp, FileText, Receipt, DollarSign, 
-  Clock, CheckCircle2, XCircle, Plus,
+  Clock, CheckCircle2, XCircle, Plus, Briefcase,
   Sparkles, Sun, Moon, ChevronRight, ArrowLeft,
   BarChart3
 } from 'lucide-react'
@@ -64,9 +64,15 @@ export default function SalesDashboard() {
             </div>
             <p className="text-slate-500 dark:text-slate-400 ml-11">Create quotations, manage invoices, track payments</p>
           </div>
-          <button onClick={() => navigate('/sales/quotations/new')} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
-            <Plus className="w-5 h-5" /><span>New Quotation</span>
-          </button>
+          <div className="flex gap-3">
+            {/* ✅ NEW: Link to Tenders */}
+            <button onClick={() => navigate('/tenders')} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2">
+              <Briefcase className="w-5 h-5" /><span>Tenders & RFQs</span>
+            </button>
+            <button onClick={() => navigate('/sales/quotations/new')} className="neu-raised neu-btn px-6 py-3 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
+              <Plus className="w-5 h-5" /><span>New Quotation</span>
+            </button>
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
@@ -106,7 +112,7 @@ export default function SalesDashboard() {
               {[
                 { label: 'New Quotation', icon: Plus, path: '/sales/quotations/new' },
                 { label: 'View Invoices', icon: Receipt, path: '/sales/invoices' },
-                { label: 'Sales Reports', icon: BarChart3, path: '/sales/reports' },
+                { label: 'Tenders & RFQs', icon: Briefcase, path: '/tenders' }, // ✅ NEW ACTION
                 { label: 'Record Payment', icon: DollarSign, path: '/sales/payments' },
               ].map(action => (
                 <button key={action.label} onClick={() => navigate(action.path)} className="neu-raised neu-btn rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-105">
