@@ -29,20 +29,17 @@ export const tenderApi = {
 
     if (tError) return { error: tError }
 
-    // Fetch pricing items
     const { data: pricing } = await supabase
       .from('tender_pricing_items')
       .select('*')
       .eq('tender_id', id)
       .order('created_at', { ascending: true })
 
-    // Fetch compliance
     const { data: compliance } = await supabase
       .from('tender_compliance_items')
       .select('*')
       .eq('tender_id', id)
 
-    // Fetch linked quotation
     const { data: quotation } = await supabase
       .from('quotations')
       .select('id, quotation_number, status')
@@ -60,30 +57,41 @@ export const tenderApi = {
     }
   },
 
-  // ── CREATE TENDER (FIXED: Sanitizes empty strings) ──
+  // ── CREATE TENDER ──
   async createTender(tenderData) {
-    // Generate Tender Number (e.g. TND-2310-001)
     const prefix = 'TND'
     const dateCode = new Date().toISOString().slice(2, 7).replace('-', '')
     const randomStr = Math.random().toString(36).substring(2, 5).toUpperCase()
     const tenderNumber = `${prefix}-${dateCode}-${randomStr}`
 
-    // ✅ Sanitize: Convert empty strings to null to prevent UUID/Date errors
     const cleanData = {}
     for (const [key, value] of Object.entries(tenderData)) {
-      if (value === '' || value === undefined || value === 'undefined') {
-        cleanData[key] = null
-      } else {
-        cleanData[key] = value
-      }
+      cleanData[key] = (value === '' || value === undefined) ? null : value
     }
-
-    // ✅ Ensure numeric fields have valid numbers
     cleanData.estimated_value = Number(cleanData.estimated_value) || 0
 
     const { data, error } = await supabase
       .from('tender_opportunities')
       .insert([{ ...cleanData, tender_number: tenderNumber }])
+      .select()
+      .single()
+
+    return { data, error }
+  },
+
+  // ✅ NEW: UPDATE TENDER DETAILS
+  async updateTender(id, tenderData) {
+    const cleanData = {}
+    for (const [key, value] of Object.entries(tenderData)) {
+      cleanData[key] = (value === '' || value === undefined) ? null : value
+    }
+    cleanData.estimated_value = Number(cleanData.estimated_value) || 0
+    cleanData.updated_at = new Date().toISOString()
+
+    const { data, error } = await supabase
+      .from('tender_opportunities')
+      .update(cleanData)
+      .eq('id', id)
       .select()
       .single()
 
@@ -103,12 +111,9 @@ export const tenderApi = {
 
   // ── SAVE PRICING ITEMS ──
   async savePricingItems(tenderId, items) {
-    // 1. Delete existing items (clean slate approach for simplicity)
     await supabase.from('tender_pricing_items').delete().eq('tender_id', tenderId)
-
     if (!items || items.length === 0) return { success: true }
 
-    // 2. Insert new items
     const payload = items.map(item => ({
       tender_id: tenderId,
       description: item.description,
@@ -152,7 +157,6 @@ export const tenderApi = {
   // ── DASHBOARD STATS ──
   async getStats() {
     const { data: tenders } = await supabase.from('tender_opportunities').select('status, estimated_value')
-    
     if (!tenders) return { total: 0, draft: 0, submitted: 0, awarded: 0, pipelineValue: 0 }
 
     return {
