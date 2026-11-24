@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Navbar from '../../../components/Navbar'
 import useTenderStore from '../store/tenderStore'
@@ -12,15 +12,18 @@ import {
 } from 'lucide-react'
 
 export default function CreateTender() {
-  const { createTender } = useTenderStore()
+  const { id } = useParams() // ✅ Get ID from URL for editing
+  const isEditMode = Boolean(id)
+
+  const { createTender, updateTender, fetchTender, selectedTender } = useTenderStore()
   const { clients } = useCRMStore()
   const { isDark } = useThemeStore()
   const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState('details')
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  // ── FORM STATE ──
   const [form, setForm] = useState({
     title: '', reference_number: '', client_id: '', client_name: '',
     contact_person: '', contact_email: '', contact_phone: '',
@@ -31,12 +34,10 @@ export default function CreateTender() {
     submission_method: 'Email', estimated_value: 0, notes: '', status: 'draft'
   })
 
-  // ── PRICING STATE (BoQ) ──
   const [pricing, setPricing] = useState([
     { description: '', quantity: 1, unit_of_measure: 'Month', labour_cost: 0, material_cost: 0, equipment_cost: 0, transport_cost: 0, overhead_cost: 0, profit_margin_percent: 20, vat_percent: 15 }
   ])
 
-  // ── COMPLIANCE STATE ──
   const [compliance, setCompliance] = useState([
     { requirement_name: 'CIPC Registration Documents', is_mandatory: true, status: 'pending' },
     { requirement_name: 'SARS Tax Compliance Status PIN', is_mandatory: true, status: 'pending' },
@@ -44,7 +45,42 @@ export default function CreateTender() {
     { requirement_name: 'B-BBEE Affidavit/Certificate', is_mandatory: true, status: 'pending' },
   ])
 
-  // ── HANDLERS ──
+  // ✅ Load existing data if in Edit Mode
+  useEffect(() => {
+    if (isEditMode) {
+      setLoading(true)
+      fetchTender(id).then(() => {
+        if (selectedTender) {
+          setForm({
+            title: selectedTender.title || '',
+            reference_number: selectedTender.reference_number || '',
+            client_id: selectedTender.client_id || '',
+            client_name: selectedTender.client_name || '',
+            contact_person: selectedTender.contact_person || '',
+            contact_email: selectedTender.contact_email || '',
+            contact_phone: selectedTender.contact_phone || '',
+            description: selectedTender.description || '',
+            service_category: selectedTender.service_category || '',
+            publication_date: selectedTender.publication_date || '',
+            site_briefing_date: selectedTender.site_briefing_date || '',
+            site_briefing_mandatory: selectedTender.site_briefing_mandatory || false,
+            clarification_deadline: selectedTender.clarification_deadline || '',
+            closing_date: selectedTender.closing_date || '',
+            closing_time: selectedTender.closing_time || '',
+            commencement_date: selectedTender.commencement_date || '',
+            end_date: selectedTender.end_date || '',
+            submission_method: selectedTender.submission_method || 'Email',
+            estimated_value: selectedTender.estimated_value || 0,
+            notes: selectedTender.notes || '',
+            status: selectedTender.status || 'draft'
+          })
+          if (selectedTender.pricing_items?.length > 0) setPricing(selectedTender.pricing_items)
+          if (selectedTender.compliance_items?.length > 0) setCompliance(selectedTender.compliance_items)
+        }
+      }).finally(() => setLoading(false))
+    }
+  }, [id, isEditMode])
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
@@ -60,16 +96,12 @@ export default function CreateTender() {
     }))
   }
 
-  // ── PRICING CALCULATIONS ──
   const calcUnitPrice = (item) => {
     const directCost = Number(item.labour_cost) + Number(item.material_cost) + Number(item.equipment_cost) + Number(item.transport_cost) + Number(item.overhead_cost)
-    const margin = directCost * (Number(item.profit_margin_percent) / 100)
-    return directCost + margin
+    return directCost + (directCost * (Number(item.profit_margin_percent) / 100))
   }
 
-  const calcTotal = (item) => {
-    return calcUnitPrice(item) * Number(item.quantity)
-  }
+  const calcTotal = (item) => calcUnitPrice(item) * Number(item.quantity)
 
   const updatePricing = (index, field, value) => {
     const newPricing = [...pricing]
@@ -77,33 +109,26 @@ export default function CreateTender() {
     setPricing(newPricing)
   }
 
-  const addPricingRow = () => {
-    setPricing([...pricing, { description: '', quantity: 1, unit_of_measure: 'Month', labour_cost: 0, material_cost: 0, equipment_cost: 0, transport_cost: 0, overhead_cost: 0, profit_margin_percent: 20, vat_percent: 15 }])
-  }
+  const addPricingRow = () => setPricing([...pricing, { description: '', quantity: 1, unit_of_measure: 'Month', labour_cost: 0, material_cost: 0, equipment_cost: 0, transport_cost: 0, overhead_cost: 0, profit_margin_percent: 20, vat_percent: 15 }])
+  const removePricingRow = (index) => { if (pricing.length > 1) setPricing(pricing.filter((_, i) => i !== index)) }
 
-  const removePricingRow = (index) => {
-    if (pricing.length === 1) return
-    setPricing(pricing.filter((_, i) => i !== index))
-  }
-
-  // ── SAVE ALL ──
+  // ✅ Handle Save (Create or Update)
   const handleSave = async () => {
     if (!form.title) { toast.error('Tender Title is required'); return }
     
     setSaving(true)
-    
-    // 1. Calculate total estimated value from pricing
     const totalEstimated = pricing.reduce((sum, item) => sum + calcTotal(item), 0)
     const finalForm = { ...form, estimated_value: totalEstimated }
 
-    // 2. Create the Tender
-    const result = await createTender(finalForm)
+    let result
+    if (isEditMode) {
+      result = await updateTender(id, finalForm)
+    } else {
+      result = await createTender(finalForm)
+    }
     
     if (result.success) {
-      // 3. We will save pricing and compliance in the next phase (TenderDetails)
-      // For now, navigate to the detail page
-      toast.success('Tender created! Now add pricing and documents.')
-      navigate(`/tenders/${result.data.id}`)
+      navigate(`/tenders/${isEditMode ? id : result.data.id}`)
     } else {
       setSaving(false)
     }
@@ -115,6 +140,8 @@ export default function CreateTender() {
     { id: 'compliance', label: '3. Compliance', icon: CheckCircle2 },
   ]
 
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>
+
   return (
     <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 font-['Inter'] ${isDark ? 'dark' : ''}`}>
       <Navbar />
@@ -122,12 +149,12 @@ export default function CreateTender() {
         <div className="flex items-center gap-2 mb-6 text-sm">
           <Link to="/tenders" className="text-slate-500 hover:text-emerald-600">Tenders</Link>
           <ChevronRight className="w-4 h-4 text-slate-400" />
-          <span className="font-medium">Create New</span>
+          <span className="font-medium">{isEditMode ? 'Edit Tender' : 'Create New'}</span>
         </div>
 
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Create Tender / RFQ</h1>
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-white">{isEditMode ? 'Edit Tender / RFQ' : 'Create Tender / RFQ'}</h1>
             <p className="text-slate-500 text-sm mt-1">Capture details, build your BoQ, and prepare compliance docs.</p>
           </div>
           <button onClick={handleSave} disabled={saving} className="neu-raised neu-btn px-6 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-2">
@@ -135,7 +162,6 @@ export default function CreateTender() {
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="flex border-b border-slate-200 dark:border-slate-700 mb-6">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -147,7 +173,6 @@ export default function CreateTender() {
           ))}
         </div>
 
-        {/* TAB 1: DETAILS */}
         {activeTab === 'details' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="neu-raised rounded-3xl p-6 space-y-4 bg-white dark:bg-slate-800">
@@ -214,7 +239,6 @@ export default function CreateTender() {
           </motion.div>
         )}
 
-        {/* TAB 2: COSTING */}
         {activeTab === 'costing' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 bg-white dark:bg-slate-800">
             <div className="flex justify-between items-center mb-4">
@@ -274,7 +298,6 @@ export default function CreateTender() {
           </motion.div>
         )}
 
-        {/* TAB 3: COMPLIANCE */}
         {activeTab === 'compliance' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="neu-raised rounded-3xl p-6 bg-white dark:bg-slate-800">
             <h2 className="text-xl font-bold mb-2">Compliance Checklist</h2>
