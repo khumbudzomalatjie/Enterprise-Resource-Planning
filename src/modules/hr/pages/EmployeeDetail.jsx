@@ -414,16 +414,13 @@ export default function EmployeeDetail() {
     } catch (error) { toast.error('Failed to upload') }
   }
 
-  // ✅ NEW: Handle deleting an attachment
   const handleDeleteAttachment = async (docId, docUrl) => {
     if (!window.confirm('Are you sure you want to permanently delete this file?')) return
     
     try {
-      // 1. Delete from database
       const { error: dbError } = await supabase.from('employee_documents').delete().eq('id', docId)
       if (dbError) throw dbError
 
-      // 2. Try to delete from storage (best effort)
       try {
         const urlParts = docUrl.split('/')
         const bucketIndex = urlParts.indexOf('documents')
@@ -442,7 +439,6 @@ export default function EmployeeDetail() {
     }
   }
 
-  // ✅ NEW: Handle direct download
   const handleDownload = async (url, fileName) => {
     try {
       const response = await fetch(url)
@@ -457,7 +453,6 @@ export default function EmployeeDetail() {
       window.URL.revokeObjectURL(blobUrl)
     } catch (error) {
       toast.error('Failed to download file')
-      // Fallback: open in new tab
       window.open(url, '_blank')
     }
   }
@@ -923,11 +918,15 @@ export default function EmployeeDetail() {
                   <td className="border border-[#b8ccdc] p-2 text-sm">{formatDate(doc.uploaded_at)}</td>
                   <td className="border border-[#b8ccdc] p-2 text-sm">
                     <div className="flex gap-1">
-                      {/* ✅ CHANGED: Replaced Eye/View with Download */}
+                      {/* ✅ VIEW */}
+                      <a href={doc.document_url} target="_blank" rel="noopener noreferrer" className="p-1 rounded hover:bg-blue-100 text-slate-400 hover:text-blue-600" title="View">
+                        <Eye className="w-4 h-4" />
+                      </a>
+                      {/* ✅ DOWNLOAD */}
                       <button onClick={() => handleDownload(doc.document_url, doc.document_name)} className="p-1 rounded hover:bg-emerald-100 text-slate-400 hover:text-emerald-600" title="Download">
                         <Download className="w-4 h-4" />
                       </button>
-                      {/* ✅ NEW: Added Delete button */}
+                      {/* ✅ DELETE */}
                       <button onClick={() => handleDeleteAttachment(doc.id, doc.document_url)} className="p-1 rounded hover:bg-red-100 text-slate-400 hover:text-red-600" title="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
