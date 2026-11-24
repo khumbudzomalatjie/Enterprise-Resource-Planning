@@ -60,7 +60,7 @@ export const tenderApi = {
     }
   },
 
-  // ── CREATE TENDER ──
+  // ── CREATE TENDER (FIXED: Sanitizes empty strings) ──
   async createTender(tenderData) {
     // Generate Tender Number (e.g. TND-2310-001)
     const prefix = 'TND'
@@ -68,9 +68,22 @@ export const tenderApi = {
     const randomStr = Math.random().toString(36).substring(2, 5).toUpperCase()
     const tenderNumber = `${prefix}-${dateCode}-${randomStr}`
 
+    // ✅ Sanitize: Convert empty strings to null to prevent UUID/Date errors
+    const cleanData = {}
+    for (const [key, value] of Object.entries(tenderData)) {
+      if (value === '' || value === undefined || value === 'undefined') {
+        cleanData[key] = null
+      } else {
+        cleanData[key] = value
+      }
+    }
+
+    // ✅ Ensure numeric fields have valid numbers
+    cleanData.estimated_value = Number(cleanData.estimated_value) || 0
+
     const { data, error } = await supabase
       .from('tender_opportunities')
-      .insert([{ ...tenderData, tender_number: tenderNumber }])
+      .insert([{ ...cleanData, tender_number: tenderNumber }])
       .select()
       .single()
 
