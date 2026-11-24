@@ -37,12 +37,23 @@ const useTenderStore = create((set, get) => ({
     return { success: true, data: newTender }
   },
 
+  // ✅ NEW: Update tender
+  updateTender: async (id, data) => {
+    const { data: updated, error } = await tenderApi.updateTender(id, data)
+    if (error) {
+      toast.error('Failed to update tender: ' + error.message)
+      return { success: false }
+    }
+    toast.success('Tender updated successfully')
+    set({ selectedTender: updated })
+    return { success: true, data: updated }
+  },
+
   updateStatus: async (id, status) => {
     const { error } = await tenderApi.updateStatus(id, status)
     if (error) toast.error('Failed to update status')
     else {
       toast.success('Status updated')
-      // Refresh selected tender
       get().fetchTender(id)
     }
   },
